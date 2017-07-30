@@ -493,40 +493,21 @@ save(main_configurations,main_configurations_lso_perf_scores,main_configurations
 ###############################################
 ###############################################
 
-dataset_pvals = c();dataset_stats = c();dataset_pvals_two_tail=c()
-par(mfrow=c(3,4))
-for (dataset in unique(dataset_ids)){
-  dataset_samples = names(dataset_ids[dataset_ids==dataset])
-  dataset_subjects = sample2subj_with_dataset_number[dataset_samples]
-  # all NAs == we do not have the data
-  if(all(is.na(dataset_subjects))){next}
-  tab = table(dataset_subjects)
-  paired_subjects = names(tab[tab==2])
-  if(length(paired_subjects)==0){next}
-  # select subjects with paired samples
-  dataset_samples = dataset_samples[is.element(dataset_subjects,set=paired_subjects)]
-  dataset_subjects = sample2subj_with_dataset_number[dataset_samples]
-  dataset_times = sample2time[dataset_samples]
-  # reorder  
-  ord = order(dataset_times,dataset_subjects,decreasing=F)
-  dataset_samples = dataset_samples[ord]
-  dataset_times = dataset_times[ord]
-  dataset_subjects = dataset_subjects[ord]
-  print(all(dataset_subjects[dataset_times==0] == dataset_subjects[dataset_times>0]))
-  # run t-test
-  mat = dataset2preprocessed_data[[dataset]]$gene_data[rownames(subject_gene_fc_matrix),dataset_samples]
-  ttests = apply(mat,1,run_paired_test,subjs = dataset_subjects,timev=dataset_times,alternative="less")
-  ttest_stats = sapply(ttests,function(x)x$statistic)
-  ttest_pvals = sapply(ttests,function(x)x$p.value)
-  hist(ttest_pvals,main=dataset)
-  dataset_pvals = cbind(dataset_pvals,ttest_pvals)
-  colnames(dataset_pvals)[ncol(dataset_pvals)] = dataset
-  dataset_stats = cbind(dataset_stats,ttest_stats)
-  colnames(dataset_stats)[ncol(dataset_stats)] = dataset
-  dataset_pvals_two_tail = cbind(dataset_pvals_two_tail,2*pmin(1-ttest_pvals,ttest_pvals))
-  colnames(dataset_pvals_two_tail)[ncol(dataset_pvals_two_tail)] = dataset
-}
+# look at the number of datasets per time point
+# merge, we want >2 datasets in each cell if possible
+samps = colnames(sample_gene_matrix_quantile)
+samps = samps[!is.na(sample2time[samps])]
+time_vs_dataset = table(sample2time[samps],sample2dataset_number[samps])
+rowSums(time_vs_dataset>0)
+tt = sample2time[samps]
+tt[tt==70.1 | tt==70.2] = 80
+tt[tt==84] = 80
+tt[tt>100 & tt<200] = 150
+time_vs_dataset = table(tt,sample2dataset_number[samps])
+rowSums(time_vs_dataset>0)
 
+rep_data = get_paired_ttest_matrices(dataset_ids[samps],tt,sample2subj_with_dataset_number,
+                                     dataset2preprocessed_data,rownames(sample_gene_matrix))
 # Screen
 library(kernlab)
 source('~/Desktop/screen/supplementary_data/submission_code/SCREEN_code_for_submission.R')
@@ -538,11 +519,11 @@ run_leadingeigen_clustering = function(x,cor_thr=0.2,toplot=F){
   if(toplot){plot(igraph::simplify(g))}
   return (cluster_infomap(g)$membership)
 }
-dataset_pvals[is.na(dataset_pvals)] = 0.5
-screen_res = SCREEN(dataset_pvals)
-screen_ind_res = SCREEN_ind(dataset_pvals)
-
-save(dataset_pvals,dataset_stats,dataset_pvals_two_tail,screen_res,screen_ind_res,file="Longterm_replicability_analysis.RData")
+rep_data$dataset_pvals[is.na(rep_data$dataset_pvals)] = 0.5
+screen_res = SCREEN(rep_data$dataset_pvals,ks=2:ncol(rep_data$dataset_pvals),nH=10000)
+screen_ind_res = SCREEN_ind(rep_data$dataset_pvals,ks=2:ncol(rep_data$dataset_pvals))
+colSums(screen_res<=0.2)
+save(rep_data,screen_res,screen_ind_res,file="Longterm_replicability_analysis.RData")
 
 ###############################################
 ###############################################
@@ -688,7 +669,7 @@ for(nn in colnames(dataset_stats)){
   samp = names(which(dataset_ids==nn))[1]
   dataset2simple_name[nn] = paste(sample2tissue[samp],sample2training_type[samp])
 }
-rownames(dataset_stats) = gsub(rownames(dataset_stats),pattern = "\\.t$",replace="",perl=T)
+
 hist(dataset_stats)
 xx = dataset_stats[rep_genes,]
 xx[xx>6]=6;xx[xx< (-6)] = -6
@@ -726,7 +707,6 @@ sol_as_list = sapply(unique(clust),function(x,y)names(which(y==x)),y=clust)
 names(sol_as_list) = paste("Cluster",1:length(sol_as_list))
 clustering_enrichment = run_topgo_enrichment_fisher(sol_as_list,rownames(dataset_pvals),5)
 extract_top_go_results(clustering_enrichment)
-
 
 ###############################################
 ###############################################

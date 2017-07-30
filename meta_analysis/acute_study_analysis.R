@@ -5,6 +5,12 @@ library('xlsx');library('GEOquery')
 source('helper_functions.R')
 GEO_destdir = "GEO"
 
+###############################################
+###############################################
+############# Load the data ###################
+###############################################
+###############################################
+
 metadata_file = 'GEO_sample_metadata.xlsx'
 # Sheet 1 has the acute samples metadata
 metadata = read.xlsx2(file=metadata_file,sheetIndex=1)
@@ -19,10 +25,28 @@ for(curr_gsm in gsm_duplications){
 metadata = metadata[to_keep,]
 rownames(metadata) = metadata[,1]
 
+# exclude samples without time info - happens due to some acute/longterm mixed
+# datasets such as GSE28392
+sample2time = sample2time = as.numeric(as.character(metadata$Acute..Standardized.Time..hours...1.is.baseline.))
+metadata = metadata[!is.na(sample2time) & sample2time!="",]
+print(dim(metadata))
+# exclude samples without subject ids - we should contact the authors
+sample2subject = as.character(metadata[,"Subject.id"])
+names(sample2subject) = metadata[,1]
+samples_without_subject = names(which(is.na(sample2subject)|sample2subject==""))
+# get these problematic datasets and remove these samples from the  metadata table
+GSEs_without_subjects = as.character(metadata[samples_without_subject,"GSE"])
+table(GSEs_without_subjects)
+metadata = metadata[!is.element(rownames(metadata),set=samples_without_subject),]
+print(dim(metadata))
+
 # Get sample information
 # The short description of the training program
 sample2training_type = simplify_training_type(metadata)
 table(sample2training_type)
+# Sanity checks
+table(is.na(sample2training_type)|sample2training_type=="")
+table(is.na(metadata$GSE)|metadata$GSE=="")
 # Study ids are primarily based on pubmed data
 study_ids = as.character(metadata$pmid)
 study_ids[study_ids==""] = as.character(metadata[study_ids=="","GSE"])
@@ -39,6 +63,7 @@ sort(table(dataset_ids))[1:5]
 # Time series by sample
 sample2time = as.numeric(as.character(metadata$Acute..Standardized.Time..hours...1.is.baseline.))
 names(sample2time) = metadata[,1]
+table(sample2time)
 # Other important data
 sample2tissue = simplify_tissue_info(tolower(as.character(metadata$Tissue)))
 names(sample2tissue) = metadata[,1]
@@ -75,6 +100,18 @@ for(dataset in unique(dataset_ids)){
   #break
 }
 
+###############################################
+###############################################
+#################### End ######################
+###############################################
+###############################################
+
+###############################################
+###############################################
+############### Set constants #################
+###############################################
+###############################################
+
 # Analysis constants
 # set constants
 # Set constants for the analysis
@@ -84,13 +121,22 @@ MIN_NROW = 5000 # minimal number of rows in a datamatrix of a specific dataset
 OUT_FILE = "PADB_univariate_results_and_preprocessed_data_acute.RData"
 ANALYSIS_OUT_FILE = "PADB_statistical_analysis_results_acute.RData"
 
-########################################################################
-######################## Preprocessing #################################
-########################################################################
+###############################################
+###############################################
+#################### End ######################
+###############################################
+###############################################
+
+###############################################
+###############################################
+############### Preprocessing #################
+###############################################
+###############################################
 
 # load the gene expression database
 load('gpl_mappings_to_entrez.RData')
 load("PA_database_profiles.RData")
+load(OUT_FILE)
 
 # Select the relevant samples
 # Get the current metadata
@@ -219,10 +265,17 @@ for (dataset in unique(dataset_ids[analysis_samples])){
 rm(CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes,gpl_mappings_to_entrez,gpl_tables)
 gc()
 
-########################################################################
-######################## Preprocessing end #############################
-########################################################################
-##### Load without running the loop above
+###############################################
+###############################################
+#################### End ######################
+###############################################
+###############################################
+
+###############################################
+###############################################
+######## Load data and merge studies ##########
+###############################################
+###############################################
 load(OUT_FILE)
 
 # Get gene intersection and subject data
@@ -333,22 +386,17 @@ time2num_datasets = table(subject_col2info$time[subject_cols],subject_col2gse)
 tp2datasets =  apply(time2num_datasets,1,function(x)names(which(x>0)))
 sapply(tp2datasets,length)
 
-#################################
-#################################
-#################################
-# (0) Sanity checks, unsupervised analysis
-#################################
-#################################
-#################################
+###############################################
+###############################################
+#################### End ######################
+###############################################
+###############################################
 
-# Use fold change data
-# kmeans
-subject_col_clustering = kmeans(scale(t(subject_gene_fc_matrix)),10)
-reverse_mapping_list(as.list(subject_col_clustering$cluster))
-table(subject_col_clustering$cluster,subject_col2info$sex[subject_cols])
-table(subject_col_clustering$cluster,subject_col2info$dataset[subject_cols])
-table(subject_col_clustering$cluster,subject_col2gse[subject_cols])
-table(subject_col_clustering$cluster)
+###############################################
+###############################################
+####### Classification-based analysis #########
+###############################################
+###############################################
 
 # Classification analysis
 library(e1071);library(pROC)
@@ -533,7 +581,6 @@ save(main_configurations,main_configurations_lso_perf_scores,main_configurations
 # Display items
 load("Acute_data_analysis_expression_intensities_data_classification_tests.RData")
 load("Acute_data_analysis_fc_data_classification_tests.RData")
-
 plot(sort(imp_time),ylab="Importance")
 sapply(main_configurations_lso_perf_scores,function(x)x$aucs[,3])
 sapply(main_configurations_lso_subj_acc_scores,function(x)x$acc)
@@ -542,534 +589,112 @@ sort(imp_time[selected_genes])
 top_go_results = run_topgo_enrichment_fisher(selected_genes,rownames(subject_gene_fc_matrix))
 extract_top_go_results(top_go_results)
 
-##################################################################
-##################################################################
-##################################################################
-############# Functions for analysis of configurations ###########
-##################################################################
+###############################################
+###############################################
+#################### End ######################
+###############################################
+###############################################
 
-run_lso_tests_on_a_configuration_set<-function(configurations,classification_xs,classification_ys,d,x_cov){
-  lso_results = list()
-  for(cname in names(configurations)){
-    config = configurations[[cname]]
-    y_names = config$sample_set
-    y = classification_ys[[config$yname]][y_names]
-    x = classification_xs[[config$xname]][y_names,]
-    features_inds_to_keep=c()
-    if(config$include_covs=="TRUE"){
-      curr_covs = x_cov[,setdiff(colnames(x_cov),config$yname)]
-      curr_covs = model.matrix(~.,curr_covs)[,-1]
-      new_y_names = intersect(rownames(x),rownames(curr_covs))
-      x = x[new_y_names,];y=y[new_y_names]
-      x = cbind(curr_covs[new_y_names,],x)
-      y_names = new_y_names
-      features_inds_to_keep = 1:ncol(curr_covs)
-    }
-   curr_lso_test_args = c(list(y,x,d[y_names],func=featureSelectionClassifier,
-                              features_inds_to_keep=features_inds_to_keep),config$classification_args)
-    lso = do.call(leave_study_out2,curr_lso_test_args)
-    lso_results[[cname]] = lso
-  }
-  return(lso_results)
+###############################################
+###############################################
+##### Fold change replicabilty analysis #######
+###############################################
+###############################################
+
+# look at the number of datasets per time point
+# merge, we want >3 datasets in each cell if possible
+time_vs_dataset = table(sample2time[samps],sample2dataset_number[samps])
+rowSums(time_vs_dataset>0)
+tt = sample2time[samps]
+tt[tt==0.5 | tt==1] = 0.75
+tt[tt==2.5] = 3
+tt[tt==20] = 24
+tt[tt==72 | tt==96] = 80
+tt[tt==4 | tt==5] = 4.5
+tt[tt==48 | tt==80] = 48
+time_vs_dataset = table(tt,sample2dataset_number[samps])
+rowSums(time_vs_dataset>0)
+# Will be used in the mixed effect analysis also
+
+rep_data = get_paired_ttest_matrices(dataset_ids[samps],tt,sample2subj_with_dataset_number,
+                                     dataset2preprocessed_data,rownames(sample_gene_matrix))
+
+# Screen
+library(kernlab)
+source('~/Desktop/screen/supplementary_data/submission_code/SCREEN_code_for_submission.R')
+source('~/Desktop/screen/supplementary_data/submission_code/twogroups_methods_for_submission.R')
+run_leadingeigen_clustering = function(x,cor_thr=0.2,toplot=F){
+  x = x >= cor_thr
+  mode(x) = 'numeric';diag(x)=0
+  g = graph.adjacency(x,mode='undirected',weighted=T)
+  if(toplot){plot(igraph::simplify(g))}
+  return (cluster_infomap(g)$membership)
 }
+dataset_pvals[is.na(dataset_pvals)] = 0.5
+screen_res = SCREEN(rep_data$dataset_pvals,ks=2:ncol(rep_data$dataset_pvals),nH=10000)
+screen_ind_res = SCREEN_ind(rep_data$dataset_pvals,ks=2:ncol(rep_data$dataset_pvals))
+colSums(screen_res<=0.2)
+save(rep_data,screen_res,screen_ind_res,file="Acute_replicability_analysis.RData")
 
-get_standard_classification_performance_scores_for_results_list<-function(lso_results){
-  performance_scores = list()
-  for(cname in names(lso_results)){
-    lso = lso_results[[cname]]
-    lso_preds = lapply(lso,function(x)x$preds)
-    if(! "matrix" %in% class(lso_preds[[1]])){
-     lso_preds = lapply(lso,function(x)attr(x$preds,"probabilities"))
-   }
-   class_names = colnames(lso_preds[[1]])
-    m = c()
-    for(mm in lso_preds){m = rbind(m,mm[,class_names])}
-    colnames(m) = class_names
-    lso_preds = m
-    aucs = c()
-    for(class_name in class_names){
-      lso_y = unlist(sapply(lso,function(x)x$real))
-      class_inds = lso_y==class_name
-      lso_y = rep(0,length(lso_y))
-      lso_y[class_inds]=1
-      lso_p = lso_preds[,class_name]
-      roc = calcAupr(lso_p,as.numeric(lso_y),roc=T)
-      proc = as.numeric(pROC::auc(lso_y, lso_p))
-      aupr = calcAupr(lso_p,as.numeric(lso_y),roc=F)
-      aucs = rbind(aucs,c(roc=roc,aupr=aupr,pROC=proc))
-    }
-    rownames(aucs) = class_names
-    acc = lso_y == (lso_p>=0.5)
-    acc = sum(acc)/length(acc)
-    performance_scores[[cname]] = list(aucs=aucs,acc=acc)
-  }
-  return(performance_scores)
-}
+###############################################
+###############################################
+########## Mixed effects analysis #############
+###############################################
+###############################################
 
-get_subject_performance_scores_from_results_list<-function(lso_results,name2subj=sample2subj,paired_tests_analysis=T,x_cov){
-  subject_performance_scores = list()
-  for(cname in names(lso_results)){
-    subject_performance_scores[[cname]]=list()
-    lso = lso_results[[cname]]
-    lso_preds = lapply(lso,function(x)x$preds)
-    if(! "matrix" %in% class(lso_preds[[1]])){
-      lso_preds = lapply(lso,function(x)attr(x$preds,"probabilities"))
-    }
-    class_names = colnames(lso_preds[[1]])
-    m = c()
-    for(mm in lso_preds){m = rbind(m,mm[,class_names])}
-    colnames(m) = class_names
-    lso_preds = m
-    #curr_subjects = subject_col2info$subject[rownames(lso_preds)]
-    #curr_subjects = sample2subj[rownames(lso_preds)]
-    curr_subjects = name2subj[rownames(lso_preds)]
-    lso_y = unlist(sapply(lso,function(x)x$real))
-    class1 = colnames(lso_preds)[1]
-    if(paired_tests_analysis){
-      get_profile_longi_line_plot(lso_preds[,class1],lso_y,curr_subjects) + 
-        geom_line() +ggtitle(g1)
-     xx1 = c();xx2=c()
-     for(subj in unique(curr_subjects)){
-       subj_inds = curr_subjects==subj
-       if(sum(subj_inds)!=2){next} 
-       curr_y = lso_y[subj_inds]
-       if(length(unique(curr_y))!=2){next}
-       curr_p = lso_preds[subj_inds,class1]
-       xx1 = c(xx1,curr_p[curr_y==class1])
-       xx2 = c(xx2,curr_p[curr_y!=class1])
-     }
-     curr_p = NA
-     if(length(xx1)>0){curr_p = wilcox.test(xx1,xx2,paired=T)$p.value}
-     d1 = data.frame(subjs=factor(curr_subjects),timev=lso_y,
-                     tissue = x_cov[rownames(lso_preds),"tissue"],
-                     training=x_cov[rownames(lso_preds),"training"],
-                     sex=x_cov[rownames(lso_preds),"sex"])
-     mixed_effects_model_emp_pval = NA
-     # Should not work when splitting the database by one of the covariates
-     # TODO: fixed later
-     try({ 
-      mixed_effects_model_emp_pval = get_mixed_effect_model_time_empirical_p(x=lso_preds[,class1],
-          frm0 = x ~ factor(tissue) + factor(training) + factor(sex) + (1|subjs),
-          frm1 = x ~ ordered(timev) + factor(tissue) + factor(training) + factor(sex) + (1|subjs),
-          d1=d1,reps=100,min_reps = 100)
-     })
-     subject_performance_scores[[cname]][["paired_tests_analysis"]] = 
-       list(x1=xx1,x2=xx2,binary_wilcox_p=curr_p,mixed_effects_emp_p = mixed_effects_model_emp_pval)
-    }
-    subj2acc = c()
-    for(subj in curr_subjects){
-      subj_inds = curr_subjects==subj
-      if(sum(subj_inds)<2){next}
-      curr_y = lso_y[subj_inds]
-      if(!grepl("time",cname) || length(unique(curr_y))==1){
-        curr_y = lso_y[subj_inds] == class1
-        curr_p = mean(lso_preds[subj_inds,class1])>0.5
-        subj2acc[subj] = sum(curr_p==curr_y[1])
-      }else{
-        curr_p = as.numeric(lso_preds[subj_inds,class1]>0.5)
-        subj2acc[subj] = mean(curr_p==curr_y)
-      }
-    }
-    subject_performance_scores[[cname]][["acc"]] = mean(subj2acc,na.rm=T)
-    print(paste(cname,mean(subj2acc,na.rm=T)))
-  }
-  return(subject_performance_scores)
-}
-
-##################################################################
-##################################################################
-##################################################################
-
-#################################
-# (1) Simple fold change analysis
-#################################
-subject_cols = colnames(subject_gene_fc_matrix)
-grps = cbind(subject_col2info$tissue[subject_cols],subject_col2info$training[subject_cols],
-             subject_col2info$sex[subject_cols],subject_col2info$time[subject_cols])
-grps = apply(grps,1,paste,collapse=';')
-table(grps)
-grp2 = subject_col2info$dataset[subject_cols]
-
-time_vec = subject_col2info$time[subject_cols]
-fold_change_sliced_matrices = list()
-for(g1 in sort(unique(grps))){
-  fold_change_sliced_matrices[[g1]]=list()
-  inds = g1==grps
-  currt = time_vec[inds]
-  currx = subject_gene_fc_matrix_original[,inds]
-  fold_change_sliced_matrices[[g1]][["time"]]=unique(currt)
-  fold_change_sliced_matrices[[g1]][["mat"]] = currx
-}
-sort(sapply(fold_change_sliced_matrices,function(x)ncol(x$mat)))
-# Analyze a sliced fold change matrix
-group2gene_set = list()
-geo_mean_thr = 0.5
-thr = 1
-library(psych)
-
-for(g1 in unique(grps)){
-  mat = fold_change_sliced_matrices[[g1]]$mat
-  mat_datasets = subject_col2info$dataset[colnames(mat)]
-  by_dataset_sum_fc = apply(mat>=thr,1,function(x,y)tapply(x,INDEX=y,FUN=mean),y=mat_datasets)
-  #by_dataset_sum_fc = apply(mat,1,function(x,y)tapply(x,INDEX=y,FUN=run_simple_ttest),y=mat_datasets)
-  if(is.null(dim(by_dataset_sum_fc))){
-    gms=by_dataset_sum_fc
-  }
-  else{
-    gms = apply(by_dataset_sum_fc,2,geometric.mean)
-  }
-  plot(sort(gms,decreasing = T))
-  group2gene_set[[paste(g1,"up",sep=';')]] = names(which(gms>=geo_mean_thr))
-  by_dataset_sum_fc = apply(mat<=-thr,1,function(x,y)tapply(x,INDEX=y,FUN=mean),y=mat_datasets)
-  if(is.null(dim(by_dataset_sum_fc))){
-    gms=by_dataset_sum_fc
-  }
-  else{
-    gms = apply(by_dataset_sum_fc,2,geometric.mean)
-  }
-  plot(sort(gms,decreasing = T))
-  group2gene_set[[paste(g1,"down",sep=';')]] = names(which(gms>=geo_mean_thr))
-}
-sapply(group2gene_set,length)
-topgo_results = run_topgo_enrichment_fisher(group2gene_set,rownames(subject_gene_fc_matrix))
-
-run_simple_ttest<-function(fcs,ret="p.value"){
-  if(length(fcs)<2){return(1)}
-  return(t.test(fcs)[[ret]])
-}
-
-group2paired_ttest_res = list()
-for(g1 in unique(grps)){
-  mat = fold_change_sliced_matrices[[g1]]$mat
-  mat_datasets = subject_col2info$dataset[colnames(mat)]
-  dataset_pvals = apply(mat,1,function(x,y)tapply(x,INDEX=y,FUN=run_simple_ttest),y=mat_datasets)
-  dataset_stats = apply(mat,1,function(x,y)tapply(x,INDEX=y,FUN=run_simple_ttest,ret="statistic"),y=mat_datasets)
-  group2paired_ttest_res[[g1]]=list()
-  group2paired_ttest_res[[g1]][["p"]] = dataset_pvals
-  group2paired_ttest_res[[g1]][["t"]] = dataset_stats #pretty stupid to run this twice :(
-}
-# run queries to get gene sets and enrichments
-group2num_datasets = sapply(group2paired_ttest_res,function(x)nrow(x$p))
-group2num_datasets[sapply(group2num_datasets,is.null)]=1
-group2num_datasets = unlist(group2num_datasets)
-min_datasets = 2
-selected_groups = names(which(group2num_datasets>=min_datasets))
-all_ps = unlist(sapply(group2paired_ttest_res[selected_groups],function(x)x$p))
-length(all_ps);hist(all_ps)
-corrected_ps = p.adjust(all_ps,method='fdr')
-hist(corrected_ps)
-table(corrected_ps<=0.1)
-p_thr = max(all_ps[corrected_ps<=0.1])
-group2rep_genes = list()
-rep_thr = 0.5
-for(g1 in selected_groups){
-  currp = group2paired_ttest_res[[g1]]$p
-  currt = group2paired_ttest_res[[g1]]$t
-  if(is.null(dim(currp))){
-    currp = matrix(currp,nrow=1,dimnames = list(g1,names(currp)))
-    currt = matrix(currt,nrow=1,dimnames = list(g1,names(currt)))
-  }
-  print(dim(currp))
-  currp_rep = apply(currp <= p_thr,2,mean)
-  print(table(currp_rep))
-  curr_genes = colnames(currp)[currp_rep>=rep_thr]
-  curr_genes_dir = c()
-  for(g in curr_genes){
-    t_s = currt[,g]
-    p_inds = currp[,g]<=p_thr
-    t_s = t_s[p_inds]
-    curr_genes_dir[g]="mixed"
-    if(all(t_s>0)){curr_genes_dir[g]="up"}
-    if(all(t_s<0)){curr_genes_dir[g]="down"}
-  }
-  group2rep_genes[[g1]] = curr_genes_dir
-}
-sapply(group2rep_genes,table)
-up_reg_genes = lapply(group2rep_genes,function(x)names(which(x=="up")))
-down_reg_genes = lapply(group2rep_genes,function(x)names(which(x=="down")))
-mixed_reg_genes = lapply(group2rep_genes,function(x)names(which(x=="mixed")))
-up_reg_genes_go_enrichment = run_topgo_enrichment_fisher(up_reg_genes,rownames(subject_gene_fc_matrix))
-extract_top_go_results(up_reg_genes_go_enrichment,0.1)
-library(org.Hs.eg.db)
-xx <- as.list(org.Hs.egSYMBOL)
-up_reg_genes_symb = lapply(up_reg_genes,function(x,y)sort(unlist(y[x])),y=xx)
-down_reg_genes_symb = lapply(down_reg_genes,function(x,y)sort(unlist(y[x])),y=xx)
-mixed_reg_genes_symb = lapply(mixed_reg_genes,function(x,y)sort(unlist(y[x])),y=xx)
-
-# # Get broader platform information, may be useful later as a random effect
-# subject_col2platform_manufacurer = subject_col2platform
-# subject_col2platform_technology = subject_col2platform
-# for(pl in unique(subject_col2platform)){
-#   pl_obj = getGEO(pl,destdir=GEO_destdir)
-#   pl_meta = Meta(pl_obj)
-#   subject_col2platform_manufacurer[subject_col2platform_manufacurer==pl] = pl_meta$manufacturer
-#   subject_col2platform_technology[subject_col2platform_technology==pl] = pl_meta$technology
-# }
-# table(subject_col2platform_technology)
-# table(subject_col2platform_manufacurer)
-
-# # PCA plots
-# gene_fold_change_pca = prcomp(t(subject_gene_fc_matrix_quantile),center=T,retx=T)
-# gene_fold_change_pca = prcomp(t(subject_gene_fc_matrix),center=T,retx=T)
-# plot(gene_fold_change_pca)
-# PC1 = gene_fold_change_pca$x[,3]
-# PC2 = gene_fold_change_pca$x[,2]
-# plot(PC1,PC2,col=as.factor(subject_col2tissue_slim),lwd=2)
-# plot(PC1,PC2,col=as.factor(subject_col2platform_manufacurer),lwd=2)
-# plot(PC1,PC2,col=as.factor(subject_col2platform_technology),lwd=2)
-
-# The previous step was about preprocessing to get the data matrices.
-# We now present a series of analyses:
-# (1) Exploratory analysis of the fold changes
-# 1.1 Select genes with high fc values
-# # 1.2 simple correlation with time
-# gene_fc_time_corrs1 = cor(t(subject_gene_fc_matrix),subject_col2time)[,1]
-# gene_fc_time_corrs2 = cor(t(subject_gene_fc_matrix_quantile),subject_col2time)[,1]
-# samps = colnames(sample_gene_matrix)
-# gene_time_corrs1 = cor(t(sample_gene_matrix),sample2time[samps])[,1]
-# gene_time_corrs2 = cor(t(sample_gene_matrix_quantile),sample2time[samps])[,1]
-# plot(gene_time_corrs1,gene_time_corrs2)
-# plot(gene_fc_time_corrs1,gene_fc_time_corrs2)
-# plot(gene_time_corrs2,gene_fc_time_corrs2)
-# sort(abs(gene_time_corrs2),decreasing=T)[1:10]
-# sort(abs(gene_fc_time_corrs2),decreasing=T)[1:10]
-# set_nonfc = names(sort(abs(gene_time_corrs2),decreasing=T)[1:50])
-# set_fc = names(sort(abs(gene_fc_time_corrs2),decreasing=T)[1:50])
-# intersect(set_fc,set_nonfc)
-# set_union = union(set_nonfc,set_fc)
-# set_union_fc_cors = gene_fc_time_corrs2[set_union]
-# set_union_nonfc_cors = gene_time_corrs2[set_union]
-# out_matrix = cbind(set_union_nonfc_cors,set_union_fc_cors)
-# out_matrix = cbind(is.element(set_union,set=set_nonfc),is.element(set_union,set=set_fc),out_matrix)
-# rownames(out_matrix) = set_union
-# colnames(out_matrix) = c("is_non_fc","is_fc","nonfc_cor","fc_cor")
-# write.table(out_matrix,file="Simple_time_correlation_analysis_selected_genes.txt",sep="\t",quote=F)
-# set_nonfc_go_enrichment = run_topgo_enrichment_fisher(set_nonfc,names(gene_time_corrs2))
-# extract_top_go_results(set_nonfc_go_enrichment,0.1,500)
-# set_fc_go_enrichment = run_topgo_enrichment_fisher(set_fc,names(gene_time_corrs2))
-# extract_top_go_results(set_fc_go_enrichment,0.1,500)
-
-################################
-# (2) Mixed-effect meta-analysis
-################################
-
-# Functions
-get_dummy_subject_randomized_vector<-function(times,subjects){
-  dummy_times = times
-  for(su in unique(subjects)){
-    inds = which(subjects==su)
-    if(length(inds)<=1){next}
-    curr_t = sample(times[inds])
-    dummy_times[inds] = curr_t
-  }
-  return(dummy_times)
-}
-run_mixed_effect_model1<-function(x,d1,return_pvals=T){
-  d = cbind(data.frame(x=x,row.names=rownames(d1)),d1)
-  lmer_obj_0 = lmer(x ~  factor(tissue) + factor(training) + factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
-  lmer_obj = lmer(x ~  ordered(timev) + factor(tissue) + factor(training) + factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
-  lmer_obj_int1 = list()
-  lmer_obj_int1[["tissue"]] =  lmer(x ~  ordered(timev) * factor(tissue) + factor(training) + factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
-  lmer_obj_int1[["training"]] =  lmer(x ~  ordered(timev) * factor(training) + factor(tissue) + factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
-  lmer_obj_int1[["sex"]] =  lmer(x ~  ordered(timev) * factor(sex) + factor(tissue) + factor(training) + (1|dataset/subjs) ,REML=F,data=d)
-  a1 = get_pairwise_anova_aic_bic_p(lmer_obj,lmer_obj_0)
-  int_a = sapply(lmer_obj_int1,get_pairwise_anova_aic_bic_p,obj2=lmer_obj)
-  int_a_0 = sapply(lmer_obj_int1,get_pairwise_anova_aic_bic_p,obj2=lmer_obj_0)
-  if(return_pvals){
-    pvals = unlist(c(a1[3],int_a[3,],int_a_0[3,]))
-    return(pvals)
-  }
-  return(list(lmer_obj=lmer_obj,lmer_obj_0=lmer_obj_0,interaction_lmers = lmer_obj_int1,pvals=pvals))
-}
-run_mixed_effect_model2<-function(x,d1,return_pvals=T,empirical_pval=T,...){
-  d = cbind(data.frame(x=x,row.names=rownames(d1)),d1)
-  lmer_obj_0 = lmer(x ~  factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
-  lmer_obj = lmer(x ~  ordered(timev) * factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
-  a1 = get_pairwise_anova_aic_bic_p(lmer_obj,lmer_obj_0)
-  if(empirical_pval){
-    rand_scores = get_lmer_model_empirical_null(
-      x ~  ordered(timev) * factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs),
-      d,RMEL=F)
-    emp_p = (1+sum(rand_scores[,2]<=a1[2]))/(1+nrow(rand_scores))
-    return(emp_p)
-  }
-  if(return_pvals){return(as.numeric(a1))}
-  return(list(lmer_obj=lmer_obj,lmer_obj_0=lmer_obj_0))
-}
-get_mixed_effect_model_time_empirical_p<-function(x,frm1,frm0,d1,reps=1000,min_reps=200,statistic="Chisq",...){
-  min_reps = min(min_reps,reps)
-  d = cbind(data.frame(x=x,row.names=rownames(d1)),d1)
-  rand_scores = c()
-  m1 = lmer(frm1,d,REML=F)
-  m0 = lmer(frm0,d,REML=F)
-  anova_real = as.numeric(anova(m1,m0)[2,statistic])
-  d_copy=d
-  for(j in 1:reps){
-    d_copy$timev = get_dummy_subject_randomized_vector(d$timev,d$subjs)
-    rand_m1 = lmer(frm1,d_copy,REML=F,control=lmerControl(check.rankX =  "silent.drop.cols"))
-    rand_m0 = lmer(frm0,d_copy,REML=F,control=lmerControl(check.rankX =  "silent.drop.cols"))
-    anova_rand = as.numeric(anova(rand_m1,rand_m0)[2,statistic])
-    rand_scores[j] = anova_rand
-    if(j>=min_reps){
-      emp_p = (1+sum(rand_scores>=anova_real))/(j+1)
-      if(emp_p>0.1){break}
-      print(emp_p)
-    }
-  }
-  return(emp_p)
-}
-get_pairwise_anova_aic_bic_p<-function(obj1,obj2){
-  return(anova(obj1,obj2)[2,c(2,3,8)])
-}
-get_mixed_effect_model_time_apprx_p<-function(x,frm1,frm0,d1,statistic="Pr(>Chisq)",...){
-  d = cbind(data.frame(x=x,row.names=rownames(d1)),d1)
-  m1 = lmer(frm1,d,REML=F)
-  m0 = lmer(frm0,d,REML=F)
-  return(as.numeric(anova(m1,m0)[2,statistic]))
-}
-
-# Analysis starts here
 samps = colnames(sample_gene_matrix)
+samps = samps[sample2training_type[samps]!="yoga"]
 sample2subj = sample2subj_with_dataset_number[samps]
 sample2tissue_slim = sample2tissue[samps]
 sample2training = sample2training_type[samps]
 sample2sex = sample2sex[samps]
 table(sample2training)
-d1 = data.frame(subjs=factor(sample2subj),timev=sample2time[samps],
-                    tissue = sample2tissue_slim,training=sample2training,
-                    sex=sample2sex,dataset=factor(sample2dataset_number[samps]))
-# look at the number of datasets per time point
-time_vs_dataset = table(d1$timev,sample2dataset_number[samps])
-rowSums(time_vs_dataset>0)
 
-# Old analysis before p-value correction
-mixed_effect_pvals = apply(sample_gene_matrix_quantile,1,run_mixed_effect_model1,d1=d1)
-mixed_effect_pvals2 = apply(sample_gene_matrix_quantile,1,run_mixed_effect_model2,d1=d1)
-save(mixed_effect_pvals,mixed_effect_pvals2,file='mixed_effect_pvals.RData')
+d1 = data.frame(subjs=factor(sample2subj),timev=tt[samps],
+                tissue = sample2tissue_slim,training=sample2training,
+                sex=sample2sex,dataset=factor(sample2dataset_number[samps]))
 
-# Save the data to the gene-based mm analysis
-save(sample_gene_matrix_quantile,d1,file="acute_data_analysis_data_for_mixed_effects_analysis.RData")
 
 # New analysis: corrected p-values
-# Simple fixed effects
-mixed_effect_pvals_emp_pvals = apply(sample_gene_matrix_quantile[1:50,],1,get_mixed_effect_model_time_empirical_p,
-                                     frm0 = x ~ factor(tissue) + factor(training) + factor(sex) + (1|dataset/subjs),
-                                     frm1 = x ~ ordered(timev) + factor(tissue) + factor(training) + factor(sex) + (1|dataset/subjs),
-                                     d1=d1)
-mixed_effect_pvals_apprx_pvals = apply(sample_gene_matrix_quantile[1:50,],1,get_mixed_effect_model_time_apprx_p,
-                                       frm0 = x ~ factor(tissue) + factor(training) + factor(sex) + (1|dataset/subjs),
-                                       frm1 = x ~ ordered(timev) + factor(tissue) + factor(training) + factor(sex) + (1|dataset/subjs),
-                                       d1=d1)
-# Fixed effects with interactions
+# Mixed effects with interactions
+# Analyze a gene sample to get empirical p-values
 gene_sample = sample(1:nrow(sample_gene_matrix))[1:500]
-mixed_effect_pvals_emp_pvals = apply(sample_gene_matrix_quantile[gene_sample,],1,get_mixed_effect_model_time_empirical_p,
+mixed_effect_pvals_emp_pvals = apply(sample_gene_matrix_quantile[gene_sample,samps],1,get_mixed_effect_model_time_empirical_p,
                                      frm0 = x ~ factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs),
                                      frm1 = x ~ ordered(timev) * factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs),
                                      d1=d1)
-mixed_effect_pvals_apprx_pvals = apply(sample_gene_matrix_quantile[gene_sample,],1,get_mixed_effect_model_time_apprx_p,
+mixed_effect_pvals_apprx_pvals = apply(sample_gene_matrix_quantile[gene_sample,samps],1,get_mixed_effect_model_time_apprx_p,
                                        frm0 = x ~ factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs),
                                        frm1 = x ~ ordered(timev) * factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs),
                                        d1=d1)
-mixed_effect_pvals_apprx_statistic = apply(sample_gene_matrix_quantile[gene_sample,],1,get_mixed_effect_model_time_apprx_p,
-                                       frm0 = x ~ factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs),
-                                       frm1 = x ~ ordered(timev) * factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs),
-                                       d1=d1,statistic="Chisq")
-get_stats_df_chisq<-function(stats,ps,range,use_log=T,func=abs){
-  mse_minus_log = c()
-  if(use_log){log_ps = -log(ps,base=10)}
-  for(j in range[-1]){
-    curr_ps = pchisq(stats,df=j,lower.tail = F)
-    curr_ps[curr_ps<min(ps)] = min(ps)
-    mse_minus_log[as.character(j)] = mean(func(ps-curr_ps))
-    if(use_log){
-      curr_ps = -log(curr_ps,base=10)
-      mse_minus_log[as.character(j)] = mean(func(log_ps-curr_ps))
-    }
-    plot(curr_ps,log_ps,main=j);abline(0,1)
-  }
-  return(range[which(mse_minus_log==min(mse_minus_log))[1]])
-}
-get_stats_df_chisq2<-function(stats,ps,range){
-  comparison_ps = c()
-  for(j in range[-1]){
-    curr_ps = pchisq(stats,df=j,lower.tail = F)
-    curr_ps[curr_ps<min(ps)] = min(ps)
-    p = wilcox.test(ps,curr_ps,alternative = "less",paired=T)$p.value
-    print(p)
-    comparison_ps[j]=p
-    if (p < 1e-50){break}
-  }
-  plot(comparison_ps)
-  return(j)
-}
-get_stats_df_chisq3<-function(stats,ps,range){
-  comparison_ps = c()
-  for(j in range[-1]){
-    curr_ps = pchisq(stats,df=j,lower.tail = F)
-    curr_ps[curr_ps<min(ps)] = min(ps)
-    if(all(curr_ps>=ps)){break}
-  }
-  return(j)
-}
-hist(pchisq(mixed_effect_pvals_apprx_statistic,50,lower.tail = F))
-# Empricial vs. approx analysis
-plot(mixed_effect_pvals_emp_pvals,mixed_effect_pvals_apprx_pvals);abline(0,1)
-original_df = get_stats_df_chisq(mixed_effect_pvals_apprx_statistic[names(mixed_effect_pvals_emp_pvals)],mixed_effect_pvals_apprx_pvals,1:200)
-corrected_df = get_stats_df_chisq3(mixed_effect_pvals_apprx_statistic[names(mixed_effect_pvals_emp_pvals)],mixed_effect_pvals_emp_pvals,1:200)
-
-mixed_effect_pvals_apprx_statistic = apply(sample_gene_matrix_quantile,1,get_mixed_effect_model_time_apprx_p,
+hist(mixed_effect_pvals_apprx_pvals);hist(mixed_effect_pvals_emp_pvals)
+# Analyze all genes using the standard statistics
+mixed_effect_pvals_apprx_statistic = apply(sample_gene_matrix_quantile[,samps],1,get_mixed_effect_model_time_apprx_p,
                                            frm0 = x ~ factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs),
                                            frm1 = x ~ ordered(timev) * factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs),
                                            d1=d1,statistic="Chisq")
-write.table(t(t(mixed_effect_pvals_apprx_statistic)),
-            file="Acute_mixed_effect_pvals_apprx_statistic.txt",sep="\t",quote=F,col.names = F)
+mixed_effect_pvals_apprx_bic_diff = apply(sample_gene_matrix_quantile[,samps],1,get_mixed_effect_model_time_apprx_stat_diff,
+                                          frm0 = x ~ factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs),
+                                          frm1 = x ~ ordered(timev) * factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs),
+                                          d1=d1,statistic="BIC")
 
-
+original_df = get_stats_df_chisq(mixed_effect_pvals_apprx_statistic[names(mixed_effect_pvals_emp_pvals)],mixed_effect_pvals_apprx_pvals,1:200)
+corrected_df = get_stats_df_chisq3(mixed_effect_pvals_apprx_statistic[names(mixed_effect_pvals_emp_pvals)],mixed_effect_pvals_emp_pvals,1:200)
 corrected_ps = pchisq(mixed_effect_pvals_apprx_statistic,corrected_df,lower.tail = F)
 par(mfrow=c(1,2))
 plot(mixed_effect_pvals_apprx_pvals,corrected_ps[names(mixed_effect_pvals_emp_pvals)],ylab="corrected p-values");abline(0,1)
 plot(mixed_effect_pvals_emp_pvals,corrected_ps[names(mixed_effect_pvals_emp_pvals)],ylab="corrected p-values");abline(0,1)
+par(mfrow=c(1,1))
+plot(mixed_effect_pvals_apprx_bic_diff,corrected_ps,ylab="corrected p-values")
 
-corrected_ps_bonf = p.adjust(corrected_ps,method='fdr')
-mixed_effects_genes = names(which(corrected_ps_bonf<0.01))
-length(mixed_effects_genes)
-mixed_effects_genes_topgo = run_topgo_enrichment_fisher(mixed_effects_genes,names(mixed_effect_pvals_apprx_statistic))
-extract_top_go_results(mixed_effects_genes_topgo,0.05,500)
+save(mixed_effect_pvals_emp_pvals,mixed_effect_pvals_apprx_pvals,mixed_effect_pvals_apprx_statistic,mixed_effect_pvals_apprx_bic_diff,
+     original_df, corrected_df,corrected_ps,file="Acute_data_analysis_mixed_effect_analysis.RData")
 
-# GSEA
-library(fgsea)
-fgsea_wrapper <- function(pathways,scores,nperm=2000,run_nperm=1000,...){
-  num_runs = nperm/run_nperm
-  l = list()
-  for(j in 1:num_runs){
-    l[[j]] = fgsea(pathways,scores,nperm = run_nperm,...)
-  }
-  emp_pvals = sapply(l,function(x)x$pval)
-  emp_pvals = emp_pvals*run_nperm
-  min_to_add = min(emp_pvals)
-  emp_pvals = emp_pvals-min_to_add
-  new_pvals = rowSums(emp_pvals)+min_to_add
-  new_pvals = new_pvals/nperm
-  new_qvals = p.adjust(new_pvals,method='fdr')
-  res = l[[1]]
-  res[,"pval"] = new_pvals
-  res[,"padj"] = new_qvals
-  return(res)
-}
-pathways = reactomePathways(names(mixed_effect_pvals_apprx_statistic))
-#system.time({gsea_res = fgsea(pathways,mixed_effect_pvals_apprx_statistic,nperm=1000,minSize = 5)})
-system.time({gsea_res = fgsea_wrapper(pathways,mixed_effect_pvals_apprx_statistic,nperm=20000,minSize = 5)})
-qvals = gsea_res$padj; ES = gsea_res$ES
-selected_pathways = gsea_res$pathway[qvals<0.01 & ES > 0]
-pathway_name = "Mitochondrial translation"
-pathway_name = "Hemostasis"
-plotEnrichment(pathways[[pathway_name]],mixed_effect_pvals_apprx_statistic)
-quantile(mixed_effect_pvals_apprx_statistic[pathways[[pathway_name]]])
-quantile(mixed_effect_pvals_apprx_statistic)
-qqplot(mixed_effect_pvals_apprx_statistic,mixed_effect_pvals_apprx_statistic[pathways[[pathway_name]]]);abline(0,1)
-
-save(mixed_effect_pvals_apprx_pvals,mixed_effect_pvals_apprx_statistic, corrected_ps, original_df, corrected_df, mixed_effects_genes_topgo,
-     mixed_effect_pvals_emp_pvals,file="Acute_data_analysis_empirical_mixed_effect_pval_analysis.RData")
+###############################################
+###############################################
+#################### End ######################
+###############################################
+###############################################
 
 # # try lmlist analysis
 # lms = lmList(x~timev+timev^2|subjs,data=d)

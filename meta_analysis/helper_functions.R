@@ -1,3 +1,4 @@
+library(e1071)
 # Helper functions
 
 simplify_tissue_info<-function(subject_col2tissue){
@@ -909,4 +910,66 @@ get_stats_df_chisq3<-function(stats,ps,range){
     if(all(curr_ps>=ps)){break}
   }
   return(j)
+}
+
+# Functions for replicability analysis
+# Get the data matrices for the analysis
+get_paired_ttest_matrices = function(dataset_ids,tt,sample2subj_with_dataset_number,
+                                     dataset2preprocessed_data,geneset,min_subjs = 3,toprint=T,toplot=T){
+  dataset_pvals = c();dataset_stats = c();dataset_pvals_two_tail=c()
+  for (dataset in unique(dataset_ids)){
+    all_dataset_samples = names(dataset_ids[dataset_ids==dataset])
+    time_points = setdiff(unique(tt[all_dataset_samples],na.rm=T),min(tt))
+    if(length(time_points)==0){next}
+    #if(toprint){print(time_points)}
+    for(tt_val in time_points){
+      dataset_samples = all_dataset_samples
+      curr_tt = tt[dataset_samples]
+      dataset_samples = dataset_samples[curr_tt==min(tt) | curr_tt==tt_val]
+      dataset_subjects = sample2subj_with_dataset_number[dataset_samples]
+      # all NAs == we do not have the data
+      if(all(is.na(dataset_subjects))){next}
+      tab = table(dataset_subjects)
+      paired_subjects = names(tab[tab==2])
+      if(length(paired_subjects)<min_subjs){next}
+      #print(table(curr_tt))
+      # select subjects with paired samples
+      dataset_samples = dataset_samples[is.element(dataset_subjects,set=paired_subjects)]
+      dataset_subjects = sample2subj_with_dataset_number[dataset_samples]
+      dataset_times = tt[dataset_samples]
+      # reorder  
+      ord = order(dataset_times,dataset_subjects,decreasing=F)
+      dataset_samples = dataset_samples[ord]
+      dataset_times = dataset_times[ord]
+      dataset_subjects = dataset_subjects[ord]
+      assertthat::assert_that(all(dataset_subjects[dataset_times==min(tt)]==dataset_subjects[dataset_times>min(tt)]))
+      # run t-test
+      mat = dataset2preprocessed_data[[dataset]]$gene_data[geneset,dataset_samples]
+      if(is.null(mat)){next}
+      ttests = apply(mat,1,run_paired_test,subjs = dataset_subjects,timev=dataset_times,alternative="less")
+      ttest_stats = sapply(ttests,function(x)x$statistic)
+      ttest_pvals = sapply(ttests,function(x)x$p.value)
+      # save the results
+      formatted_name = get_dataset_name_for_rep_analysis(dataset,dataset_ids,sample2tissue,sample2training_type)
+      tt_val = as.character(tt_val)
+      formatted_name = paste(tt_val,formatted_name,sep=';')
+      print(formatted_name)
+      if(toplot){hist(ttest_pvals,main=dataset)}
+      dataset_pvals = cbind(dataset_pvals,ttest_pvals)
+      colnames(dataset_pvals)[ncol(dataset_pvals)] = formatted_name
+      dataset_stats = cbind(dataset_stats,ttest_stats)
+      colnames(dataset_stats)[ncol(dataset_stats)] = formatted_name
+      dataset_pvals_two_tail = cbind(dataset_pvals_two_tail,2*pmin(1-ttest_pvals,ttest_pvals))
+      colnames(dataset_pvals_two_tail)[ncol(dataset_pvals_two_tail)] = formatted_name
+    }
+  }
+  rownames(dataset_stats) = gsub(rownames(dataset_stats),pattern = "\\.t$",replace="",perl=T)
+  return(list(dataset_stats=dataset_stats,dataset_pvals=dataset_pvals,dataset_pvals_two_tail=dataset_pvals_two_tail))
+}
+
+get_dataset_name_for_rep_analysis<-function(nn,dataset_ids,sample2tissue,sample2training_type){
+  samp = names(which(dataset_ids==nn))[1]
+  gse = strsplit(split=';',nn)[[1]][1]
+  newname = paste(sample2tissue[samp],sample2training_type[samp],gse,sep=';')
+  return(newname)
 }
