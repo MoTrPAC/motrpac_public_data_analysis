@@ -381,6 +381,7 @@ run_topgo_enrichment_fisher<-function(genesOfInterest,geneUniverse,go_term_size=
     }
   }
   go_pvals = as.numeric(res[,ncol(allRes)])
+  go_pvals[is.na(go_pvals)] = 1e-30
   go_qvals = p.adjust(go_pvals,method='fdr')
   res = cbind(res,go_qvals)
   return(res)
