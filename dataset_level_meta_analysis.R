@@ -94,109 +94,196 @@ longterm_mod = get_dataset_moderators(names(longterm_datasets_effects),longterm_
 longterm_gene_tables = lapply(longterm_genes,get_gene_table,dataset_effects=longterm_datasets_effects,moderators=longterm_mod)
 names(longterm_gene_tables) = longterm_genes
 
+# remove controls, untrained, and fat from the tables
+remove_undesired_datasets<-function(gdata){
+  gdata = gdata[!grepl("control",gdata$training),]
+  gdata = gdata[!grepl("untr",gdata$training),]
+  gdata = gdata[!grepl("fat",gdata$tissue),]
+  gdata = gdata[!grepl("adipose",gdata$tissue),]
+  return (gdata)
+}
+acute_gene_tables_raw = acute_gene_tables
+acute_gene_tables = lapply(acute_gene_tables,remove_undesired_datasets)
+longterm_gene_tables_raw = longterm_gene_tables
+longterm_gene_tables = lapply(longterm_gene_tables,remove_undesired_datasets)
+save(acute_gene_tables_raw,acute_gene_tables,longterm_gene_tables_raw,longterm_gene_tables,file="PADB_dataset_level_meta_analysis_data.RData")
+
+# ... e.g., subset = (tissue=="blood")
 get_gene_analysis_pvals<-function(gdata,use_mods=T,func=rma,...){
   gdata = gdata[gdata$vi>0,]
   v = NULL
   try({
     if(use_mods){
-      res1 = func(yi=yi,vi=vi,mods = ~ training + time ,data=gdata,knha=T, 
-                 subset = (tissue=="blood"),control=list(maxiter=10000,stepadj=0.5),...) 
-      res2 = func(yi=yi,vi=vi,mods = ~ training + time ,data=gdata,knha=T, 
-                 subset = (tissue=="muscle"),control=list(maxiter=10000,stepadj=0.5),...)
+      res1 = func(yi=yi,vi=vi,weights = 1, mods = ~ training + time ,data=gdata, control=list(maxiter=10000,stepadj=0.5),...) 
     }
     else{
-      res1 = func(yi=yi,vi=vi,data=gdata,knha=T, subset = (tissue=="blood"),control=list(maxiter=10000,stepadj=0.5),...) 
-      res2 = func(yi=yi,vi=vi,data=gdata,knha=T, subset = (tissue=="muscle"),control=list(maxiter=10000,stepadj=0.5),...)
+      res1 = func(yi=yi,vi=vi,weights = 1,data=gdata, control=list(maxiter=10000,stepadj=0.5),...) 
     }
     ps1 = res1$pval;names(ps1) = rownames(res1$b)
     ps1 = c(ps1,res1$QMp);names(ps1)[length(ps1)] = "AllMods"
     stats1 = res1$b[,1];ses1 = res1$se
-    ps2 = res2$pval;names(ps2) = rownames(res2$b)
-    stats2 = res2$b[,1];ses2 = res2$se
-    ps2 = c(ps2,res2$QMp);names(ps2)[length(ps2)] = "AllMods"
-    names(ps1) = paste("blood_p_",names(ps1),sep="")
-    names(ps2) = paste("muscle_p_",names(ps2),sep="")
-    names(stats1) = paste("blood_s_",names(stats1),sep="")
-    names(stats2) = paste("muscle_s_",names(stats2),sep="")
-    v = c(ps1,ps2,stats1,stats2)
+    names(ps1) = paste("pval_",names(ps1),sep="")
+    names(stats1) = paste("stat_",names(stats1),sep="")
+    v = c(ps1,stats1)
   })
   return(v)
 }
-acute_meta_analysis_res = t(sapply(acute_gene_tables,get_gene_analysis_pvals,use_mods=F))
-longterm_meta_analysis_res = t(sapply(longterm_gene_tables,get_gene_analysis_pvals,use_mods=F))
-# longterm had several fails, the above line returns a list
-names(longterm_meta_analysis_res) = names(longterm_gene_tables)
-longterm_meta_analysis_res = longterm_meta_analysis_res[!sapply(longterm_meta_analysis_res,is.null)]
-tmp_mat = t(sapply(longterm_meta_analysis_res,function(x) x ))
-longterm_meta_analysis_res = tmp_mat
-save(acute_meta_analysis_res,longterm_meta_analysis_res,file="PADB_metafor_meta_analysis_results.RData")
+get_gene_analysis_pvals_with_gse_correction<-function(gdata,use_mods=T,func=rma.mv,...){
+  gdata = gdata[gdata$vi>0,]
+  v = NULL
+  try({
+    if(use_mods){
+      res1 = func(yi,vi,W=1,mods = ~ training + time ,data=gdata, random = ~ 1|gse,control=list(maxiter=10000),...) 
+    }
+    else{
+      res1 = func(yi,vi,W=1,data=gdata, random = ~ 1|gse,control=list(maxiter=10000),...)
+    }
+    ps1 = res1$pval;names(ps1) = rownames(res1$b)
+    ps1 = c(ps1,res1$QMp);names(ps1)[length(ps1)] = "AllMods"
+    stats1 = res1$b[,1];ses1 = res1$se
+    names(ps1) = paste("pval_",names(ps1),sep="")
+    names(stats1) = paste("stat_",names(stats1),sep="")
+    v = c(ps1,stats1)
+  })
+  return(v)
+}
+
+# save results as lists: sometimes the solvers fail
+acute_meta_analysis_results = list()
+acute_meta_analysis_results[["random_effects_blood"]] = lapply(acute_gene_tables,
+                function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="blood",],use_mods=F))
+acute_meta_analysis_results[["random_effects_muscle"]] = lapply(acute_gene_tables,
+                function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="muscle",],use_mods=F))
+acute_meta_analysis_results[["mixed_effects_blood"]] = lapply(acute_gene_tables,
+                function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="blood",],use_mods=T))
+acute_meta_analysis_results[["mixed_effects_muscle"]] = lapply(acute_gene_tables,
+                function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="muscle",],use_mods=T))
+
+longterm_meta_analysis_results = list()
+longterm_meta_analysis_results[["random_effects_blood"]] = lapply(longterm_gene_tables,
+        function(x)get_gene_analysis_pvals(x[x$tissue=="blood",],use_mods=F))
+longterm_meta_analysis_results[["random_effects_muscle"]] = lapply(longterm_gene_tables,
+        function(x)get_gene_analysis_pvals(x[x$tissue=="muscle",],use_mods=F))
+longterm_meta_analysis_results[["mixed_effects_blood"]] = lapply(longterm_gene_tables,
+        function(x)get_gene_analysis_pvals(x[x$tissue=="blood",],use_mods=T))
+longterm_meta_analysis_results[["mixed_effects_muscle"]] = lapply(longterm_gene_tables,
+        function(x)get_gene_analysis_pvals(x[x$tissue=="muscle",],use_mods=T))
+
+tmp1 = lapply(longterm_gene_tables,
+              function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="blood",],use_mods=F))
+
+save(acute_meta_analysis_results,longterm_meta_analysis_results,file="PADB_metafor_meta_analysis_results.RData")
+
+load("PADB_metafor_meta_analysis_results.RData")
+get_ps<-function(x,ind=1){
+  nn = names(x)
+  xl = lapply(x,function(x)x[ind])
+  xl[sapply(xl,length)==0] = NA
+  v = unlist(xl)
+  names(v) = nn
+  return (v)
+}
+acute_ps_intersect = sapply(acute_meta_analysis_results,get_ps)
+acute_ps_mods = sapply(acute_meta_analysis_results[3:4],get_ps,ind="pval_AllMods")
+acute_ps = cbind(acute_ps_intersect,acute_ps_mods)
+colnames(acute_ps)[5:6] = c("blood, modifiers","muscle,modifiers")
+longterm_ps_intersect = sapply(longterm_meta_analysis_results,get_ps)
+longterm_ps_mods = sapply(longterm_meta_analysis_results[3:4],get_ps,ind="pval_AllMods")
+longterm_ps = cbind(longterm_ps_intersect,longterm_ps_mods)
+colnames(longterm_ps)[5:6] = c("blood, modifiers","muscle,modifiers")
+
+acute_qs = apply(acute_ps,2,p.adjust,method='fdr')
+longterm_qs = apply(longterm_ps,2,p.adjust,method='fdr')
 
 par(mfrow=c(2,2))
-hist(acute_meta_analysis_res[,"blood_p_intrcpt"])
-hist(longterm_meta_analysis_res[,"blood_p_intrcpt"])
-hist(acute_meta_analysis_res[,"muscle_p_intrcpt"])
-hist(longterm_meta_analysis_res[,"muscle_p_intrcpt"])
+hist(acute_ps[,1],main="Acute, blood")
+hist(acute_ps[,2],main="Acute, muscle")
+hist(longterm_ps[,1],main="Longterm, blood")
+hist(longterm_ps[,2],main="Longterm, muscle")
 
-metafor_gene_sets = list()
-metafor_gene_sets[["acute_muscle"]] = names(which(p.adjust(acute_meta_analysis_res[,"muscle_p_intrcpt"],method='fdr')<0.1))
-metafor_gene_sets[["acute_blood"]] = names(which(p.adjust(acute_meta_analysis_res[,"blood_p_intrcpt"],method='fdr')<0.1))
-metafor_gene_sets[["longterm_muscle"]] = names(which(p.adjust(longterm_meta_analysis_res[,"muscle_p_intrcpt"],method='fdr')<0.1))
-metafor_gene_sets[["longterm_blood"]] = names(which(p.adjust(longterm_meta_analysis_res[,"blood_p_intrcpt"],method='fdr')<0.1))
-metafor_gene_sets_enrichments = run_topgo_enrichment_fisher(metafor_gene_sets,union(acute_genes,longterm_genes))
+metafor_gene_sets = c(
+  apply(acute_qs,2,function(x,y)y[x<=0.1 & !is.na(x)],y=rownames(acute_ps)),
+  apply(longterm_qs,2,function(x,y)y[x<=0.1 & !is.na(x)],y=rownames(longterm_ps))
+)
+names(metafor_gene_sets) = paste("longterm",names(metafor_gene_sets),sep=",")
+names(metafor_gene_sets)[1:ncol(acute_ps)] = gsub(pattern="longterm,",names(metafor_gene_sets)[1:ncol(acute_ps)],replace="acute,")
+metafor_gene_sets = metafor_gene_sets[sapply(metafor_gene_sets,length)>0]
+save(metafor_gene_sets,file="metafor_gene_sets.RData")
+metafor_sets_enrichments = run_topgo_enrichment_fisher(metafor_gene_sets,rownames(acute_ps))
 
-# tests and comments from the paper of metafor (2010)
-gdata = get_gene_table("8863",acute_datasets_effects,acute_mod)
-gdata = get_gene_table("65121",longterm_datasets_effects,longterm_mod)
-# another test: make a dataset with large effects
-# gdata$yi = rnorm(nrow(gdata),mean=5)
-plot(gdata[,"yi"],gdata[,"vi"],pch=as.numeric(as.factor(gdata$tissue)))
-# knha - a correction that accounts for the uncertainty in the random effect
-res0 = rma(yi,vi,data=gdata,knha=T)
-res0 = rma.mv(yi,vi,random = ~ 1|gse,data=gdata)
-res0 = rma(yi,vi,data=gdata,knha=T,subset = (tissue=="muscle"))
-res0 = rma.mv(yi,vi,random = ~ 1|gse,data=gdata,subset = (tissue=="muscle"))
-# explanation of the result above:
-#   mu - the average effect is 0.067, the CI contains zero
-res = rma(yi=yi,vi=vi,mods = ~ tissue + training + time ,data=gdata,knha=T)
-# CIs of the anova stats:
-confint(res)
-# Forest plot - very informative
-forest(res)
-# difference in tau before and after using moderators - teaches us about the 
-# percentage of explained variance due to the moderators
-# when the test for residuals (QE) is signficant - we may be missing additional
-# moderators
-# We can use predict to get expected effects for new moderators:
-# Currently does not work because factors should be transformed into dummy vars.
-# Also pages 18-19 show nice figures and analysis of the predictions.
-predict(res,newmods = as.matrix(data.frame("",time=5,"",training="endurance",tissue="muscle")), addx = TRUE)
-predict(res,newmods = as.matrix(gdata))
-# look at the fitted values
-predict(res)
-# Separate by tissue
-res2 = rma(yi=yi,vi=vi,mods = ~ training + time ,data=gdata,knha=T, subset = (tissue=="muscle"))
-res1 = rma(yi=yi,vi=vi,mods = ~ training + time ,data=gdata,knha=T, subset = (tissue=="blood"))
-# Residual analysis for detecting outlier datasets
-barplot(as.numeric(rstudent(res)$z));abline(-2,0);abline(2,0)
-# Residual analysis is informative but not enough
-# case deletion diagnostics are informatice as well
-plot(influence(res))
-# funnel plots
-funnel(res)
-# radial plots: useful for consistency analysis
-# can be used only for models without moderators
-radial(res0)
-# qq plots for the standardized residuals
-par(mfrow=c(2,2))
-qqnorm(res0,main="random")
-qqnorm(res,main="mixed, both tissues")
-qqnorm(res1,main="blood")
-qqnorm(res2,main="muscle")
-# tests for publication bias
-regtest(res0,predictor="vi",model="lm")
-regtest(res2,predictor="vi",model="lm")
-# anova tests
-anova(res0,res)
+# # Tests and comments from the paper of metafor (2010)
+# gdata = get_gene_table("6947",acute_datasets_effects,acute_mod)
+# gdata = get_gene_table("65121",longterm_datasets_effects,longterm_mod)
+# # another test: make a dataset with large effects
+# # gdata$yi = rnorm(nrow(gdata),mean=5)
+# plot(gdata[,"yi"],gdata[,"vi"],pch=as.numeric(as.factor(gdata$tissue)))
+# # knha - a correction that accounts for the uncertainty in the random effect
+# res0 = rma.mv(yi,vi,random = ~ 1|gse,data=gdata,subset = (tissue=="blood"))
+# rma.mv(yi,vi,random = ~ 1|gse,data=gdata,subset = (tissue=="blood"))
+# rma.mv(yi,vi,random = ~ 1|gse,data=gdata,subset = (tissue=="blood"),method="ML")
+# rma.mv(yi,vi,random = ~ 1|gse,data=gdata,subset = (tissue=="blood"),method="ML",test='t')
+# res0 = rma.mv(yi,vi,random = list(~ training|gse ,~ordered(time)|gse), data=gdata,subset = (tissue=="blood"),method="ML")
+# res0 = rma.mv(yi,vi,random = ~ training|gse ,mods =  ~time , data=gdata,subset = (tissue=="blood"),method="ML")
+# # explanation of the result above:
+# #   mu - the average effect is 0.067, the CI contains zero
+# res = rma(yi=yi,vi=vi,mods = ~ tissue + training + time ,data=gdata,knha=T)
+# # CIs of the anova stats:
+# confint(res0)
+# # Forest plot - very informative
+# forest(res0)
+# # difference in tau before and after using moderators - teaches us about the 
+# # percentage of explained variance due to the moderators
+# # when the test for residuals (QE) is signficant - we may be missing additional
+# # moderators
+# # We can use predict to get expected effects for new moderators:
+# # Currently does not work because factors should be transformed into dummy vars.
+# # Also pages 18-19 show nice figures and analysis of the predictions.
+# predict(res,newmods = as.matrix(data.frame("",time=5,"",training="endurance",tissue="muscle")), addx = TRUE)
+# predict(res,newmods = as.matrix(gdata))
+# # look at the fitted values
+# predict(res)
+# # Separate by tissue
+# res2 = rma(yi=yi,vi=vi,mods = ~ training + time ,data=gdata,knha=T, subset = (tissue=="muscle"))
+# res1 = rma(yi=yi,vi=vi,mods = ~ training + time ,data=gdata,knha=T, subset = (tissue=="blood"))
+# # Residual analysis for detecting outlier datasets
+# barplot(as.numeric(rstudent(res)$z));abline(-2,0);abline(2,0)
+# # Residual analysis is informative but not enough
+# # case deletion diagnostics are informatice as well
+# plot(influence(res))
+# # funnel plots
+# funnel(res0)
+# # radial plots: useful for consistency analysis
+# # can be used only for models without moderators
+# radial(res0)
+# # qq plots for the standardized residuals
+# qqnorm(res0,main="random")
+# qqnorm(res,main="mixed, both tissues")
+# qqnorm(res1,main="blood")
+# qqnorm(res2,main="muscle")
+# # tests for publication bias
+# regtest(res0,predictor="vi",model="lm")
+# regtest(res2,predictor="vi",model="lm")
+# # anova tests
+# anova(res0,res)
+# 
+# # Compare to the rmeta package
+# install.packages('rmeta')
+# library(rmeta)
+# blood_gdata = gdata[gdata$tissue=="blood",]
+# rmeta_res0 = meta.summaries(d=blood_gdata$yi,se = blood_gdata$vi)
+# summary(rmeta_res0)[[3]]
+# plot(rmeta_res0)
+# funnelplot(rmeta_res0)
+# gdata$yi
+
+
+
+
+
+
+
+
+
 
 
 
