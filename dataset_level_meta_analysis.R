@@ -106,7 +106,41 @@ acute_gene_tables_raw = acute_gene_tables
 acute_gene_tables = lapply(acute_gene_tables,remove_undesired_datasets)
 longterm_gene_tables_raw = longterm_gene_tables
 longterm_gene_tables = lapply(longterm_gene_tables,remove_undesired_datasets)
-save(acute_gene_tables_raw,acute_gene_tables,longterm_gene_tables_raw,longterm_gene_tables,file="PADB_dataset_level_meta_analysis_data.RData")
+
+# transform the datasets into matrices that can be plotted
+acute_effects_matrix = c();acute_sds_matrix = c()
+for(d in names(acute_datasets_effects)){
+  l = acute_datasets_effects[[d]]
+  times = names(l)
+  darr = strsplit(split=';',d)[[1]]
+  darr[2] = simplify_tissue_info(darr[2])
+  for (tt in times){
+    currname = paste(c(tt,darr[c(2,4,1)]),collapse=';')
+    acute_effects_matrix = cbind(acute_effects_matrix,l[[tt]][acute_genes,1])
+    acute_sds_matrix = cbind(acute_sds_matrix,l[[tt]][acute_genes,2])
+    colnames(acute_sds_matrix)[ncol(acute_sds_matrix)] = currname
+  }
+}
+colnames(acute_effects_matrix) = colnames(acute_sds_matrix)
+longterm_effects_matrix = c();longterm_sds_matrix = c()
+for(d in names(longterm_datasets_effects)){
+  l = longterm_datasets_effects[[d]]
+  times = names(l)
+  darr = strsplit(split=';',d)[[1]]
+  darr[2] = simplify_tissue_info(darr[2])
+  for (tt in times){
+    currname = paste(c(tt,darr[c(2,4,1)]),collapse=';')
+    longterm_effects_matrix = cbind(longterm_effects_matrix,l[[tt]][longterm_genes,1])
+    longterm_sds_matrix = cbind(longterm_sds_matrix,l[[tt]][longterm_genes,2])
+    colnames(longterm_sds_matrix)[ncol(longterm_sds_matrix)] = currname
+  }
+}
+colnames(longterm_effects_matrix) = colnames(longterm_sds_matrix)
+
+save(acute_gene_tables_raw,acute_gene_tables,longterm_gene_tables_raw,longterm_gene_tables,
+     longterm_sds_matrix, longterm_effects_matrix,
+     acute_sds_matrix,acute_effects_matrix,
+     file="PADB_dataset_level_meta_analysis_data.RData")
 
 # ... e.g., subset = (tissue=="blood")
 get_gene_analysis_pvals<-function(gdata,use_mods=T,func=rma,...){
@@ -202,14 +236,15 @@ hist(longterm_ps[,1],main="Longterm, blood")
 hist(longterm_ps[,2],main="Longterm, muscle")
 
 metafor_gene_sets = c(
-  apply(acute_qs,2,function(x,y)y[x<=0.1 & !is.na(x)],y=rownames(acute_ps)),
-  apply(longterm_qs,2,function(x,y)y[x<=0.1 & !is.na(x)],y=rownames(longterm_ps))
+  apply(acute_qs,2,function(x,y)y[x<=0.2 & !is.na(x)],y=rownames(acute_ps)),
+  apply(longterm_qs,2,function(x,y)y[x<=0.2 & !is.na(x)],y=rownames(longterm_ps))
 )
 names(metafor_gene_sets) = paste("longterm",names(metafor_gene_sets),sep=",")
 names(metafor_gene_sets)[1:ncol(acute_ps)] = gsub(pattern="longterm,",names(metafor_gene_sets)[1:ncol(acute_ps)],replace="acute,")
 metafor_gene_sets = metafor_gene_sets[sapply(metafor_gene_sets,length)>0]
-save(metafor_gene_sets,file="metafor_gene_sets.RData")
 metafor_sets_enrichments = run_topgo_enrichment_fisher(metafor_gene_sets,rownames(acute_ps))
+extract_top_go_results(metafor_sets_enrichments)
+save(metafor_gene_sets,metafor_sets_enrichments,acute_ps,longterm_ps,file="metafor_gene_sets.RData")
 
 # # Tests and comments from the paper of metafor (2010)
 # gdata = get_gene_table("6947",acute_datasets_effects,acute_mod)
