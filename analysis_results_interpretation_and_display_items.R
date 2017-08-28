@@ -92,18 +92,19 @@ hist(corrs1,breaks=100)
 # Show heatmaps
 load("metafor_gene_sets.RData")
 get_tstats_heatmap(longterm_effects_matrix[metafor_gene_sets$`longterm,random_effects_muscle`,],
-                   entrez2symbol=entrez2symbol,mar=c(18,15),min_t = 0)
+                   entrez2symbol=entrez2symbol,mar=c(12,15),min_t = 0)
 get_tstats_heatmap(acute_effects_matrix[metafor_gene_sets$`acute,random_effects_muscle`,grepl("muscle",colnames(acute_effects_matrix))],
                    entrez2symbol=entrez2symbol,mar=c(8,15),min_t = 0)
 get_tstats_heatmap(acute_effects_matrix[metafor_gene_sets$`acute,mixed_effects_muscle`,grepl("muscle",colnames(acute_effects_matrix))],
                    entrez2symbol=entrez2symbol,mar=c(8,15),min_t = 0)
-get_tstats_heatmap(acute_effects_matrix[rep_gene_sets$acute,grepl("muscle",colnames(acute_effects_matrix))],
-                   entrez2symbol=entrez2symbol,mar=c(8,15),min_t = 0)
-get_tstats_heatmap(longterm_effects_matrix[rep_gene_sets$longterm,grepl("muscle",colnames(longterm_effects_matrix))],
+get_tstats_heatmap(acute_effects_matrix[metafor_gene_sets$`acute,muscle,modifiers`,grepl("muscle",colnames(acute_effects_matrix))],
                    entrez2symbol=entrez2symbol,mar=c(8,15),min_t = 0)
 
 top_acue_avg = names(sort(abs(rowMeans(acute_effects_matrix)),decreasing = T)[1:20])
 get_tstats_heatmap(acute_effects_matrix[top_acue_avg,],
+                   entrez2symbol=entrez2symbol,mar=c(8,15),min_t = 0)
+top_longterm_avg = names(sort(abs(rowMeans(longterm_effects_matrix)),decreasing = T)[1:20])
+get_tstats_heatmap(longterm_effects_matrix[top_longterm_avg,],
                    entrez2symbol=entrez2symbol,mar=c(8,15),min_t = 0)
 
 # Classification overall results using the gene intensity data
