@@ -279,6 +279,8 @@ save(metafor_gene_sets,metafor_sets_enrichments,acute_ps,longterm_ps,file="metaf
 # Tests and comments from the paper of metafor (2010)
 gdata = acute_gene_tables[["6947"]]
 gdata = longterm_gene_tables[["1284"]]
+gdata = acute_gene_tables[["5166"]] # survived rep but not meta
+gdata = acute_gene_tables[["11326"]] # gene with significant modifiers
 # another test: make a dataset with large effects
 # gdata$yi = rnorm(nrow(gdata),mean=5)
 plot(gdata[,"yi"],gdata[,"vi"],pch=as.numeric(as.factor(gdata$tissue)))

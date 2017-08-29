@@ -40,57 +40,79 @@ plot_with_err_bars<-function(xnames,avg,sdev,add=F,...){
   # hack: we draw arrows but with very special "arrowheads"
   arrows(1:length(xnames), avg-sdev, 1:length(xnames), avg+sdev, length=0.05, angle=90, code=3)
 }
-######################################################################
-# Get dataset sizes
-load("PADB_univariate_results_and_preprocessed_data_acute.RData")
-acute_study_sizes = sapply(dataset2preprocessed_data,function(x)ncol(x$gene_data))
-load("PADB_univariate_results_and_preprocessed_data_longterm.RData")
-longterm_study_sizes = sapply(dataset2preprocessed_data,function(x)ncol(x$gene_data))
-dataset_sizes = c(acute_study_sizes,longterm_study_sizes)
-
-# Dataset sizes vs. t-tests: show effect sizes vs. dataset sizes and precision
-# Load the ts
-load("Longterm_replicability_analysis.RData")
-longterm_ts = rep_data$dataset_stats
-longterm_ps = rep_data$dataset_pvals
-load("Acute_replicability_analysis.RData")
-acute_ts = rep_data$dataset_stats
-acute_ps = rep_data$dataset_pvals
-shared_genes = intersect(rownames(longterm_ts),rownames(acute_ts))
-all_ts = cbind(longterm_ts[shared_genes,],acute_ts[shared_genes,])
-all_ts[is.na(all_ts)|is.nan(all_ts)]=0
-all_ps = cbind(longterm_ps[shared_genes,],acute_ps[shared_genes,])
-all_ps[is.na(all_ps)|is.nan(all_ps)]=0.5
-ts_info_table = sapply(colnames(all_ts),function(x)strsplit(x,split=';')[[1]])
-ts_info_table = rbind(c(rep("longterm",ncol(longterm_ts)),rep("acute",ncol(acute_ts))),ts_info_table)
-
-# correlation of effects vs study size
-dataset_sizes_info = sapply(names(dataset_sizes),function(x)strsplit(x,split=';')[[1]][1:4])
-dataset_sizes_info = rbind(dataset_sizes_info,dataset_sizes)
-dataset_sizes_info[2,] = sapply(dataset_sizes_info[2,],simplify_tissue_info)
-gse_tissue_to_size = as.numeric(dataset_sizes_info[5,])
-names(gse_tissue_to_size) = apply(dataset_sizes_info[c(1,2),],2,paste,collapse=",")
-all_ts_col_to_sizes = as.numeric(gse_tissue_to_size[apply(ts_info_table[c(5,3),],2,paste,collapse=",")])
-ts_sizes_corrs = cor(abs(t(all_ts)),all_ts_col_to_sizes,method="spearman")[,1]
-hist(ts_sizes_corrs,main="Correlation between t-statistic and sample size",breaks=100)
-abline(v=0,col="red",lwd=5,lty=2)
+# ######################################################################
+# # Get dataset sizes
+# load("PADB_univariate_results_and_preprocessed_data_acute.RData")
+# acute_study_sizes = sapply(dataset2preprocessed_data,function(x)ncol(x$gene_data))
+# load("PADB_univariate_results_and_preprocessed_data_longterm.RData")
+# longterm_study_sizes = sapply(dataset2preprocessed_data,function(x)ncol(x$gene_data))
+# dataset_sizes = c(acute_study_sizes,longterm_study_sizes)
+# 
+# # Dataset sizes vs. t-tests: show effect sizes vs. dataset sizes and precision
+# # Load the ts
+# load("Longterm_replicability_analysis.RData")
+# longterm_ts = rep_data$dataset_stats
+# longterm_ps = rep_data$dataset_pvals
+# load("Acute_replicability_analysis.RData")
+# acute_ts = rep_data$dataset_stats
+# acute_ps = rep_data$dataset_pvals
+# shared_genes = intersect(rownames(longterm_ts),rownames(acute_ts))
+# all_ts = cbind(longterm_ts[shared_genes,],acute_ts[shared_genes,])
+# all_ts[is.na(all_ts)|is.nan(all_ts)]=0
+# all_ps = cbind(longterm_ps[shared_genes,],acute_ps[shared_genes,])
+# all_ps[is.na(all_ps)|is.nan(all_ps)]=0.5
+# ts_info_table = sapply(colnames(all_ts),function(x)strsplit(x,split=';')[[1]])
+# ts_info_table = rbind(c(rep("longterm",ncol(longterm_ts)),rep("acute",ncol(acute_ts))),ts_info_table)
+# 
+# # correlation of effects vs study size
+# dataset_sizes_info = sapply(names(dataset_sizes),function(x)strsplit(x,split=';')[[1]][1:4])
+# dataset_sizes_info = rbind(dataset_sizes_info,dataset_sizes)
+# dataset_sizes_info[2,] = sapply(dataset_sizes_info[2,],simplify_tissue_info)
+# gse_tissue_to_size = as.numeric(dataset_sizes_info[5,])
+# names(gse_tissue_to_size) = apply(dataset_sizes_info[c(1,2),],2,paste,collapse=",")
+# all_ts_col_to_sizes = as.numeric(gse_tissue_to_size[apply(ts_info_table[c(5,3),],2,paste,collapse=",")])
+# ts_sizes_corrs = cor(abs(t(all_ts)),all_ts_col_to_sizes,method="spearman")[,1]
+# hist(ts_sizes_corrs,main="Correlation between t-statistic and sample size",breaks=100)
+# abline(v=0,col="red",lwd=5,lty=2)
 
 # Load effect sizes
 load("PADB_dataset_level_meta_analysis_data.RData")
-ts1 = acute_ts
-ts2 = acute_effects_matrix/acute_sds_matrix
-x1 = ts1[,"0;blood;endurance;GSE46075"]
-x2 = ts2[,"0;blood;endurance;GSE46075"]
-plot(-x1,x2);abline(0,1)
+# ts1 = acute_ts
+# ts2 = acute_effects_matrix/acute_sds_matrix
+# x1 = ts1[,"0;blood;endurance;GSE46075"]
+# x2 = ts2[,"0;blood;endurance;GSE46075"]
+# plot(-x1,x2);abline(0,1)
+# corrs1 = c()
+# for(j in 1:nrow(acute_effects_matrix)){
+#   corrs1[j] = cor(longterm_effects_matrix[j,],longterm_sds_matrix[j,],method="spearman")
+# }
+# hist(corrs1,breaks=100)
 
-corrs1 = c()
-for(j in 1:nrow(acute_effects_matrix)){
-  corrs1[j] = cor(longterm_effects_matrix[j,],longterm_sds_matrix[j,],method="spearman")
+# Load the gene sets from the different analyses
+load("metafor_gene_sets.RData")
+load("PADB_dataset_level_replicability_analysis_results.RData")
+metafor_gene_sets = metafor_gene_sets[[1]]
+all_selected_pe_genes = unique(unlist(metafor_gene_sets))
+all_selected_pe_genes = union(all_selected_pe_genes,unlist(rep_gene_sets))
+all_selected_pe_genes = sort(all_selected_pe_genes)
+gene_data_summary_table = c()
+for(nn in names(rep_gene_sets)){
+  v = rep(F,length(all_selected_pe_genes));names(v)=all_selected_pe_genes
+  v[rep_gene_sets[[nn]]] = T
+  gene_data_summary_table = cbind(gene_data_summary_table,v)
+  colnames(gene_data_summary_table)[ncol(gene_data_summary_table)] = nn
 }
-hist(corrs1,breaks=100)
+colnames(gene_data_summary_table) = paste("rep_",colnames(gene_data_summary_table),sep="")
+for(nn in names(metafor_gene_sets)){
+  v = rep(F,length(all_selected_pe_genes));names(v)=all_selected_pe_genes
+  v[metafor_gene_sets[[nn]]] = T
+  gene_data_summary_table = cbind(gene_data_summary_table,v)
+  colnames(gene_data_summary_table)[ncol(gene_data_summary_table)] = nn
+}
+gene_data_summary_table = gene_data_summary_table[,-ncol(gene_data_summary_table)]
+write.table(gene_data_summary_table,file="replicability_and_metaanalysis_genes.txt",sep="\t",quote=F)
 
 # Show heatmaps
-load("metafor_gene_sets.RData")
 get_tstats_heatmap(longterm_effects_matrix[metafor_gene_sets$`longterm,random_effects_muscle`,],
                    entrez2symbol=entrez2symbol,mar=c(12,15),min_t = 0)
 get_tstats_heatmap(acute_effects_matrix[metafor_gene_sets$`acute,random_effects_muscle`,grepl("muscle",colnames(acute_effects_matrix))],

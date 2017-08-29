@@ -85,35 +85,89 @@ longterm_mod = get_dataset_moderators(names(longterm_datasets_pvals),longterm_me
 acute_pvals_matrix = c()
 for(d in names(acute_datasets_pvals)){
   l = acute_datasets_pvals[[d]]
-  times = rownames(l)
+  times = colnames(l)
   darr = strsplit(split=';',d)[[1]]
   darr[2] = simplify_tissue_info(darr[2])
   for (tt in times){
     currname = paste(c(tt,darr[c(2,4,1)]),collapse=';')
-    acute_pvals_matrix = cbind(acute_pvals_matrix,l[as.character(tt),acute_genes])
+    acute_pvals_matrix = cbind(acute_pvals_matrix,l[acute_genes,as.character(tt)])
     colnames(acute_pvals_matrix)[ncol(acute_pvals_matrix)] = currname
   }
 }
-longterm_pvals_matrix = c();longterm_sds_matrix = c()
+longterm_pvals_matrix = c()
 for(d in names(longterm_datasets_pvals)){
   l = longterm_datasets_pvals[[d]]
-  times = names(l)
+  times = colnames(l)
   darr = strsplit(split=';',d)[[1]]
   darr[2] = simplify_tissue_info(darr[2])
   for (tt in times){
     currname = paste(c(tt,darr[c(2,4,1)]),collapse=';')
-    longterm_pvals_matrix = cbind(longterm_pvals_matrix,l[[tt]][longterm_genes,1])
-    longterm_sds_matrix = cbind(longterm_sds_matrix,l[[tt]][longterm_genes,2])
-    colnames(longterm_sds_matrix)[ncol(longterm_sds_matrix)] = currname
+    longterm_pvals_matrix = cbind(longterm_pvals_matrix,l[longterm_genes,as.character(tt)])
+    colnames(longterm_pvals_matrix)[ncol(longterm_pvals_matrix)] = currname
   }
 }
-colnames(longterm_pvals_matrix) = colnames(longterm_sds_matrix)
 
-save(acute_gene_tables_raw,acute_gene_tables,longterm_gene_tables_raw,longterm_gene_tables,
-     longterm_sds_matrix, longterm_pvals_matrix,
-     acute_sds_matrix,acute_pvals_matrix,
-     file="PADB_dataset_level_meta_analysis_data.RData")
+save(longterm_pvals_matrix,acute_pvals_matrix,acute_datasets_pvals,longterm_datasets_pvals,
+     file="PADB_dataset_level_replicability_analysis_data.RData")
 
+# Separate by tissue
+rep_datasets = list()
+rep_datasets[["acute_muscle"]] = acute_pvals_matrix[,
+    grepl("muscle",colnames(acute_pvals_matrix)) & 
+      !grepl(pattern = "other|untra|control",colnames(acute_pvals_matrix))
+]
+rep_datasets[["acute_blood"]] = acute_pvals_matrix[,
+    grepl("blood",colnames(acute_pvals_matrix)) & 
+    !grepl(pattern = "other|untra|control",colnames(acute_pvals_matrix))
+]
+rep_datasets[["longterm_muscle"]] = longterm_pvals_matrix[,
+    grepl("muscle",colnames(longterm_pvals_matrix)) & 
+    !grepl(pattern = "other|untra|control",colnames(longterm_pvals_matrix))
+    ]
+rep_datasets[["longterm_blood"]] = longterm_pvals_matrix[,
+    grepl("blood",colnames(longterm_pvals_matrix)) & 
+    !grepl(pattern = "other|untra|control",colnames(longterm_pvals_matrix))
+    ]
+sapply(rep_datasets,dim)
+rep_datasets = lapply(rep_datasets,function(x){x[is.na(x)]=0.5;return(x)})
+library(kernlab)
+source('~/Desktop/screen/supplementary_data/submission_code/SCREEN_code_for_submission.R')
+source('~/Desktop/screen/supplementary_data/submission_code/twogroups_methods_for_submission.R')
+run_leadingeigen_clustering = function(x,cor_thr=0.2,toplot=F){
+  x = x >= cor_thr
+  mode(x) = 'numeric';diag(x)=0
+  g = graph.adjacency(x,mode='undirected',weighted=T)
+  if(toplot){plot(igraph::simplify(g))}
+  return (cluster_infomap(g)$membership)
+}
+screen_res = sapply(rep_datasets,function(x)SCREEN(x,ks=2:ncol(x),nH=10000))
+sapply(screen_res,function(x)colSums(x<=0.2))
+acute_genes[screen_res$acute_muscle[,"SCREEN 9"]<=0.2]
 
+rep_num_genes_per_percent = list()
+rep_lfdr = 0.2
+rep_gene_sets = list(); decay_plot_data = list()
+par(mfrow=c(2,2))
+for(nn in names(screen_res)){
+  currgenes = acute_genes
+  if(grepl("longterm",nn)){
+    currgenes = longterm_genes
+  }
+  mat = screen_res[[nn]]
+  num_genes = colSums(mat<=rep_lfdr)
+  percents = (1:ncol(mat))/ncol(mat)
+  plot(x=percents,y=num_genes,type='b')
+  ind = which(percents >= 0.5)[1]
+  selected_genes = currgenes[mat[,ind]<=rep_lfdr]
+  if(length(selected_genes)>0){
+    rep_gene_sets[[nn]] = selected_genes
+  }
+  decay_plot_data[[nn]] = list()
+  decay_plot_data[[nn]][["percents"]] = percents
+  decay_plot_data[[nn]][["num_genes"]] = num_genes
+}
 
+save(acute_genes,longterm_genes,screen_res,
+     decay_plot_data,rep_gene_sets,
+     file="PADB_dataset_level_replicability_analysis_results.RData")
 
