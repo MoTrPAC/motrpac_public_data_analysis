@@ -191,24 +191,40 @@ get_ps<-function(x,ind=1){
   names(v) = nn
   return (v)
 }
+library(locfdr)
+get_lfdrs<-function(pp){
+  pp[is.na(pp)]=0.5
+  if(sd(pp)==0){return(matrix(1,nrow=length(pp),ncol=3))}
+  pp[pp==0] = min(pp[pp>0])
+  pp[pp==1] = max(pp[pp<1])
+  zz = qnorm(pp)
+  lfdr = locfdr(zz)
+  return(cbind(pp,lfdr$fdr,zz))
+}
 acute_ps_intersect = sapply(acute_meta_analysis_results,get_ps)
-acute_ps_mods = sapply(acute_meta_analysis_results[3:4],get_ps,ind="pval_AllMods")
-acute_ps = cbind(acute_ps_intersect,acute_ps_mods)
-colnames(acute_ps)[5:6] = c("blood, modifiers","muscle,modifiers")
-longterm_ps_intersect = sapply(longterm_meta_analysis_results,get_ps)
-longterm_ps_mods = sapply(longterm_meta_analysis_results[3:4],get_ps,ind="pval_AllMods")
-longterm_ps = cbind(longterm_ps_intersect,longterm_ps_mods)
-nn = ncol(longterm_ps)
-colnames(longterm_ps)[(nn-1):nn] = c("blood, modifiers","muscle,modifiers")
-
+acute_ps_time = sapply(acute_meta_analysis_results[3:4],get_ps,ind="pval_time")
+acute_ps_tr = sapply(acute_meta_analysis_results[3:4],get_ps,ind="pval_trainingresistance")
+acute_ps = cbind(acute_ps_intersect,acute_ps_time,acute_ps_tr)
+colnames(acute_ps)[5:6] = c("blood, time","muscle,time")
+colnames(acute_ps)[7:8] = c("blood, training","muscle,training")
+longterm_ps_intersect = sapply(longterm_meta_analysis_results[-5],get_ps)
+longterm_ps_time = sapply(longterm_meta_analysis_results[3:4],get_ps,ind="pval_time")
+longterm_ps_tr = sapply(longterm_meta_analysis_results[3:4],get_ps,ind="pval_trainingresistance")
+longterm_ps = cbind(longterm_ps_intersect,longterm_ps_time,longterm_ps_tr)
+colnames(longterm_ps)[5:6] = c("blood, time","muscle,time")
+colnames(longterm_ps)[7:8] = c("blood, training","muscle,training")
 acute_qs = apply(acute_ps,2,p.adjust,method='fdr')
 longterm_qs = apply(longterm_ps,2,p.adjust,method='fdr')
+acute_lfdrs = apply(acute_ps,2,function(x)get_lfdrs(x)[,2])
+longterm_lfdrs = apply(longterm_ps,2,function(x)get_lfdrs(x)[,2])
+longterm_zzs = apply(longterm_ps,2,function(x)get_lfdrs(x)[,3])
+acute_zzs = apply(acute_ps,2,function(x)get_lfdrs(x)[,3])
 
-par(mfrow=c(2,2))
-hist(acute_ps[,1],main="Acute, blood")
-hist(acute_ps[,2],main="Acute, muscle")
-hist(longterm_ps[,1],main="Longterm, blood")
-hist(longterm_ps[,2],main="Longterm, muscle")
+# par(mfrow=c(2,2))
+# hist(acute_ps[,1],main="Acute, blood")
+# hist(acute_ps[,2],main="Acute, muscle")
+# hist(longterm_ps[,1],main="Longterm, blood")
+# hist(longterm_ps[,2],main="Longterm, muscle")
 
 metafor_gene_sets = list()
 metafor_gene_sets[["0.1fdr"]] = c(
@@ -219,13 +235,15 @@ names(metafor_gene_sets[["0.1fdr"]]) = paste("longterm",names(metafor_gene_sets[
 names(metafor_gene_sets[["0.1fdr"]])[1:ncol(acute_ps)] = gsub(pattern="longterm,",
                   names(metafor_gene_sets[["0.1fdr"]])[1:ncol(acute_ps)],replace="acute,")
 
-metafor_gene_sets[["0.2fdr"]] = c(
-  apply(acute_qs,2,function(x,y)y[x<=0.2 & !is.na(x)],y=rownames(acute_ps)),
-  apply(longterm_qs,2,function(x,y)y[x<=0.2 & !is.na(x)],y=rownames(longterm_ps))
-)
-names(metafor_gene_sets[["0.2fdr"]]) = paste("longterm",names(metafor_gene_sets[["0.2fdr"]]),sep=",")
-names(metafor_gene_sets[["0.2fdr"]])[1:ncol(acute_ps)] = gsub(pattern="longterm,",
-                names(metafor_gene_sets[["0.2fdr"]])[1:ncol(acute_ps)],replace="acute,")
+metafor_gene_sets[["0.1lfdr"]] = list()
+for(j in 1:ncol(acute_ps)){
+  nn = paste("acute",colnames(acute_ps)[j],sep=',')
+  metafor_gene_sets[["0.1lfdr"]][[nn]] = rownames(acute_ps)[acute_lfdrs[,j]<=0.1 & acute_zzs[,j]<(-1)]
+}
+for(j in 1:ncol(longterm_ps)){
+  nn = paste("longterm",colnames(longterm_ps)[j],sep=',')
+  metafor_gene_sets[["0.1lfdr"]][[nn]] = rownames(longterm_ps)[longterm_lfdrs[,j]<=0.1 & longterm_zzs[,j]<(-1)]
+}
 
 metafor_gene_sets = lapply(metafor_gene_sets,function(x)x[sapply(x,length)>0])
 metafor_sets_enrichments = run_topgo_enrichment_fisher(metafor_gene_sets[[2]],rownames(acute_ps))
@@ -233,21 +251,19 @@ extract_top_go_results(metafor_sets_enrichments)
 save(metafor_gene_sets,metafor_sets_enrichments,acute_ps,longterm_ps,file="metafor_gene_sets.RData")
 
 # Tests and comments from the paper of metafor (2010)
-gdata = acute_gene_tables[["10891"]]
-# gdata = longterm_gene_tables[["1284"]]
-# gdata = acute_gene_tables[["5166"]] # survived rep but not meta
+gdata = acute_gene_tables_raw[["10891"]] # PGC1 in acute response
+gdata = longterm_gene_tables[["1282"]] # COL1 gene
+gdata = longterm_gene_tables[["4168"]] # A negative example
+gdata = acute_gene_tables[["5166"]] # survived rep but not meta
 # gdata = acute_gene_tables[["11326"]] # gene with significant modifiers
 # another test: make a dataset with large effects
 # gdata$yi = rnorm(nrow(gdata),mean=5)
 plot(gdata[,"yi"],gdata[,"vi"],pch=as.numeric(as.factor(gdata$tissue)))
 # knha - a correction that accounts for the uncertainty in the random effect
 res0 = rma.mv(yi,vi,random = ~ 1|gse,data=gdata,subset = (tissue=="muscle"))
-res0 = rma.mv(yi,vi,random = list(~ training|gse ,~ordered(time)|gse), data=gdata,subset = (tissue=="muscle"),method="ML")
-res0 = rma.mv(yi,vi,random = ~ 1|gse ,mods =  ~ordered(time) , data=gdata,subset = (tissue=="blood"),method="ML")
 # explanation of the result above:
 #   mu - the average effect is 0.067, the CI contains zero
-res = rma.mv(yi,vi,mods = ~ tissue + training + time, random= ~1|gse ,data=gdata)
-res = rma.mv(yi,vi,mods = ~ tissue + training + time, random= ~1|gse ,data=gdata,subset = (tissue=="muscle"))
+res = rma.mv(yi,vi,mods = ~  training + time, random= ~1|gse ,data=gdata[gdata$tissue=="muscle",])
 # CIs of the anova stats:
 confint(res0)
 # Forest plot - very informative
