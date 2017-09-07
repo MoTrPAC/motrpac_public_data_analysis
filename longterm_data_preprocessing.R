@@ -118,7 +118,6 @@ OMIC_TYPE = "mRNA" # mRNA, methylation
 EXERCISE_TYPE = "both" # endurance, resistance, both, or other (yoga)
 MIN_NROW = 5000 # minimal number of rows in a datamatrix of a specific dataset
 OUT_FILE = "PADB_univariate_results_and_preprocessed_data_longterm.RData"
-ANALYSIS_OUT_FILE = "PADB_statistical_analysis_results_longterm.RData"
 
 ###############################################
 ###############################################
@@ -264,9 +263,75 @@ for (dataset in unique(dataset_ids[analysis_samples])){
 rm(CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes,gpl_mappings_to_entrez,gpl_tables)
 gc()
 
+# Encode the dataset ids and create their metadata info
+cohort_ids = paste("GE_L_",1:length(dataset2preprocessed_data),sep='')
+cohort_info = lapply(names(dataset2preprocessed_data),function(x)strsplit(x,split=';')[[1]])
+cohort_metadata = list()
+for(j in 1:length(dataset2preprocessed_data)){
+  c_id = cohort_ids[j]
+  d_id = names(dataset2preprocessed_data)[j]
+  gsms = colnames(dataset2preprocessed_data[[d_id]]$gene_data)
+  gsms = gsms[!is.na(sample2time[gsms])]
+  curr_times = sample2time[gsms]
+  c_info = cohort_info[[j]]
+  gse = c_info[1]
+  full_tissue = c_info[2]
+  gpl = c_info[3]
+  training = c_info[4]
+  training_desc = NA
+  if(length(c_info)>4){training_desc = c_info[5]}
+  tissue = simplify_tissue_info(full_tissue)
+  cohort_metadata[[c_id]] = list(gsms=gsms,tissue=tissue,training=training,gse=gse,gpl=gpl,
+                                 full_tissue=full_tissue,training_desc=training_desc)
+  if(length(unique(curr_times))<2){next}
+  gene_fchanges = get_fold_changes_vs_baseline(dataset2preprocessed_data[[j]]$gene_data[,gsms],sample2subject[gsms],curr_times)
+  dataset2preprocessed_data[[j]][["gene_fchanges"]] = gene_fchanges
+}
+names(dataset2preprocessed_data) = cohort_ids
+cohort_data = dataset2preprocessed_data
+save(cohort_data,cohort_metadata,file = OUT_FILE)
+
+rm(CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes,gpl_mappings_to_entrez,gpl_tables)
+gc()
+
 ###############################################
 ###############################################
 #################### End ######################
 ###############################################
 ###############################################
+
+###############################################
+###############################################
+########### Fold changes and t-tests ##########
+###############################################
+###############################################
+load(OUT_FILE)
+load("PADB_sample_metadata_longterm.RData")
+longterm_metadata = get(load("PADB_sample_metadata_longterm.RData"))
+
+# # test
+# res1 = get_ttest_yi_vi_per_dataset(cohort_data[[1]]$gene_data,longterm_metadata)
+# mat1 = cohort_data[[1]]$gene_fchanges
+# res2 = rowMeans(mat1[,grepl(colnames(mat1),pattern='70')])
+# max(abs(res1$`70`[,"yi"]-res2))
+
+# compute ttest p-values, yi's and vi's
+for(j in 1:length(cohort_data)){
+  if(length(cohort_data[[j]])<3){next}
+  res1 = get_ttest_yi_vi_per_dataset(cohort_data[[j]]$gene_data,longterm_metadata)
+  res2 = get_ttest_pval_per_dataset(cohort_data[[j]]$gene_data,longterm_metadata)
+  for(nn in names(res1)){
+    res1[[nn]] = cbind(res1[[nn]],res2[,nn])
+    colnames(res1[[nn]]) = c("yi","vi","p")
+  }
+  cohort_data[[j]][["time2ttest_stats"]] = res1
+}
+save(cohort_data,cohort_metadata,file = OUT_FILE)
+
+###############################################
+###############################################
+#################### End ######################
+###############################################
+###############################################
+
 

@@ -913,64 +913,128 @@ get_stats_df_chisq3<-function(stats,ps,range){
   return(j)
 }
 
-# Functions for replicability analysis
-# Get the data matrices for the analysis
-get_paired_ttest_matrices = function(dataset_ids,tt,sample2subj_with_dataset_number,
-                                     dataset2preprocessed_data,geneset,min_subjs = 3,toprint=T,toplot=T){
-  dataset_pvals = c();dataset_stats = c();dataset_pvals_two_tail=c()
-  for (dataset in unique(dataset_ids)){
-    all_dataset_samples = names(dataset_ids[dataset_ids==dataset])
-    time_points = setdiff(unique(tt[all_dataset_samples],na.rm=T),min(tt))
-    if(length(time_points)==0){next}
-    #if(toprint){print(time_points)}
-    for(tt_val in time_points){
-      dataset_samples = all_dataset_samples
-      curr_tt = tt[dataset_samples]
-      dataset_samples = dataset_samples[curr_tt==min(tt) | curr_tt==tt_val]
-      dataset_subjects = sample2subj_with_dataset_number[dataset_samples]
-      # all NAs == we do not have the data
-      if(all(is.na(dataset_subjects))){next}
-      tab = table(dataset_subjects)
-      paired_subjects = names(tab[tab==2])
-      if(length(paired_subjects)<min_subjs){next}
-      #print(table(curr_tt))
-      # select subjects with paired samples
-      dataset_samples = dataset_samples[is.element(dataset_subjects,set=paired_subjects)]
-      dataset_subjects = sample2subj_with_dataset_number[dataset_samples]
-      dataset_times = tt[dataset_samples]
-      # reorder  
-      ord = order(dataset_times,dataset_subjects,decreasing=F)
-      dataset_samples = dataset_samples[ord]
-      dataset_times = dataset_times[ord]
-      dataset_subjects = dataset_subjects[ord]
-      assertthat::assert_that(all(dataset_subjects[dataset_times==min(tt)]==dataset_subjects[dataset_times>min(tt)]))
-      # run t-test
-      mat = dataset2preprocessed_data[[dataset]]$gene_data[geneset,dataset_samples]
-      if(is.null(mat)){next}
-      ttests = apply(mat,1,run_paired_test,subjs = dataset_subjects,timev=dataset_times,alternative="less")
-      ttest_stats = sapply(ttests,function(x)x$statistic)
-      ttest_pvals = sapply(ttests,function(x)x$p.value)
-      # save the results
-      formatted_name = get_dataset_name_for_rep_analysis(dataset,dataset_ids,sample2tissue,sample2training_type)
-      tt_val = as.character(tt_val)
-      formatted_name = paste(tt_val,formatted_name,sep=';')
-      print(formatted_name)
-      if(toplot){hist(ttest_pvals,main=dataset)}
-      dataset_pvals = cbind(dataset_pvals,ttest_pvals)
-      colnames(dataset_pvals)[ncol(dataset_pvals)] = formatted_name
-      dataset_stats = cbind(dataset_stats,ttest_stats)
-      colnames(dataset_stats)[ncol(dataset_stats)] = formatted_name
-      dataset_pvals_two_tail = cbind(dataset_pvals_two_tail,2*pmin(1-ttest_pvals,ttest_pvals))
-      colnames(dataset_pvals_two_tail)[ncol(dataset_pvals_two_tail)] = formatted_name
-    }
-  }
-  rownames(dataset_stats) = gsub(rownames(dataset_stats),pattern = "\\.t$",replace="",perl=T)
-  return(list(dataset_stats=dataset_stats,dataset_pvals=dataset_pvals,dataset_pvals_two_tail=dataset_pvals_two_tail))
+# # Functions for replicability analysis
+# # Get the data matrices for the analysis
+# get_paired_ttest_matrices = function(dataset_ids,tt,sample2subj_with_dataset_number,
+#                                      dataset2preprocessed_data,geneset,min_subjs = 3,toprint=T,toplot=T){
+#   dataset_pvals = c();dataset_stats = c();dataset_pvals_two_tail=c()
+#   for (dataset in unique(dataset_ids)){
+#     all_dataset_samples = names(dataset_ids[dataset_ids==dataset])
+#     time_points = setdiff(unique(tt[all_dataset_samples],na.rm=T),min(tt))
+#     if(length(time_points)==0){next}
+#     #if(toprint){print(time_points)}
+#     for(tt_val in time_points){
+#       dataset_samples = all_dataset_samples
+#       curr_tt = tt[dataset_samples]
+#       dataset_samples = dataset_samples[curr_tt==min(tt) | curr_tt==tt_val]
+#       dataset_subjects = sample2subj_with_dataset_number[dataset_samples]
+#       # all NAs == we do not have the data
+#       if(all(is.na(dataset_subjects))){next}
+#       tab = table(dataset_subjects)
+#       paired_subjects = names(tab[tab==2])
+#       if(length(paired_subjects)<min_subjs){next}
+#       #print(table(curr_tt))
+#       # select subjects with paired samples
+#       dataset_samples = dataset_samples[is.element(dataset_subjects,set=paired_subjects)]
+#       dataset_subjects = sample2subj_with_dataset_number[dataset_samples]
+#       dataset_times = tt[dataset_samples]
+#       # reorder  
+#       ord = order(dataset_times,dataset_subjects,decreasing=F)
+#       dataset_samples = dataset_samples[ord]
+#       dataset_times = dataset_times[ord]
+#       dataset_subjects = dataset_subjects[ord]
+#       assertthat::assert_that(all(dataset_subjects[dataset_times==min(tt)]==dataset_subjects[dataset_times>min(tt)]))
+#       # run t-test
+#       mat = dataset2preprocessed_data[[dataset]]$gene_data[geneset,dataset_samples]
+#       if(is.null(mat)){next}
+#       ttests = apply(mat,1,run_paired_test,subjs = dataset_subjects,timev=dataset_times,alternative="less")
+#       ttest_stats = sapply(ttests,function(x)x$statistic)
+#       ttest_pvals = sapply(ttests,function(x)x$p.value)
+#       # save the results
+#       formatted_name = get_dataset_name_for_rep_analysis(dataset,dataset_ids,sample2tissue,sample2training_type)
+#       tt_val = as.character(tt_val)
+#       formatted_name = paste(tt_val,formatted_name,sep=';')
+#       print(formatted_name)
+#       if(toplot){hist(ttest_pvals,main=dataset)}
+#       dataset_pvals = cbind(dataset_pvals,ttest_pvals)
+#       colnames(dataset_pvals)[ncol(dataset_pvals)] = formatted_name
+#       dataset_stats = cbind(dataset_stats,ttest_stats)
+#       colnames(dataset_stats)[ncol(dataset_stats)] = formatted_name
+#       dataset_pvals_two_tail = cbind(dataset_pvals_two_tail,2*pmin(1-ttest_pvals,ttest_pvals))
+#       colnames(dataset_pvals_two_tail)[ncol(dataset_pvals_two_tail)] = formatted_name
+#     }
+#   }
+#   rownames(dataset_stats) = gsub(rownames(dataset_stats),pattern = "\\.t$",replace="",perl=T)
+#   return(list(dataset_stats=dataset_stats,dataset_pvals=dataset_pvals,dataset_pvals_two_tail=dataset_pvals_two_tail))
+# }
+# 
+# get_dataset_name_for_rep_analysis<-function(nn,dataset_ids,sample2tissue,sample2training_type){
+#   samp = names(which(dataset_ids==nn))[1]
+#   gse = strsplit(split=';',nn)[[1]][1]
+#   newname = paste(sample2tissue[samp],sample2training_type[samp],gse,sep=';')
+#   return(newname)
+# }
+
+
+## Simple functions for cohort-level analyses
+# some simple functions to analyze a time point in a dataset's matrix
+get_paired_ttest_yi_vi <-function(x,sample2time,t1,t2){
+  x1 = x[sample2time==t1]
+  x2 = x[sample2time==t2]
+  d = x2-x1
+  sdd = sd(d)/sqrt(length(x1))
+  return(c(yi=mean(d),vi=sdd))
 }
 
-get_dataset_name_for_rep_analysis<-function(nn,dataset_ids,sample2tissue,sample2training_type){
-  samp = names(which(dataset_ids==nn))[1]
-  gse = strsplit(split=';',nn)[[1]][1]
-  newname = paste(sample2tissue[samp],sample2training_type[samp],gse,sep=';')
-  return(newname)
+get_ttest_yi_vi_per_dataset<-function(mat,metadata){
+  dataset_times = metadata$time[colnames(mat)]
+  if(any(is.na(dataset_times))){
+    mat = mat[,!is.na(dataset_times)]
+    dataset_times = metadata$time[colnames(mat)]
+  }
+  min_time = min(dataset_times)
+  other_times = setdiff(unique(dataset_times),min_time)
+  times2effects = list()
+  for(other_time in other_times){
+    curr_mat = mat[,dataset_times==min_time | dataset_times==other_time]
+    curr_subjects = metadata$subject[colnames(curr_mat)]
+    subjects_to_keep = names(which(table(curr_subjects)==2))
+    curr_mat = curr_mat[,is.element(curr_subjects,set = subjects_to_keep)]
+    ord = order(metadata$subject[colnames(curr_mat)],metadata$time[colnames(curr_mat)])
+    curr_mat = curr_mat[,ord]
+    curr_times = metadata$time[colnames(curr_mat)]
+    paired_test_data = t(apply(curr_mat,1,get_paired_ttest_yi_vi,sample2time=curr_times,t1=min_time,t2=other_time))
+    times2effects[[as.character(other_time)]] = paired_test_data
+  }
+  return(times2effects)
 }
+get_ttest_pval_per_dataset<-function(mat,metadata){
+  dataset_times = metadata$time[colnames(mat)]
+  if(any(is.na(dataset_times))){
+    mat = mat[,!is.na(dataset_times)]
+    dataset_times = metadata$time[colnames(mat)]
+  }
+  min_time = min(dataset_times)
+  other_times = setdiff(unique(dataset_times),min_time)
+  times2pvals = c()
+  for(other_time in other_times){
+    curr_mat = mat[,dataset_times==min_time | dataset_times==other_time]
+    curr_subjects = metadata$subject[colnames(curr_mat)]
+    subjects_to_keep = names(which(table(curr_subjects)==2))
+    curr_mat = curr_mat[,is.element(curr_subjects,set = subjects_to_keep)]
+    ord = order(metadata$subject[colnames(curr_mat)],metadata$time[colnames(curr_mat)])
+    curr_mat = curr_mat[,ord]
+    curr_times = metadata$time[colnames(curr_mat)]
+    paired_test_data = apply(curr_mat,1,get_paired_ttest_pval,sample2time=curr_times,t1=min_time,t2=other_time)
+    times2pvals = cbind(times2pvals,paired_test_data)
+    colnames(times2pvals)[ncol(times2pvals)] = as.character(other_time)
+  }
+  return(times2pvals)
+}
+# some simple functions to analyze a time point in a dataset's matrix
+get_paired_ttest_pval <-function(x,sample2time,t1,t2){
+  x1 = x[sample2time==t1]
+  x2 = x[sample2time==t2]
+  return(t.test(x1,x2,paired = T)$p.value)
+}
+##

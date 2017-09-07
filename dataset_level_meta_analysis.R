@@ -5,45 +5,15 @@ library(metafor)
 source('repos/motrpac/helper_functions.R')
 
 # Get the datasets and their metadata
-acute_datasets = get(load("PADB_univariate_results_and_preprocessed_data_acute.RData"))
-acute_metadata = get(load("PADB_sample_metadata_acute.RData"))
-longterm_datasets = get(load("PADB_univariate_results_and_preprocessed_data_longterm.RData"))
-longterm_metadata = get(load("PADB_sample_metadata_longterm.RData"))
+load("PADB_univariate_results_and_preprocessed_data_acute.RData")
+acute_datasets = cohort_data
+acute_metadata = cohort_metadata
+load("PADB_univariate_results_and_preprocessed_data_longterm.RData")
+longterm_datasets = cohort_data
+longterm_metadata = cohort_metadata
 
-# some simple functions to analyze a time point in a dataset's matrix
-get_paired_ttest_yi_vi <-function(x,sample2time,t1,t2){
-  x1 = x[sample2time==t1]
-  x2 = x[sample2time==t2]
-  d = x2-x1
-  sdd = sd(d)/sqrt(length(x1))
-  return(c(yi=mean(d),vi=sdd))
-}
-
-get_ttest_yi_vi_per_dataset<-function(mat,metadata){
-  dataset_times = metadata$time[colnames(mat)]
-  if(any(is.na(dataset_times))){
-    mat = mat[,!is.na(dataset_times)]
-    dataset_times = metadata$time[colnames(mat)]
-  }
-  min_time = min(dataset_times)
-  other_times = setdiff(unique(dataset_times),min_time)
-  times2effects = list()
-  for(other_time in other_times){
-    curr_mat = mat[,dataset_times==min_time | dataset_times==other_time]
-    curr_subjects = metadata$subject[colnames(curr_mat)]
-    subjects_to_keep = names(which(table(curr_subjects)==2))
-    curr_mat = curr_mat[,is.element(curr_subjects,set = subjects_to_keep)]
-    ord = order(metadata$subject[colnames(curr_mat)],metadata$time[colnames(curr_mat)])
-    curr_mat = curr_mat[,ord]
-    curr_times = metadata$time[colnames(curr_mat)]
-    paired_test_data = t(apply(curr_mat,1,get_paired_ttest_yi_vi,sample2time=curr_times,t1=min_time,t2=other_time))
-    times2effects[[as.character(other_time)]] = paired_test_data
-  }
-  return(times2effects)
-}
-
-acute_datasets_effects = lapply(acute_datasets,function(x,y)get_ttest_yi_vi_per_dataset(x$gene_data,y),y=acute_metadata)
-longterm_datasets_effects = lapply(longterm_datasets,function(x,y)get_ttest_yi_vi_per_dataset(x$gene_data,y),y=longterm_metadata)
+acute_datasets_effects = lapply(acute_datasets,function(x)x$time2ttest_stats)
+longterm_datasets_effects = lapply(longterm_datasets,function(x)x$time2ttest_stats)
 longterm_datasets_effects = longterm_datasets_effects[sapply(longterm_datasets_effects,length)>0]
 acute_datasets_effects = acute_datasets_effects[sapply(acute_datasets_effects,length)>0]
 sapply(acute_datasets_effects,length)
@@ -55,20 +25,22 @@ sapply(longterm_datasets_effects,function(x)sapply(x,function(y)sum(is.na(y)|is.
 # we therefore need to create a table for each gene
 # get dataset info - moderators
 # tissue, training type, gse
-get_dataset_moderators<-function(datasets,metadata){
-  arrs = t(sapply(datasets,function(x)strsplit(x,split=';')[[1]][c(1,2,4)]))
-  arrs[,2] = simplify_tissue_info(arrs[,2])
-  arrs[grepl(datasets,pattern = 'control',ignore.case = T) | grepl(datasets,pattern="untrain",ignore.case = T),3] = "control"
+# Assumption, "other" without a description for a training type == "untrained"
+get_dataset_moderators<-function(metadata){
+  arrs = t(sapply(metadata,function(x)c(x$gse,x$tissue,x$training)))
+  tr_desc = paste(arrs[,3],sapply(metadata,function(x)x$training_desc),sep=';')
+  arrs[grepl(tr_desc,pattern = 'control',ignore.case = T) | grepl(tr_desc,pattern="untrain",ignore.case = T),3] = "control"
+  arrs[grepl(tr_desc,pattern = 'other;NA',ignore.case = T) | grepl(tr_desc,pattern="untrain",ignore.case = T),3] = "control"
   colnames(arrs) = c("gse","tissue","training")
   return(arrs)
 }
 get_gene_table<-function(gene,dataset_effects,moderators){
-  gene_data = lapply(dataset_effects,function(x,y)sapply(x,function(u,v)u[v,],v=y),y=gene)
+  gene_data = lapply(dataset_effects,function(x,y)try({sapply(x,function(u,v)u[v,],v=y)}),y=gene)
   m = c()
   for(nn in names(gene_data)){
     mm = gene_data[[nn]]
     for(j in 1:ncol(mm)){
-      m = rbind(m,c(nn,colnames(mm)[j],moderators[nn,],mm[,j]))
+      m = rbind(m,c(nn,colnames(mm)[j],moderators[nn,],mm[1:2,j]))
     }
   }
   colnames(m)[2]="time"
@@ -80,16 +52,18 @@ get_gene_table<-function(gene,dataset_effects,moderators){
 # extract the data objects for the meta-analysis
 acute_genes = rownames(acute_datasets[[1]]$gene_data)
 for(i in 2:length(acute_datasets)){
+  if(length(acute_datasets[[i]])<3){next}
   acute_genes = intersect(acute_genes,rownames(acute_datasets[[i]]$gene_data))
 }
-acute_mod = get_dataset_moderators(names(acute_datasets_effects),acute_metadata)
+acute_mod = get_dataset_moderators(acute_metadata)
 acute_gene_tables = lapply(acute_genes,get_gene_table,dataset_effects=acute_datasets_effects,moderators=acute_mod)
 names(acute_gene_tables) = acute_genes
 longterm_genes = rownames(longterm_datasets[[1]]$gene_data)
 for(i in 2:length(longterm_datasets)){
+  if(length(longterm_datasets[[i]])<3){next}
   longterm_genes = intersect(longterm_genes,rownames(longterm_datasets[[i]]$gene_data))
 }
-longterm_mod = get_dataset_moderators(names(longterm_datasets_effects),longterm_metadata)
+longterm_mod = get_dataset_moderators(longterm_metadata)
 longterm_gene_tables = lapply(longterm_genes,get_gene_table,dataset_effects=longterm_datasets_effects,moderators=longterm_mod)
 names(longterm_gene_tables) = longterm_genes
 
@@ -108,39 +82,37 @@ acute_gene_tables = lapply(acute_gene_tables,remove_undesired_datasets)
 longterm_gene_tables_raw = longterm_gene_tables
 longterm_gene_tables = lapply(longterm_gene_tables,remove_undesired_datasets)
 
-# transform the datasets into matrices that can be plotted
-acute_effects_matrix = c();acute_sds_matrix = c()
-for(d in names(acute_datasets_effects)){
-  l = acute_datasets_effects[[d]]
-  times = names(l)
-  darr = strsplit(split=';',d)[[1]]
-  darr[2] = simplify_tissue_info(darr[2])
-  for (tt in times){
-    currname = paste(c(tt,darr[c(2,4,1)]),collapse=';')
-    acute_effects_matrix = cbind(acute_effects_matrix,l[[tt]][acute_genes,1])
-    acute_sds_matrix = cbind(acute_sds_matrix,l[[tt]][acute_genes,2])
-    colnames(acute_sds_matrix)[ncol(acute_sds_matrix)] = currname
-  }
-}
-colnames(acute_effects_matrix) = colnames(acute_sds_matrix)
-longterm_effects_matrix = c();longterm_sds_matrix = c()
-for(d in names(longterm_datasets_effects)){
-  l = longterm_datasets_effects[[d]]
-  times = names(l)
-  darr = strsplit(split=';',d)[[1]]
-  darr[2] = simplify_tissue_info(darr[2])
-  for (tt in times){
-    currname = paste(c(tt,darr[c(2,4,1)]),collapse=';')
-    longterm_effects_matrix = cbind(longterm_effects_matrix,l[[tt]][longterm_genes,1])
-    longterm_sds_matrix = cbind(longterm_sds_matrix,l[[tt]][longterm_genes,2])
-    colnames(longterm_sds_matrix)[ncol(longterm_sds_matrix)] = currname
-  }
-}
-colnames(longterm_effects_matrix) = colnames(longterm_sds_matrix)
+# # transform the datasets into matrices that can be plotted
+# acute_effects_matrix = c();acute_sds_matrix = c()
+# for(d in names(acute_datasets_effects)){
+#   l = acute_datasets_effects[[d]]
+#   times = names(l)
+#   darr = strsplit(split=';',d)[[1]]
+#   darr[2] = simplify_tissue_info(darr[2])
+#   for (tt in times){
+#     currname = paste(c(tt,darr[c(2,4,1)]),collapse=';')
+#     acute_effects_matrix = cbind(acute_effects_matrix,l[[tt]][acute_genes,1])
+#     acute_sds_matrix = cbind(acute_sds_matrix,l[[tt]][acute_genes,2])
+#     colnames(acute_sds_matrix)[ncol(acute_sds_matrix)] = currname
+#   }
+# }
+# colnames(acute_effects_matrix) = colnames(acute_sds_matrix)
+# longterm_effects_matrix = c();longterm_sds_matrix = c()
+# for(d in names(longterm_datasets_effects)){
+#   l = longterm_datasets_effects[[d]]
+#   times = names(l)
+#   darr = strsplit(split=';',d)[[1]]
+#   darr[2] = simplify_tissue_info(darr[2])
+#   for (tt in times){
+#     currname = paste(c(tt,darr[c(2,4,1)]),collapse=';')
+#     longterm_effects_matrix = cbind(longterm_effects_matrix,l[[tt]][longterm_genes,1])
+#     longterm_sds_matrix = cbind(longterm_sds_matrix,l[[tt]][longterm_genes,2])
+#     colnames(longterm_sds_matrix)[ncol(longterm_sds_matrix)] = currname
+#   }
+# }
+# colnames(longterm_effects_matrix) = colnames(longterm_sds_matrix)
 
 save(acute_gene_tables_raw,acute_gene_tables,longterm_gene_tables_raw,longterm_gene_tables,
-     longterm_sds_matrix, longterm_effects_matrix,
-     acute_sds_matrix,acute_effects_matrix,
      file="PADB_dataset_level_meta_analysis_data.RData")
 
 # ... e.g., subset = (tissue=="blood")
@@ -149,10 +121,10 @@ get_gene_analysis_pvals<-function(gdata,use_mods=T,func=rma,...){
   v = NULL
   try({
     if(use_mods){
-      res1 = func(yi=yi,vi=vi,weights = 1, mods = ~ training + time ,data=gdata, control=list(maxiter=10000,stepadj=0.5),...) 
+      res1 = func(yi=yi,vi=vi, mods = ~ training + time ,data=gdata, control=list(maxiter=10000,stepadj=0.5),...) 
     }
     else{
-      res1 = func(yi=yi,vi=vi,weights = 1,data=gdata, control=list(maxiter=10000,stepadj=0.5),...) 
+      res1 = func(yi=yi,vi=vi,data=gdata, control=list(maxiter=10000,stepadj=0.5),...) 
     }
     ps1 = res1$pval;names(ps1) = rownames(res1$b)
     ps1 = c(ps1,res1$QMp);names(ps1)[length(ps1)] = "AllMods"
@@ -168,10 +140,10 @@ get_gene_analysis_pvals_with_gse_correction<-function(gdata,use_mods=T,func=rma.
   v = NULL
   try({
     if(use_mods){
-      res1 = func(yi,vi,W=1,mods = ~ training + time ,data=gdata, random = ~ 1|gse,control=list(maxiter=10000),...) 
+      res1 = func(yi,vi,mods = ~ training + time ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000),...) 
     }
     else{
-      res1 = func(yi,vi,W=1,data=gdata, random = ~ 1|gse,control=list(maxiter=10000),...)
+      res1 = func(yi,vi,data=gdata, random = ~ 1|gse,control=list(maxiter=10000),...)
     }
     ps1 = res1$pval;names(ps1) = rownames(res1$b)
     ps1 = c(ps1,res1$QMp);names(ps1)[length(ps1)] = "AllMods"
@@ -193,22 +165,6 @@ acute_meta_analysis_results[["mixed_effects_blood"]] = lapply(acute_gene_tables,
                 function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="blood",],use_mods=T))
 acute_meta_analysis_results[["mixed_effects_muscle"]] = lapply(acute_gene_tables,
                 function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="muscle",],use_mods=T))
-
-# tnp1 = lapply(acute_gene_tables,function(x)get_gene_analysis_pvals_with_gse_correction(
-#   x[x$tissue=="blood" & x$training=="resistance" | x$training=="other",],use_mods=F))
-# tnp2 = lapply(acute_gene_tables,function(x)get_gene_analysis_pvals_with_gse_correction(
-#   x[x$tissue=="blood" & x$training=="endurance" | x$training=="other",],use_mods=F))
-# tnp3 = lapply(acute_gene_tables,function(x)get_gene_analysis_pvals_with_gse_correction(
-#   x[x$tissue=="blood",],use_mods=F))
-# tnp4 = lapply(acute_gene_tables,get_gene_analysis_pvals_with_gse_correction,use_mods=F)
-# hist(get_ps(tnp1))
-# hist(get_ps(tnp2))
-# hist(get_ps(tnp3))
-# hist(get_ps(tnp4))
-# plot(p.adjust(get_ps(tnp2),method='fdr'),p.adjust(get_ps(tnp3),method='fdr'))
-# abline(0,1)
-# table(p.adjust(get_ps(tnp2),method='fdr')<0.1)
-# table(p.adjust(get_ps(tnp3),method='fdr')<0.1)
 
 longterm_meta_analysis_results = list()
 longterm_meta_analysis_results[["random_effects_blood"]] = lapply(longterm_gene_tables,
@@ -277,25 +233,25 @@ extract_top_go_results(metafor_sets_enrichments)
 save(metafor_gene_sets,metafor_sets_enrichments,acute_ps,longterm_ps,file="metafor_gene_sets.RData")
 
 # Tests and comments from the paper of metafor (2010)
-gdata = acute_gene_tables[["6947"]]
-gdata = longterm_gene_tables[["1284"]]
-gdata = acute_gene_tables[["5166"]] # survived rep but not meta
-gdata = acute_gene_tables[["11326"]] # gene with significant modifiers
+gdata = acute_gene_tables[["10891"]]
+# gdata = longterm_gene_tables[["1284"]]
+# gdata = acute_gene_tables[["5166"]] # survived rep but not meta
+# gdata = acute_gene_tables[["11326"]] # gene with significant modifiers
 # another test: make a dataset with large effects
 # gdata$yi = rnorm(nrow(gdata),mean=5)
 plot(gdata[,"yi"],gdata[,"vi"],pch=as.numeric(as.factor(gdata$tissue)))
 # knha - a correction that accounts for the uncertainty in the random effect
 res0 = rma.mv(yi,vi,random = ~ 1|gse,data=gdata,subset = (tissue=="muscle"))
 res0 = rma.mv(yi,vi,random = list(~ training|gse ,~ordered(time)|gse), data=gdata,subset = (tissue=="muscle"),method="ML")
-res0 = rma.mv(yi,vi,random = ~ training|gse ,mods =  ~time , data=gdata,subset = (tissue=="blood"),method="ML")
+res0 = rma.mv(yi,vi,random = ~ 1|gse ,mods =  ~ordered(time) , data=gdata,subset = (tissue=="blood"),method="ML")
 # explanation of the result above:
 #   mu - the average effect is 0.067, the CI contains zero
-res = rma(yi=yi,vi=vi,mods = ~ tissue + training + time ,data=gdata,knha=T)
-res = rma(yi=yi,vi=vi,mods = ~tissue ,data=gdata,knha=T)
+res = rma.mv(yi,vi,mods = ~ tissue + training + time, random= ~1|gse ,data=gdata)
+res = rma.mv(yi,vi,mods = ~ tissue + training + time, random= ~1|gse ,data=gdata,subset = (tissue=="muscle"))
 # CIs of the anova stats:
 confint(res0)
 # Forest plot - very informative
-forest(res0)
+forest(res)
 # difference in tau before and after using moderators - teaches us about the
 # percentage of explained variance due to the moderators
 # when the test for residuals (QE) is signficant - we may be missing additional

@@ -4,13 +4,12 @@
 # Need to revise this entire code
 ###############################
 
-
 # This script interprets the results of the acute and longterm analyses.
 # The summarized analyses here are the mixed effects, replicability, and dataset level analyses.
 # The script is structured by generating one display item or analysis at a time from scratch.
 
 setwd('/Users/David/Desktop/MoTrPAC/PA_database')
-library('xlsx');library('GEOquery');library(corrplot)
+library('xlsx');library('GEOquery');library(corrplot);library(metafor)
 source('repos/motrpac/helper_functions.R')
 library(org.Hs.eg.db)
 entrez2symbol = as.list(org.Hs.egSYMBOL)
@@ -110,7 +109,67 @@ for(nn in names(metafor_gene_sets)){
   colnames(gene_data_summary_table)[ncol(gene_data_summary_table)] = nn
 }
 gene_data_summary_table = gene_data_summary_table[,-ncol(gene_data_summary_table)]
-write.table(gene_data_summary_table,file="replicability_and_metaanalysis_genes.txt",sep="\t",quote=F)
+#write.table(gene_data_summary_table,file="replicability_and_metaanalysis_genes.txt",sep="\t",quote=F)
+sort(unlist(entrez2symbol[rownames(gene_data_summary_table)]))
+
+# Get the meta-analysis p-values
+selected_genes_meta_analysis_pvals = c()
+for(g in rownames(gene_data_summary_table)){
+  gname = entrez2symbol[g]
+  g_acute_pvals = rep(NA,ncol(acute_ps));names(g_acute_pvals) = colnames(acute_ps)
+  if(g %in% rownames(acute_ps)){g_acute_pvals = acute_ps[g,]}
+  names(g_acute_pvals) = paste("acute",names(g_acute_pvals),sep=",")
+  g_longterm_pvals = longterm_ps[g,]
+  names(g_longterm_pvals) = paste("longterm",names(g_longterm_pvals),sep=",")
+  selected_genes_meta_analysis_pvals = rbind(selected_genes_meta_analysis_pvals,c(g_acute_pvals,g_longterm_pvals))
+}
+selected_genes_meta_analysis_pvals[is.na(selected_genes_meta_analysis_pvals)] = 1
+rownames(selected_genes_meta_analysis_pvals) = rownames(gene_data_summary_table)
+
+selected_genes_meta_analysis_mod_pvals = list()
+for(g in rownames(gene_data_summary_table)){
+  acute_res = sapply(acute_meta_analysis_results,function(x)x[[g]])
+  acute_res = acute_res[grepl(names(acute_res),pattern="mixed")]
+  acute_mod_ps = unlist(sapply(acute_res,get_modifiers_pvals))
+  names(acute_mod_ps) = gsub(names(acute_mod_ps),pattern = "(mixed_effects_)|(pval_)",replace="")
+  longterm_res = sapply(longterm_meta_analysis_results,function(x)x[[g]])
+  longterm_res = longterm_res[grepl(names(longterm_res),pattern="mixed")]
+  longterm_mod_ps = unlist(sapply(longterm_res,get_modifiers_pvals))
+  names(longterm_mod_ps) = gsub(names(longterm_mod_ps),pattern = "(mixed_effects_)|(pval_)",replace="")
+  selected_genes_meta_analysis_mod_pvals[[g]] = list(acute = acute_mod_ps, longterm = longterm_mod_ps)
+}
+
+# Look at specific examples
+load("PADB_metafor_meta_analysis_results.RData")
+sort(rowSums(gene_data_summary_table))
+
+# Common examples that we expect to see
+gene = "10891" # PGC1 gene
+gene = "6678"
+
+gname = entrez2symbol[gene]
+sig_ps = which(gene_data_summary_table[as.character(gene),])
+acute_res = sapply(acute_meta_analysis_results,function(x)x[[gene]])
+longterm_res = sapply(longterm_meta_analysis_results,function(x)x[[gene]])
+acute_gene_table = acute_gene_tables[[gene]]
+get_subset_forest_plot(acute_gene_table,"muscle")
+get_subset_forest_plot(acute_gene_table,"blood")
+longterm_gene_table = longterm_gene_tables[[gene]]
+get_subset_forest_plot(longterm_gene_table,"muscle")
+get_subset_forest_plot(longterm_gene_table,"blood")
+
+get_subset_forest_plot<-function(gdata,tissue="all",training="all",sortby = "time"){
+  if(!tissue=="all"){
+    gdata = gdata[gdata$tissue==tissue,]
+  }
+  if(!training=="all"){
+    gdata = gdata[gdata$training==training,]
+  }
+  ord = order(gdata[,sortby])
+  gdata = gdata[ord,]
+  res = rma.mv(yi,vi,random = ~ 1|gse,data=gdata)
+  forest(res,slab=paste(gdata$gse,gdata$time,sep=','))
+}
 
 # Show heatmaps
 get_tstats_heatmap(longterm_effects_matrix[metafor_gene_sets$`longterm,random_effects_muscle`,],
