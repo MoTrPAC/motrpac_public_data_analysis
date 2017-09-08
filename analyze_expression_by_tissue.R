@@ -70,7 +70,8 @@ for(nn in names(expressed_genes2)){
 gs = intersect(acute_genes,longterm_genes)
 plot(expressed_genes1$muscle[gs],expressed_genes2$muscle[gs])
 plot(expressed_genes1$blood[gs],expressed_genes2$blood[gs])
-
+tissue_expression_scores = list(longterm = expressed_genes2,acute=expressed_genes1,shared_genes=gs)
+save(tissue_expression_scores,file="tissue_expression_scores.RData")
 
 
 
