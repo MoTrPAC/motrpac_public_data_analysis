@@ -113,7 +113,20 @@ get_gene_analysis_pvals_with_gse_correction<-function(gdata,use_mods=T,func=rma.
   v = NULL
   try({
     if(use_mods){
-      res1 = func(yi,vi,mods = ~ training + time ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000),...) 
+      has_times = length(unique(gdata$time))>1
+      has_tr = length(unique(gdata$training))>1
+      if(has_tr && has_times){
+        res1 = func(yi,vi,mods = ~ training + time ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000),...) 
+      }
+      if(!has_tr && !has_times){
+        res1 = func(yi,vi,data=gdata, random = ~ 1|gse, control=list(maxiter=10000),...) 
+      }
+      if(has_times){
+        res1 = func(yi,vi,mods = ~ time ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000),...)
+      }
+      else{
+        res1 = func(yi,vi,mods = ~ training ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000),...)
+      }
     }
     else{
       res1 = func(yi,vi,data=gdata, random = ~ 1|gse,control=list(maxiter=10000),...)
@@ -270,7 +283,7 @@ get_most_sig_enrichments_by_groups = function(res){
 }
 get_most_sig_enrichments_by_groups(enrich_res)
 
-get_subset_forest_plot<-function(gdata,tissue="all",training="all",sortby = "time",...){
+get_subset_forest_plot<-function(gdata,tissue="all",training="all",sortby = "time",labelsby=c("gse","time"),...){
   if(!tissue=="all"){
     gdata = gdata[gdata$tissue==tissue,]
   }
@@ -280,14 +293,54 @@ get_subset_forest_plot<-function(gdata,tissue="all",training="all",sortby = "tim
   ord = order(gdata[,sortby])
   gdata = gdata[ord,]
   res = rma.mv(yi,vi,random = ~ 1|gse,data=gdata)
-  forest(res,slab=paste(gdata$gse,gdata$time,sep=','),...)
+  forest(res,slab=apply(gdata[,labelsby],1,paste,collapse=','),...)
 }
 
+# Specific examples
+library(org.Hs.eg.db)
+entrez2symbol = as.list(org.Hs.egSYMBOL)
+metafor_gene_sets_names = lapply(metafor_gene_sets[[2]],function(x,y)sort(unlist(y[x])),y=entrez2symbol)
+all_genes = sort(unique(unlist(metafor_gene_sets_names)))
+known_genes = c("PPARGC1A","COX1","NDUFA","PDK4","VEGFA","KDR","THY1","MYL4",
+"MYH1","COL1A1","ACTC1","TNNT2","GADD45G","MMP9","NR4A1")
+which(sapply(known_genes,function(x,y)any(grepl(x,y)),y=all_genes))
+intersect(all_genes,known_genes)
+intersect(known_genes,unlist(entrez2symbol[rownames(acute_ps)]))
 gene = "10891"
 gdata = acute_gene_tables[[gene]] # PGC1 in acute response
 get_subset_forest_plot(gdata,"muscle",main="PGC1, acute, muscle")
 get_subset_forest_plot(gdata,"blood",main="PGC1,acute,blood")
 acute_ps[gene,]
+
+gene = "1282"
+entrez2symbol[gene]
+gdata = acute_gene_tables[[gene]] # COL4A1 in acute response
+get_subset_forest_plot(gdata,"muscle",main="COL4A1, acute, muscle")
+gdata = longterm_gene_tables[[gene]] # COL4A1 in longterm response
+get_subset_forest_plot(gdata,"muscle",main="COL4A1, longterm, muscle")
+acute_ps[gene,]
+longterm_ps[gene,]
+
+gene = "4318" # MMP9
+entrez2symbol[gene]
+gdata = acute_gene_tables[[gene]]
+get_gene_analysis_pvals_with_gse_correction(gdata[gdata$tissue=="blood",])
+get_subset_forest_plot(gdata,"blood",main="MMP9, acute, blood")
+acute_ps[gene,]
+longterm_ps[gene,]
+gdata$time = ordered(gdata$time)
+get_gene_analysis_pvals_with_gse_correction(gdata[gdata$tissue=="blood",])
+
+gene = "7139" # TNNT2 - expected but has poor signal
+entrez2symbol[gene]
+gdata = acute_gene_tables[[gene]] 
+get_subset_forest_plot(gdata,"muscle")
+get_subset_forest_plot(gdata,"blood")
+gdata = longterm_gene_tables[[gene]] 
+get_subset_forest_plot(gdata,"muscle")
+get_subset_forest_plot(gdata,"blood")
+acute_ps[gene,]
+longterm_ps[gene,]
 
 # # Tests and comments from the paper of metafor (2010)
 # gdata = acute_gene_tables_raw[["10891"]] # PGC1 in acute response
