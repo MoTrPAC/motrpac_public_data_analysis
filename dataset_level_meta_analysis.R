@@ -162,6 +162,8 @@ get_lfdrs<-function(pp,...){
 ########################################################################
 ########################################################################
 
+load("PADB_dataset_level_meta_analysis_data.RData")
+
 # save results as lists: sometimes the solvers fail
 acute_meta_analysis_results = list()
 acute_meta_analysis_results[["random_effects_blood"]] = lapply(acute_gene_tables,
@@ -189,6 +191,12 @@ longterm_meta_analysis_results[["random_effects_muscle_with_gse"]] = lapply(long
 
 save(acute_meta_analysis_results,longterm_meta_analysis_results,file="PADB_metafor_meta_analysis_results.RData")
 
+##########################################################
+##########################################################
+##########################################################
+##########################################################
+# Gene selection and display items
+
 load("PADB_metafor_meta_analysis_results.RData")
 acute_ps_intersect = sapply(acute_meta_analysis_results,get_ps)
 acute_ps_time = sapply(acute_meta_analysis_results[3:4],get_ps,ind="pval_time")
@@ -208,12 +216,6 @@ acute_lfdrs = apply(acute_ps,2,function(x)get_lfdrs(x)[,2])
 longterm_lfdrs = apply(longterm_ps,2,function(x)get_lfdrs(x)[,2])
 longterm_zzs = apply(longterm_ps,2,function(x)get_lfdrs(x)[,3])
 acute_zzs = apply(acute_ps,2,function(x)get_lfdrs(x)[,3])
-
-# par(mfrow=c(2,2))
-# hist(acute_ps[,1],main="Acute, blood")
-# hist(acute_ps[,2],main="Acute, muscle")
-# hist(longterm_ps[,1],main="Longterm, blood")
-# hist(longterm_ps[,2],main="Longterm, muscle")
 
 metafor_gene_sets = list()
 metafor_gene_sets[["0.1fdr"]] = c(
@@ -239,10 +241,10 @@ metafor_sets_enrichments = run_topgo_enrichment_fisher(metafor_gene_sets[[2]],ro
 enrich_res = extract_top_go_results(metafor_sets_enrichments)
 save(metafor_gene_sets,metafor_sets_enrichments,acute_ps,longterm_ps,file="metafor_gene_sets.RData")
 
-# Analyze the control cohorts
-
-# Display items
+# Main display items
+load("PADB_dataset_level_meta_analysis_data.RData")
 load("tissue_expression_scores.RData")
+load("metafor_gene_sets.RData")
 gs = tissue_expression_scores$shared_genes
 muscle_expression_scores = tissue_expression_scores$longterm$muscle[gs] + 
   tissue_expression_scores$acute$muscle[gs]
@@ -306,11 +308,15 @@ known_genes = c("PPARGC1A","COX1","NDUFA","PDK4","VEGFA","KDR","THY1","MYL4",
 which(sapply(known_genes,function(x,y)any(grepl(x,y)),y=all_genes))
 intersect(all_genes,known_genes)
 intersect(known_genes,unlist(entrez2symbol[rownames(acute_ps)]))
+sapply(metafor_gene_sets_names,intersect,y=known_genes)
+
 gene = "10891"
 gdata = acute_gene_tables[[gene]] # PGC1 in acute response
 get_subset_forest_plot(gdata,"muscle",main="PGC1, acute, muscle")
 get_subset_forest_plot(gdata,"blood",main="PGC1,acute,blood")
 acute_ps[gene,]
+acute_gene_tables[[gene]]
+acute_gene_tables_raw[[gene]]
 
 gene = "1282"
 entrez2symbol[gene]
@@ -341,6 +347,82 @@ get_subset_forest_plot(gdata,"muscle")
 get_subset_forest_plot(gdata,"blood")
 acute_ps[gene,]
 longterm_ps[gene,]
+
+# Clustering and plots
+# Step 1: take a selected list of genes, in a specific tissue 
+genes = metafor_gene_sets$`0.1lfdr`$`acute,mixed_effects_muscle`
+tissue = "muscle"
+tissues = acute_gene_tables_raw[[genes[1]]]$tissue
+gene_patterns = sapply(acute_gene_tables_raw[genes],function(x)x$yi)[tissues==tissue,]
+colnames(gene_patterns) = entrez2symbol[genes]
+
+# Step 2: order by time and training
+times = acute_gene_tables_raw[[genes[1]]]$time[tissues==tissue]
+trs = acute_gene_tables_raw[[genes[1]]]$training[tissues==tissue]
+ord = order(times,trs)
+times=times[ord];trs=trs[ord];gene_patterns=t(gene_patterns[ord,])
+gene_clusters = perform_gene_clustering(gene_patterns,num_pcs=-1)
+cluster_homogeneities(gene_patterns,gene_clusters,method='spearman')
+table(gene_clusters)
+
+tr2col = c("red","blue","green");names(tr2col) = unique(trs)
+tr2lty = c(2,1,1);names(tr2lty) = unique(trs)
+num_c = length(unique(gene_clusters))
+par(mfrow=c(1,num_c))
+for(i in 1:num_c){
+  cl_data = gene_patterns[gene_clusters==i,]
+  plot(colMeans(cl_data),x=times,col="white")
+  for(tr in unique(trs)){
+    curr_data = cl_data[,trs==tr]
+    print(intersect(rownames(curr_data),known_genes))
+    curr_times = times[trs==tr]
+    curr_profile = get_avg_merged_pattern(curr_data,curr_times)
+    lines(curr_profile,x=unique(curr_times),ylim=c(-1,1),main=tr,type='l',lwd=2,col=tr2col[tr],lty=tr2lty[tr])
+    abline(h=0)
+  }
+  legend(x="top",legend = unique(trs),fill=tr2col,cex=1.5)  
+}
+
+# Step 3: cluster
+library(cluster)
+pam1 <- function(x,k) list(cluster = pam(x,k, cluster.only=TRUE))
+# x: rows are genes
+perform_gene_clustering<-function(x,fun=pam1,standardize_genes=T,num_pcs=5){
+  xx = x
+  if(standardize_genes){xx = t(apply(x,1,function(x)(x-mean(x))/(sd(x))))}
+  if(num_pcs>1){xx = prcomp(xx)$x[,1:num_pcs]}
+  gs.pam.xx <- clusGap(xx, FUN = fun, K.max = 20, B = 100)
+  num_c = maxSE(gs.pam.xx[[1]][,3],gs.pam.xx[[1]][,4])
+  cc = fun(xx,num_c)$cluster
+  return(cc)
+}
+cluster_homogeneities<-function(x,cl,...){
+  hs = c()
+  for(cc in unique(cl)){
+    rhos = cor(t(x[cl==cc,]),...)
+    hs[cc] = mean(rhos[lower.tri(rhos)])
+  }
+  return(hs)
+}
+
+xx = ordered(paste(times,trs,sep=","))
+plot(gene_patterns[,1],type='b',ylim=c(min(gene_patterns),max(gene_patterns)),x=xx)
+for(j in 1:ncol(gene_patterns)){
+  lines(gene_patterns[,j],x=xx,type='l')
+}
+
+# x: rows are genes
+get_avg_merged_pattern<-function(x,times,smooth=F){
+  xx = t(apply(x,1,function(x,y)tapply(x,factor(times),mean),y=times))
+  xx_means = colMeans(xx)
+  if(smooth){xx_means = smooth.spline(xx_means)}
+  return(xx_means)
+}
+
+library(gplots)
+heatmap.2(cor(t(gene_patterns),method = "spearman"),trace="none",
+          scale="none",col=colorRampPalette(c("red","white","blue"))(256))
+
 
 # # Tests and comments from the paper of metafor (2010)
 # gdata = acute_gene_tables_raw[["10891"]] # PGC1 in acute response
