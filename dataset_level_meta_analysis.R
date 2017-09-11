@@ -240,7 +240,8 @@ metafor_gene_sets = lapply(metafor_gene_sets,function(x)x[sapply(x,length)>0])
 metafor_sets_enrichments = run_topgo_enrichment_fisher(metafor_gene_sets[[2]],rownames(acute_ps))
 enrich_res = extract_top_go_results(metafor_sets_enrichments)
 save(metafor_gene_sets,metafor_sets_enrichments,acute_ps,longterm_ps,file="metafor_gene_sets.RData")
-
+######################################################################################################
+######################################################################################################
 # Main display items
 load("PADB_dataset_level_meta_analysis_data.RData")
 load("tissue_expression_scores.RData")
@@ -273,7 +274,7 @@ barplot(m,beside=T,legend=T,args.legend = c(x="top"),ylab="Number of selected ge
 # Gene numbers and specific examples
 gene_nums = t(t(sapply(metafor_gene_sets[[2]],length)))
 enrich_res = extract_top_go_results(metafor_sets_enrichments)
-get_most_sig_enrichments_by_groups = function(res){
+get_most_sig_enrichments_by_groups <- function(res){
   gs = unique(as.character(res[,1]))
   m = c()
   for(g in gs){
@@ -295,6 +296,9 @@ get_subset_forest_plot<-function(gdata,tissue="all",training="all",sortby = "tim
   ord = order(gdata[,sortby])
   gdata = gdata[ord,]
   res = rma.mv(yi,vi,random = ~ 1|gse,data=gdata)
+  res0 = rma(yi,vi,data=gdata)
+  rtest = regtest(res0)
+  print(rtest)
   forest(res,slab=apply(gdata[,labelsby],1,paste,collapse=','),...)
 }
 
@@ -348,9 +352,61 @@ get_subset_forest_plot(gdata,"blood")
 acute_ps[gene,]
 longterm_ps[gene,]
 
+######## "Advanced" analyses ############
+# Get average effect per time point x training
+get_gene_weighted_avg_pattern <-function(gdata){
+  gdata$wt = 1/gdata$vi
+  res = by(gdata, paste(gdata$tissue,gdata$training,gdata$time,sep=','), function(x) weighted.mean(x$yi, x$wt),simplify = T)
+  v = as.numeric(res);names(v) = names(res)
+  return(v)
+}
+reorder_weighted_avg_matrix<-function(x){
+  cn = colnames(x)
+  cn = sapply(cn,function(x)strsplit(x,split=',')[[1]])
+  ord = order(cn[1,],cn[2,],as.numeric(cn[3,]))
+  x = x[,ord]
+  return(x)
+}
+print_drem_matrix<-function(){
+  
+}
+plot_gene_pattern<-function(x,tosmooth=T,min_time_points=3,
+                            tr2col=c(control="red",endurance="blue",resistance="green"),
+                            legend.x="topright",legend.cex=0.8,legend.ncol=2,
+                            ...){
+  cn = names(x)
+  cn = sapply(cn,function(x)strsplit(x,split=',')[[1]])
+  tb = table(cn[1,],cn[2,])
+  par(mfrow=c(2,1))
+  for(tissue in rownames(tb)){
+    xx = x[cn[1,]==tissue]
+    times = as.numeric(cn[3,cn[1,]==tissue])
+    trs = cn[2,cn[1,]==tissue]
+    plot(xx,x=times,col="white",las=2,main=tissue,xlim=c(-1,max(times)),ylim=c(-2.5,2.5),ylab="log2 Fold Change",xlab="time")
+    for(tr in unique(trs)){
+      if(tosmooth){xx1 = c(0,smooth(xx[trs==tr]))}
+      else{xx1 = c(0,xx[trs==tr])}
+      if(length(xx1)<min_time_points){next}
+      tt1 = c(-1,times[trs==tr])
+      lines(xx1,x=tt1,type='l',lwd=2,col=tr2col[tr],pch=20)
+    }
+    legend(x=legend.x,legend = unique(trs),fill=tr2col,cex=legend.cex,horiz=T)  
+  }
+}
+get_pattern_plot<-function()
+weighted_avg_matrices=list()
+weighted_avg_matrices[["acute"]] = t(sapply(acute_gene_tables_raw,get_gene_weighted_avg_pattern))
+weighted_avg_matrices[["longterm"]] = t(sapply(longterm_gene_tables_raw,get_gene_weighted_avg_pattern))
+# reorder the matrices
+weighted_avg_matrices = lapply(weighted_avg_matrices,reorder_weighted_avg_matrix)
+plot(weighted_avg_matrices[[1]]["10891",])
+
 # Clustering and plots
 # Step 1: take a selected list of genes, in a specific tissue 
 genes = metafor_gene_sets$`0.1lfdr`$`acute,mixed_effects_muscle`
+genes = unique(unlist(metafor_gene_sets[[2]]))
+
+genes = intersect(names(acute_gene_tables),genes)
 tissue = "muscle"
 tissues = acute_gene_tables_raw[[genes[1]]]$tissue
 gene_patterns = sapply(acute_gene_tables_raw[genes],function(x)x$yi)[tissues==tissue,]
@@ -361,26 +417,28 @@ times = acute_gene_tables_raw[[genes[1]]]$time[tissues==tissue]
 trs = acute_gene_tables_raw[[genes[1]]]$training[tissues==tissue]
 ord = order(times,trs)
 times=times[ord];trs=trs[ord];gene_patterns=t(gene_patterns[ord,])
-gene_clusters = perform_gene_clustering(gene_patterns,num_pcs=-1)
+gene_clusters = perform_gene_clustering(gene_patterns,num_pcs=-1,standardize_genes = T)
 cluster_homogeneities(gene_patterns,gene_clusters,method='spearman')
 table(gene_clusters)
 
 tr2col = c("red","blue","green");names(tr2col) = unique(trs)
 tr2lty = c(2,1,1);names(tr2lty) = unique(trs)
 num_c = length(unique(gene_clusters))
-par(mfrow=c(1,num_c))
+num_c=8
+par(mfrow=c(2,num_c/2))
 for(i in 1:num_c){
   cl_data = gene_patterns[gene_clusters==i,]
-  plot(colMeans(cl_data),x=times,col="white")
+  plot(colMeans(cl_data),x=times,col="white",las=2)
   for(tr in unique(trs)){
     curr_data = cl_data[,trs==tr]
     print(intersect(rownames(curr_data),known_genes))
     curr_times = times[trs==tr]
     curr_profile = get_avg_merged_pattern(curr_data,curr_times)
-    lines(curr_profile,x=unique(curr_times),ylim=c(-1,1),main=tr,type='l',lwd=2,col=tr2col[tr],lty=tr2lty[tr])
+    lines(curr_profile,x=unique(curr_times),ylim=c(-1,1),main=tr,type='b',
+          lwd=2,col=tr2col[tr],lty=tr2lty[tr],pch=20)
     abline(h=0)
   }
-  legend(x="top",legend = unique(trs),fill=tr2col,cex=1.5)  
+  legend(x="top",legend = unique(trs),fill=tr2col,cex=1)  
 }
 
 # Step 3: cluster
