@@ -180,17 +180,20 @@ get_lfdrs<-function(pp,...){
 library(lme4)
 # For egger and correlations: take the first time point from each gse
 # Use mixed effects with all to measure bias
-perform_bias_analysis<-function(gdata,c2n){
+perform_bias_analysis<-function(gdata,c2n,tissue="muscle"){
   gdata = gdata[gdata$vi>0,]
+  gdata = gdata[gdata$tissue==tissue,]
   d = data.frame(y=gdata$yi,a=gdata$vi,b=as.numeric(c2n[gdata$V1]),z=as.character(gdata$gse))
-  lme1 = lmer(formula = y~a+b+(1|z),d,REML=F)
-  lme0 = lmer(formula = y~(1|z),d,REML=F)
-  av_p = anova(lme0,lme1)[2,8]
+  # lme1 = lmer(formula = y ~ a+b+(1|z),d,REML=F)
+  # lme0 = lmer(formula = y ~ (1|z),d,REML=F)
+  # av_p = anova(lme0,lme1)[2,8]
+  lm1 = lm(y~a+z,d)
+  av_p = summary(lm1)[[4]][2,4]
   
   gdata1 = apply(gdata,2,function(x,y)tapply(x,y,function(x)x[1]),y=gdata$V1)
   gdata = data.frame(gdata1)
-  gdata$yi = as.numeric(gdata$yi)
-  gdata$vi = as.numeric(gdata$vi)
+  gdata$yi = as.numeric(as.character(gdata$yi))
+  gdata$vi = as.numeric(as.character(gdata$vi))
   eg_test = NA
   try({
     res = rma(yi=yi,vi=vi,data=gdata, control=list(maxiter=10000,stepadj=0.5)) 
@@ -213,29 +216,49 @@ perform_bias_analysis<-function(gdata,c2n){
 
 load("PADB_dataset_level_meta_analysis_data.RData")
 
+# Bug fix: Sept 11 2017: the objects have standard errors in the vi
+# we use the square for correction
+correct_vi<-function(gdata){gdata$vi = gdata$vi^2;return(gdata)}
+acute_gene_tables = lapply(acute_gene_tables,correct_vi)
+acute_gene_tables_raw = lapply(acute_gene_tables_raw,correct_vi)
+longterm_gene_tables = lapply(longterm_gene_tables,correct_vi)
+longterm_gene_tables_raw = lapply(longterm_gene_tables_raw,correct_vi)
+#################################
+
 # estimation of publication bias
 publication_bias_res = list()
 
 acute_c2n = sapply(acute_metadata,function(x)length(x$gsms))
 c2num_ts = table(acute_gene_tables_raw[[1]]$V1)
 acute_c2n[names(c2num_ts)] = acute_c2n[names(c2num_ts)]/c2num_ts
-publication_bias_res[["acute"]] = sapply(acute_gene_tables_raw,perform_bias_analysis,c2n=acute_c2n)
+publication_bias_res[["acute,muscle"]] = sapply(acute_gene_tables_raw,perform_bias_analysis,c2n=acute_c2n)
+publication_bias_res[["acute,blood"]] = sapply(acute_gene_tables_raw,perform_bias_analysis,c2n=acute_c2n,tissue="blood")
 
 longterm_c2n = sapply(longterm_metadata,function(x)length(x$gsms))
 c2num_ts = table(longterm_gene_tables_raw[[1]]$V1)
 longterm_c2n[names(c2num_ts)] = longterm_c2n[names(c2num_ts)]/c2num_ts
-publication_bias_res[["longterm"]] = sapply(longterm_gene_tables_raw,perform_bias_analysis,c2n=longterm_c2n)
+publication_bias_res[["longterm,muscle"]] = sapply(longterm_gene_tables_raw,perform_bias_analysis,c2n=longterm_c2n)
+publication_bias_res[["longterm,blood"]] = sapply(longterm_gene_tables_raw,perform_bias_analysis,c2n=longterm_c2n,tissue="blood")
 
-par(mfrow=c(2,2))
-hist(publication_bias_res[["acute"]][1,],main="Acute, Egger test", xlab="p-value")
-hist(publication_bias_res[["longterm"]][1,],main="Longterm, Egger test", xlab="p-value")
-sapply(publication_bias_res,function(x)table(x[1,]<0.01))
-publication_bias_res[["acute"]][,"10891"]
-
-all_genes = unique(unlist(metafor_gene_sets[[1]]))
-gss = lapply(publication_bias_res,function(x,y)intersect(y,colnames(x)),y=all_genes)
-hist(publication_bias_res[["acute"]][1,gss[[1]]])
-hist(publication_bias_res[["longterm"]][1,gss[[2]]])
+# par(mfrow=c(2,2))
+# hist(publication_bias_res[["acute"]][1,],main="Acute, Egger test", xlab="p-value")
+# hist(publication_bias_res[["longterm"]][1,],main="Longterm, Egger test", xlab="p-value")
+# hist(publication_bias_res[["acute"]][5,],main="Acute, Egger test", xlab="p-value")
+# hist(publication_bias_res[["longterm"]][5,],main="Longterm, Egger test", xlab="p-value")
+# sapply(publication_bias_res,function(x)table(x[1,]<0.01))
+# 
+# gene = "10891"
+# gdata = acute_gene_tables[[gene]]
+# res = rma(yi,vi,data=gdata)
+# funnel(res)
+# regtest(res)
+# perform_bias_analysis(gdata,acute_c2n)
+# perform_bias_analysis(gdata,acute_c2n,"blood")
+# 
+# all_genes = unique(unlist(metafor_gene_sets[[2]]))
+# gss = lapply(publication_bias_res,function(x,y)intersect(y,colnames(x)),y=all_genes)
+# hist(publication_bias_res[["acute"]][5,gss[[1]]])
+# hist(publication_bias_res[["longterm"]][5,gss[[2]]])
 
 # save results as lists: sometimes the solvers fail
 acute_meta_analysis_results = list()
@@ -321,6 +344,7 @@ for(j in 1:ncol(longterm_ps)){
 metafor_gene_sets = lapply(metafor_gene_sets,function(x)x[sapply(x,length)>0])
 metafor_sets_enrichments = run_topgo_enrichment_fisher(metafor_gene_sets[[2]],rownames(acute_ps))
 enrich_res = extract_top_go_results(metafor_sets_enrichments)
+get_most_sig_enrichments_by_groups(enrich_res)
 save(metafor_gene_sets,metafor_sets_enrichments,acute_ps,longterm_ps,file="metafor_gene_sets.RData")
 ######################################################################################################
 ######################################################################################################
@@ -374,56 +398,6 @@ get_subset_forest_plot<-function(gdata,tissue="all",training="all",sortby = "tim
   print(rtest)
   forest(res,slab=apply(gdata[,labelsby],1,paste,collapse=','),...)
 }
-
-# Specific examples
-library(org.Hs.eg.db)
-entrez2symbol = as.list(org.Hs.egSYMBOL)
-metafor_gene_sets_names = lapply(metafor_gene_sets[[2]],function(x,y)sort(unlist(y[x])),y=entrez2symbol)
-all_genes = sort(unique(unlist(metafor_gene_sets_names)))
-known_genes = c("PPARGC1A","COX1","NDUFA","PDK4","VEGFA","KDR","THY1","MYL4",
-"MYH1","COL1A1","ACTC1","TNNT2","GADD45G","MMP9","NR4A1")
-which(sapply(known_genes,function(x,y)any(grepl(x,y)),y=all_genes))
-intersect(all_genes,known_genes)
-intersect(known_genes,unlist(entrez2symbol[rownames(acute_ps)]))
-sapply(metafor_gene_sets_names,intersect,y=known_genes)
-
-gene = "10891"
-gdata = acute_gene_tables[[gene]] # PGC1 in acute response
-get_subset_forest_plot(gdata,"muscle",main="PGC1, acute, muscle")
-get_subset_forest_plot(gdata,"blood",main="PGC1,acute,blood")
-acute_ps[gene,]
-acute_gene_tables[[gene]]
-acute_gene_tables_raw[[gene]]
-
-gene = "1282"
-entrez2symbol[gene]
-gdata = acute_gene_tables[[gene]] # COL4A1 in acute response
-get_subset_forest_plot(gdata,"muscle",main="COL4A1, acute, muscle")
-gdata = longterm_gene_tables[[gene]] # COL4A1 in longterm response
-get_subset_forest_plot(gdata,"muscle",main="COL4A1, longterm, muscle")
-acute_ps[gene,]
-longterm_ps[gene,]
-
-gene = "4318" # MMP9
-entrez2symbol[gene]
-gdata = acute_gene_tables[[gene]]
-get_gene_analysis_pvals_with_gse_correction(gdata[gdata$tissue=="blood",])
-get_subset_forest_plot(gdata,"blood",main="MMP9, acute, blood")
-acute_ps[gene,]
-longterm_ps[gene,]
-gdata$time = ordered(gdata$time)
-get_gene_analysis_pvals_with_gse_correction(gdata[gdata$tissue=="blood",])
-
-gene = "7139" # TNNT2 - expected but has poor signal
-entrez2symbol[gene]
-gdata = acute_gene_tables[[gene]] 
-get_subset_forest_plot(gdata,"muscle")
-get_subset_forest_plot(gdata,"blood")
-gdata = longterm_gene_tables[[gene]] 
-get_subset_forest_plot(gdata,"muscle")
-get_subset_forest_plot(gdata,"blood")
-acute_ps[gene,]
-longterm_ps[gene,]
 
 ######## "Advanced" analyses: functions ############
 # Get average effect per time point x training
@@ -515,11 +489,8 @@ cluster_homogeneities<-function(x,cl,...){
 weighted_avg_matrices=list()
 weighted_avg_matrices[["acute"]] = t(sapply(acute_gene_tables_raw,get_gene_weighted_avg_pattern))
 weighted_avg_matrices[["longterm"]] = t(sapply(longterm_gene_tables_raw,get_gene_weighted_avg_pattern))
-plot_gene_pattern(weighted_avg_matrices$acute["10891",],tosmooth = T,mfrow=c(2,2))
-plot_gene_pattern(weighted_avg_matrices$longterm["10891",],main_prefix = "long-term",mfrow=NULL)
 # reorder the matrices
 weighted_avg_matrices = lapply(weighted_avg_matrices,reorder_weighted_avg_matrix)
-plot(weighted_avg_matrices[[1]]["10891",])
 dir.create("processed_avg_effects_matrices")
 dir.create("processed_avg_effects_matrices/acute")
 dir.create("processed_avg_effects_matrices/longterm")
@@ -532,9 +503,68 @@ dir.create("processed_avg_effects_matrices/longterm_metaanalysis_genes/")
 print_drem_matrices(weighted_avg_matrices$acute,"processed_avg_effects_matrices/acute_metaanalysis_genes/",geneset = metafor_gene_sets_names_0.2_all_genes)
 print_drem_matrices(weighted_avg_matrices$longterm,"processed_avg_effects_matrices/longterm_metaanalysis_genes/",geneset = metafor_gene_sets_names_0.2_all_genes)
 
+# Specific examples
+library(org.Hs.eg.db)
+entrez2symbol = as.list(org.Hs.egSYMBOL)
+metafor_gene_sets_names = lapply(metafor_gene_sets[[2]],function(x,y)sort(unlist(y[x])),y=entrez2symbol)
+all_genes = sort(unique(unlist(metafor_gene_sets_names)))
+known_genes = c("PPARGC1A","COX1","NDUFA","PDK4","VEGFA","KDR","THY1","MYL4",
+                "MYH1","COL1A1","ACTC1","TNNT2","GADD45G","MMP9","NR4A1")
+which(sapply(known_genes,function(x,y)any(grepl(x,y)),y=all_genes))
+intersect(all_genes,known_genes)
+intersect(known_genes,unlist(entrez2symbol[rownames(acute_ps)]))
+sapply(metafor_gene_sets_names,intersect,y=known_genes)
+
+gene = "10891"
+gdata = acute_gene_tables[[gene]] # PGC1 in acute response
+get_subset_forest_plot(gdata,"muscle",main="PGC1, acute, muscle")
+get_subset_forest_plot(gdata,"blood",main="PGC1,acute,blood")
+acute_ps[gene,]
+acute_gene_tables[[gene]]
+acute_gene_tables_raw[[gene]]
+plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = T,mfrow=c(2,2))
+plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL)
+
+gene = "1282"
+entrez2symbol[gene]
+gdata = acute_gene_tables[[gene]] # COL4A1 in acute response
+get_subset_forest_plot(gdata,"muscle",main="COL4A1, acute, muscle")
+gdata = longterm_gene_tables[[gene]] # COL4A1 in longterm response
+get_subset_forest_plot(gdata,"muscle",main="COL4A1, longterm, muscle")
+acute_ps[gene,]
+longterm_ps[gene,]
+plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = T,mfrow=c(2,2))
+plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL)
+
+gene = "4318" # MMP9
+entrez2symbol[gene]
+gdata = acute_gene_tables[[gene]]
+get_gene_analysis_pvals_with_gse_correction(gdata[gdata$tissue=="blood",])
+get_subset_forest_plot(gdata,"blood",main="MMP9, acute, blood")
+acute_ps[gene,]
+longterm_ps[gene,]
+gdata$time = ordered(gdata$time)
+get_gene_analysis_pvals_with_gse_correction(gdata[gdata$tissue=="blood",])
+plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = T,mfrow=c(2,2))
+plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL)
+
+gene = "7139" # TNNT2 - expected but has poor signal
+entrez2symbol[gene]
+gdata = acute_gene_tables[[gene]] 
+get_subset_forest_plot(gdata,"muscle")
+get_subset_forest_plot(gdata,"blood")
+gdata = longterm_gene_tables[[gene]] 
+get_subset_forest_plot(gdata,"muscle")
+get_subset_forest_plot(gdata,"blood")
+acute_ps[gene,]
+longterm_ps[gene,]
+plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = T,mfrow=c(2,2))
+plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL)
+
+
 # Clustering and plots
 # Step 1: take a selected list of genes, in a specific tissue 
-genes = metafor_gene_sets$`0.1lfdr`$`acute,mixed_effects_muscle`
+genes = metafor_gene_sets$`0.2lfdr`$`acute,mixed_effects_muscle`
 genes = unique(unlist(metafor_gene_sets[[2]]))
 
 genes = intersect(names(acute_gene_tables),genes)
