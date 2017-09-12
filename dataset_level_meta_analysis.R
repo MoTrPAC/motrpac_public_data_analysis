@@ -2,6 +2,7 @@
 # This is done both for the acute and longterm datasets
 setwd('/Users/David/Desktop/MoTrPAC/PA_database')
 library(metafor)
+library(org.Hs.eg.db)
 source('repos/motrpac/helper_functions.R')
 
 # Get the datasets and their metadata
@@ -11,6 +12,24 @@ acute_metadata = cohort_metadata
 load("PADB_univariate_results_and_preprocessed_data_longterm.RData")
 longterm_datasets = cohort_data
 longterm_metadata = cohort_metadata
+
+# Some basic statistics
+get_basic_stats_from_metadata<-function(metadata){
+  num_gses = length(unique(sapply(metadata,function(x)x$gse)))
+  num_samples = length(unique(unlist(sapply(metadata,function(x)x$gsms))))
+  c2n = sapply(metadata,function(x)length(x$gsms))
+  c2tissue = sapply(metadata,function(x)x$tissue)
+  c2tr = sapply(metadata,function(x)x$training)
+  tr2samples = sapply(unique(c2tr),function(x,y,z)sum(z[y==x]),y=c2tr,z=c2n)
+  tissue2samples = sapply(unique(c2tissue),function(x,y,z)sum(z[y==x]),y=c2tissue,z=c2n)
+  return(list(num_gses,num_samples,c2n,c2tissue,c2tr,tr2samples,tissue2samples))
+}
+acute_cohorts = sapply(acute_datasets,function(x)!is.null(x$gene_fchanges))
+get_basic_stats_from_metadata(acute_metadata[acute_cohorts])
+get_basic_stats_from_metadata(acute_metadata[!acute_cohorts])
+longterm_cohorts = sapply(longterm_datasets,function(x)!is.null(x$gene_fchanges))
+get_basic_stats_from_metadata(longterm_metadata[longterm_cohorts])
+get_basic_stats_from_metadata(longterm_metadata[!longterm_cohorts])
 
 acute_datasets_effects = lapply(acute_datasets,function(x)x$time2ttest_stats)
 longterm_datasets_effects = lapply(longterm_datasets,function(x)x$time2ttest_stats)
@@ -86,7 +105,7 @@ save(acute_gene_tables_raw,acute_gene_tables,longterm_gene_tables_raw,longterm_g
      file="PADB_dataset_level_meta_analysis_data.RData")
 
 ########################################################################
-########################################################################
+#######################  Meta-analysis functions  ######################
 ########################################################################
 # ... e.g., subset = (tissue=="blood")
 get_gene_analysis_pvals<-function(gdata,use_mods=T,func=rma,...){
@@ -158,11 +177,65 @@ get_lfdrs<-function(pp,...){
   lfdr = locfdr(zz,...)
   return(cbind(pp,lfdr$fdr,zz))
 }
+library(lme4)
+# For egger and correlations: take the first time point from each gse
+# Use mixed effects with all to measure bias
+perform_bias_analysis<-function(gdata,c2n){
+  gdata = gdata[gdata$vi>0,]
+  d = data.frame(y=gdata$yi,a=gdata$vi,b=as.numeric(c2n[gdata$V1]),z=as.character(gdata$gse))
+  lme1 = lmer(formula = y~a+b+(1|z),d,REML=F)
+  lme0 = lmer(formula = y~(1|z),d,REML=F)
+  av_p = anova(lme0,lme1)[2,8]
+  
+  gdata1 = apply(gdata,2,function(x,y)tapply(x,y,function(x)x[1]),y=gdata$V1)
+  gdata = data.frame(gdata1)
+  gdata$yi = as.numeric(gdata$yi)
+  gdata$vi = as.numeric(gdata$vi)
+  eg_test = NA
+  try({
+    res = rma(yi=yi,vi=vi,data=gdata, control=list(maxiter=10000,stepadj=0.5)) 
+    eg_test = regtest(res)$pval
+  })
+  size_effect_test = cor.test(gdata$yi,c2n[gdata$V1],method="spearman")
+  size_effect_cor = size_effect_test$estimate
+  size_effect_p = size_effect_test$p.value
+  size_precision_cor = cor(gdata$vi,c2n[gdata$V1],method="spearman")
+  return(c(eggerp = eg_test,size_effect_cor=size_effect_cor,
+           size_effect_p=size_effect_p,size_precision_cor=size_precision_cor,
+           me_with_vi_and_size=av_p))
+}
+#perform_bias_analysis(acute_gene_tables[["10891"]],acute_c2n)
+#perform_bias_analysis(longterm_gene_tables[["10891"]],longterm_c2n)
+
 ########################################################################
 ########################################################################
 ########################################################################
 
 load("PADB_dataset_level_meta_analysis_data.RData")
+
+# estimation of publication bias
+publication_bias_res = list()
+
+acute_c2n = sapply(acute_metadata,function(x)length(x$gsms))
+c2num_ts = table(acute_gene_tables_raw[[1]]$V1)
+acute_c2n[names(c2num_ts)] = acute_c2n[names(c2num_ts)]/c2num_ts
+publication_bias_res[["acute"]] = sapply(acute_gene_tables_raw,perform_bias_analysis,c2n=acute_c2n)
+
+longterm_c2n = sapply(longterm_metadata,function(x)length(x$gsms))
+c2num_ts = table(longterm_gene_tables_raw[[1]]$V1)
+longterm_c2n[names(c2num_ts)] = longterm_c2n[names(c2num_ts)]/c2num_ts
+publication_bias_res[["longterm"]] = sapply(longterm_gene_tables_raw,perform_bias_analysis,c2n=longterm_c2n)
+
+par(mfrow=c(2,2))
+hist(publication_bias_res[["acute"]][1,],main="Acute, Egger test", xlab="p-value")
+hist(publication_bias_res[["longterm"]][1,],main="Longterm, Egger test", xlab="p-value")
+sapply(publication_bias_res,function(x)table(x[1,]<0.01))
+publication_bias_res[["acute"]][,"10891"]
+
+all_genes = unique(unlist(metafor_gene_sets[[1]]))
+gss = lapply(publication_bias_res,function(x,y)intersect(y,colnames(x)),y=all_genes)
+hist(publication_bias_res[["acute"]][1,gss[[1]]])
+hist(publication_bias_res[["longterm"]][1,gss[[2]]])
 
 # save results as lists: sometimes the solvers fail
 acute_meta_analysis_results = list()
@@ -184,12 +257,11 @@ longterm_meta_analysis_results[["mixed_effects_blood"]] = lapply(longterm_gene_t
         function(x)get_gene_analysis_pvals(x[x$tissue=="blood",],use_mods=T))
 longterm_meta_analysis_results[["mixed_effects_muscle"]] = lapply(longterm_gene_tables,
         function(x)get_gene_analysis_pvals(x[x$tissue=="muscle",],use_mods=T))
-
 longterm_meta_analysis_results[["random_effects_muscle_with_gse"]] = lapply(longterm_gene_tables, 
       function(x)get_gene_analysis_pvals_with_gse_correction(
       x[x$tissue=="muscle",],use_mods=F))
 
-save(acute_meta_analysis_results,longterm_meta_analysis_results,file="PADB_metafor_meta_analysis_results.RData")
+save(acute_meta_analysis_results,longterm_meta_analysis_results,publication_bias_res,file="PADB_metafor_meta_analysis_results.RData")
 
 ##########################################################
 ##########################################################
@@ -236,12 +308,23 @@ for(j in 1:ncol(longterm_ps)){
   metafor_gene_sets[["0.1lfdr"]][[nn]] = rownames(longterm_ps)[longterm_lfdrs[,j]<=0.1 & longterm_zzs[,j]<(-1)]
 }
 
+metafor_gene_sets[["0.2lfdr"]] = list()
+for(j in 1:ncol(acute_ps)){
+  nn = paste("acute",colnames(acute_ps)[j],sep=',')
+  metafor_gene_sets[["0.2lfdr"]][[nn]] = rownames(acute_ps)[acute_lfdrs[,j]<=0.2 & acute_zzs[,j]<(-1)]
+}
+for(j in 1:ncol(longterm_ps)){
+  nn = paste("longterm",colnames(longterm_ps)[j],sep=',')
+  metafor_gene_sets[["0.2lfdr"]][[nn]] = rownames(longterm_ps)[longterm_lfdrs[,j]<=0.2 & longterm_zzs[,j]<(-1)]
+}
+
 metafor_gene_sets = lapply(metafor_gene_sets,function(x)x[sapply(x,length)>0])
 metafor_sets_enrichments = run_topgo_enrichment_fisher(metafor_gene_sets[[2]],rownames(acute_ps))
 enrich_res = extract_top_go_results(metafor_sets_enrichments)
 save(metafor_gene_sets,metafor_sets_enrichments,acute_ps,longterm_ps,file="metafor_gene_sets.RData")
 ######################################################################################################
 ######################################################################################################
+
 # Main display items
 load("PADB_dataset_level_meta_analysis_data.RData")
 load("tissue_expression_scores.RData")
@@ -274,16 +357,6 @@ barplot(m,beside=T,legend=T,args.legend = c(x="top"),ylab="Number of selected ge
 # Gene numbers and specific examples
 gene_nums = t(t(sapply(metafor_gene_sets[[2]],length)))
 enrich_res = extract_top_go_results(metafor_sets_enrichments)
-get_most_sig_enrichments_by_groups <- function(res){
-  gs = unique(as.character(res[,1]))
-  m = c()
-  for(g in gs){
-    res0 = res[res[,1]==g,]
-    ps = as.numeric(res0$classicFisher)
-    m = rbind(m,res0[ps==min(ps),])
-  }
-  return(m)
-}
 get_most_sig_enrichments_by_groups(enrich_res)
 
 get_subset_forest_plot<-function(gdata,tissue="all",training="all",sortby = "time",labelsby=c("gse","time"),...){
@@ -352,7 +425,7 @@ get_subset_forest_plot(gdata,"blood")
 acute_ps[gene,]
 longterm_ps[gene,]
 
-######## "Advanced" analyses ############
+######## "Advanced" analyses: functions ############
 # Get average effect per time point x training
 get_gene_weighted_avg_pattern <-function(gdata){
   gdata$wt = 1/gdata$vi
@@ -367,22 +440,47 @@ reorder_weighted_avg_matrix<-function(x){
   x = x[,ord]
   return(x)
 }
-print_drem_matrix<-function(){
-  
+# geneset - a list of gene symbols
+print_drem_matrices<-function(x,dir_name,gene_conv = entrez2symbol,min_time_points=3,geneset=NULL){
+  cn = colnames(x)
+  cn = sapply(cn,function(x)strsplit(x,split=',')[[1]])
+  tb = table(cn[1,],cn[2,])
+  for(tissue in rownames(tb)){
+    xx = x[,cn[1,]==tissue]
+    times = as.numeric(cn[3,cn[1,]==tissue])
+    trs = cn[2,cn[1,]==tissue]
+    for(tr in unique(trs)){
+      if(sum(trs==tr)<min_time_points){next}
+      curr_xx = xx[,trs==tr]
+      curr_times = times[trs==tr]
+      colnames(curr_xx) = paste(curr_times,"h",sep='')
+      rownames(curr_xx) = gene_conv[rownames(curr_xx)]
+      if(!is.null(geneset)){curr_xx = curr_xx[intersect(rownames(curr_xx),geneset),]}
+      fname = paste(dir_name,tissue,"_",tr,'.txt',sep='')
+      curr_xx = cbind(rownames(curr_xx),curr_xx)
+      colnames(curr_xx)[1] = "UID"
+      write.table(curr_xx,file=fname,quote=F,sep="\t",col.names = T,row.names = F)
+    }
+  }
 }
 plot_gene_pattern<-function(x,tosmooth=T,min_time_points=3,
-                            tr2col=c(control="red",endurance="blue",resistance="green"),
+                            tr2col=c(control="red",endurance="blue",resistance="green",both="purple"),
                             legend.x="topright",legend.cex=0.8,legend.ncol=2,
+                            mfrow = c(1,2),main_prefix = "acute",y_lim_add = 0.5,y_lim_min = 1.5,
                             ...){
   cn = names(x)
   cn = sapply(cn,function(x)strsplit(x,split=',')[[1]])
   tb = table(cn[1,],cn[2,])
-  par(mfrow=c(2,1))
+  if(!is.null(mfrow)){par(mfrow=mfrow)}
   for(tissue in rownames(tb)){
     xx = x[cn[1,]==tissue]
+    if(length(xx)<min_time_points){next}
     times = as.numeric(cn[3,cn[1,]==tissue])
     trs = cn[2,cn[1,]==tissue]
-    plot(xx,x=times,col="white",las=2,main=tissue,xlim=c(-1,max(times)),ylim=c(-2.5,2.5),ylab="log2 Fold Change",xlab="time")
+    ylim = c(min(xx)-y_lim_add,max(xx)+y_lim_add)
+    ylim[1] = min(-y_lim_min,ylim[1])
+    ylim[2] = max(y_lim_min,ylim[2])
+    plot(xx,x=times,col="white",las=2,main=paste(main_prefix,tissue),xlim=c(-1,max(times)),ylim=ylim,ylab="log2 Fold Change",xlab="time")
     for(tr in unique(trs)){
       if(tosmooth){xx1 = c(0,smooth(xx[trs==tr]))}
       else{xx1 = c(0,xx[trs==tr])}
@@ -390,16 +488,49 @@ plot_gene_pattern<-function(x,tosmooth=T,min_time_points=3,
       tt1 = c(-1,times[trs==tr])
       lines(xx1,x=tt1,type='l',lwd=2,col=tr2col[tr],pch=20)
     }
-    legend(x=legend.x,legend = unique(trs),fill=tr2col,cex=legend.cex,horiz=T)  
+    legend(x=legend.x,legend = unique(trs),fill=tr2col[unique(trs)],cex=legend.cex,ncol=legend.ncol)  
   }
 }
-get_pattern_plot<-function()
+library(cluster)
+pam1 <- function(x,k) list(cluster = pam(x,k, cluster.only=TRUE))
+# x: rows are genes
+perform_gene_clustering<-function(x,fun=pam1,standardize_genes=T,num_pcs=5){
+  xx = x
+  if(standardize_genes){xx = t(apply(x,1,function(x)(x-mean(x))/(sd(x))))}
+  if(num_pcs>1){xx = prcomp(xx)$x[,1:num_pcs]}
+  gs.pam.xx <- clusGap(xx, FUN = fun, K.max = 20, B = 100)
+  num_c = maxSE(gs.pam.xx[[1]][,3],gs.pam.xx[[1]][,4])
+  cc = fun(xx,num_c)$cluster
+  return(cc)
+}
+cluster_homogeneities<-function(x,cl,...){
+  hs = c()
+  for(cc in unique(cl)){
+    rhos = cor(t(x[cl==cc,]),...)
+    hs[cc] = mean(rhos[lower.tri(rhos)])
+  }
+  return(hs)
+}
+#########################################################
 weighted_avg_matrices=list()
 weighted_avg_matrices[["acute"]] = t(sapply(acute_gene_tables_raw,get_gene_weighted_avg_pattern))
 weighted_avg_matrices[["longterm"]] = t(sapply(longterm_gene_tables_raw,get_gene_weighted_avg_pattern))
+plot_gene_pattern(weighted_avg_matrices$acute["10891",],tosmooth = T,mfrow=c(2,2))
+plot_gene_pattern(weighted_avg_matrices$longterm["10891",],main_prefix = "long-term",mfrow=NULL)
 # reorder the matrices
 weighted_avg_matrices = lapply(weighted_avg_matrices,reorder_weighted_avg_matrix)
 plot(weighted_avg_matrices[[1]]["10891",])
+dir.create("processed_avg_effects_matrices")
+dir.create("processed_avg_effects_matrices/acute")
+dir.create("processed_avg_effects_matrices/longterm")
+print_drem_matrices(weighted_avg_matrices$acute,"processed_avg_effects_matrices/acute/")
+print_drem_matrices(weighted_avg_matrices$longterm,"processed_avg_effects_matrices/longterm/")
+metafor_gene_sets_names_0.2 = lapply(metafor_gene_sets[[3]],function(x,y)sort(unlist(y[x])),y=entrez2symbol)
+metafor_gene_sets_names_0.2_all_genes = sort(unique(unlist(metafor_gene_sets_names_0.2)))
+dir.create("processed_avg_effects_matrices/acute_metaanalysis_genes/")
+dir.create("processed_avg_effects_matrices/longterm_metaanalysis_genes/")
+print_drem_matrices(weighted_avg_matrices$acute,"processed_avg_effects_matrices/acute_metaanalysis_genes/",geneset = metafor_gene_sets_names_0.2_all_genes)
+print_drem_matrices(weighted_avg_matrices$longterm,"processed_avg_effects_matrices/longterm_metaanalysis_genes/",geneset = metafor_gene_sets_names_0.2_all_genes)
 
 # Clustering and plots
 # Step 1: take a selected list of genes, in a specific tissue 
@@ -442,26 +573,7 @@ for(i in 1:num_c){
 }
 
 # Step 3: cluster
-library(cluster)
-pam1 <- function(x,k) list(cluster = pam(x,k, cluster.only=TRUE))
-# x: rows are genes
-perform_gene_clustering<-function(x,fun=pam1,standardize_genes=T,num_pcs=5){
-  xx = x
-  if(standardize_genes){xx = t(apply(x,1,function(x)(x-mean(x))/(sd(x))))}
-  if(num_pcs>1){xx = prcomp(xx)$x[,1:num_pcs]}
-  gs.pam.xx <- clusGap(xx, FUN = fun, K.max = 20, B = 100)
-  num_c = maxSE(gs.pam.xx[[1]][,3],gs.pam.xx[[1]][,4])
-  cc = fun(xx,num_c)$cluster
-  return(cc)
-}
-cluster_homogeneities<-function(x,cl,...){
-  hs = c()
-  for(cc in unique(cl)){
-    rhos = cor(t(x[cl==cc,]),...)
-    hs[cc] = mean(rhos[lower.tri(rhos)])
-  }
-  return(hs)
-}
+
 
 xx = ordered(paste(times,trs,sep=","))
 plot(gene_patterns[,1],type='b',ylim=c(min(gene_patterns),max(gene_patterns)),x=xx)

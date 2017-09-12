@@ -258,7 +258,7 @@ for (dataset in unique(dataset_ids[analysis_samples])){
   
   # release memory and save
   rm(data_matrix);rm(genes_data_matrix);rm(genes_data_matrix_obj);gc()
-  save(dataset2preprocessed_data,file=OUT_FILE)
+  #save(dataset2preprocessed_data,file=OUT_FILE)
 }
 rm(CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes,gpl_mappings_to_entrez,gpl_tables)
 gc()

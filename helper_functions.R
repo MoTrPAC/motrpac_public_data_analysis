@@ -56,6 +56,24 @@ get_subject_info_from_gsms<-function(subj,gsms,metadata,colname,sample2subject){
   return(unique(currdata)[1])
 }
 
+simplify_time_acute<-function(tt){
+  tt[tt==0.5 | tt==1] = 0.75
+  tt[tt==2.5] = 3
+  tt[tt==20] = 24
+  tt[tt==72 | tt==96] = 80
+  tt[tt==4 | tt==5] = 4.5
+  tt[tt==48 | tt==80] = 48
+  return(tt)
+}
+
+simplify_time_longterm<-function(tt){
+  tt = sample2time[samps]
+  tt[tt==70.1 | tt==70.2] = 80
+  tt[tt==84] = 80
+  tt[tt>100 & tt<200] = 150
+  return(tt)
+}
+
 
 ####################### Working with GPL tables ####################
 merge_two_id_lists<-function(l1,l2){
@@ -395,6 +413,16 @@ extract_top_go_results<-function(res,qval=0.1,maxsize=2000){
   #plot(new_qvals,res$go_qvals);abline(0,1)
   res$go_qvals = new_qvals
   return(res[res$go_qvals<=qval,])
+}
+get_most_sig_enrichments_by_groups <- function(res){
+  gs = unique(as.character(res[,1]))
+  m = c()
+  for(g in gs){
+    res0 = res[res[,1]==g,]
+    ps = as.numeric(res0$classicFisher)
+    m = rbind(m,res0[ps==min(ps),])
+  }
+  return(m)
 }
 
 # GSEA
