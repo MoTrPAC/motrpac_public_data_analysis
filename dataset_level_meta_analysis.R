@@ -132,20 +132,7 @@ get_gene_analysis_pvals_with_gse_correction<-function(gdata,use_mods=T,func=rma.
   v = NULL
   try({
     if(use_mods){
-      has_times = length(unique(gdata$time))>1
-      has_tr = length(unique(gdata$training))>1
-      if(has_tr && has_times){
-        res1 = func(yi,vi,mods = ~ training + time ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000),...) 
-      }
-      if(!has_tr && !has_times){
-        res1 = func(yi,vi,data=gdata, random = ~ 1|gse, control=list(maxiter=10000),...) 
-      }
-      if(has_times){
-        res1 = func(yi,vi,mods = ~ time ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000),...)
-      }
-      else{
-        res1 = func(yi,vi,mods = ~ training ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000),...)
-      }
+      res1 = get_rma_obj_with_mods(gdata,func)
     }
     else{
       res1 = func(yi,vi,data=gdata, random = ~ 1|gse,control=list(maxiter=10000),...)
@@ -159,6 +146,44 @@ get_gene_analysis_pvals_with_gse_correction<-function(gdata,use_mods=T,func=rma.
   })
   return(v)
 }
+
+# If training has controls: add a new binary vector for controls
+get_rma_obj_with_mods<-function(gdata,func=rma.mv){
+  has_times = length(unique(gdata$time))>1
+  has_tr = length(unique(gdata$training))>1
+  if(has_tr && has_times){
+    res1 = func(yi,vi,mods = ~ training + time ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000),...) 
+  }
+  if(!has_tr && !has_times){
+    res1 = func(yi,vi,data=gdata, random = ~ 1|gse, control=list(maxiter=10000),...) 
+  }
+ if(has_times && ! has_tr){
+    res1 = func(yi,vi,mods = ~ time ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000),...)
+  }
+ if(has_tr && ! has_times){
+    res1 = func(yi,vi,mods = ~ training ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000),...)
+  }
+  return(res1)
+}
+
+perform_control_test<-function(gdata,func=rma.mv,...){
+  try({
+  has_times = length(unique(gdata$time))>1
+  gdata = gdata[gdata$training!="other",]
+  is_ctrl = factor(gdata$training=="control")
+  gdata$is_ctrl=is_ctrl
+  if(has_times){
+    res1 = func(yi,vi,mods = ~ is_ctrl + training + time ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000),...) 
+  }
+  if(!has_times){
+    res1 = func(yi,vi,mods = ~ is_ctrl + training ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000),...)
+  }
+  ind = grepl("is_ctrl",rownames(res1$beta))
+  return(res1$pval[ind])
+  })
+  return(NA)
+}
+
 get_ps<-function(x,ind=1){
   nn = names(x)
   xl = lapply(x,function(x)x[ind])
@@ -189,7 +214,6 @@ perform_bias_analysis<-function(gdata,c2n,tissue="muscle"){
   # av_p = anova(lme0,lme1)[2,8]
   lm1 = lm(y~a+z,d)
   av_p = summary(lm1)[[4]][2,4]
-  
   gdata1 = apply(gdata,2,function(x,y)tapply(x,y,function(x)x[1]),y=gdata$V1)
   gdata = data.frame(gdata1)
   gdata$yi = as.numeric(as.character(gdata$yi))
@@ -216,6 +240,7 @@ perform_bias_analysis<-function(gdata,c2n,tissue="muscle"){
 
 load("PADB_dataset_level_meta_analysis_data.RData")
 
+################################
 # Bug fix: Sept 11 2017: the objects have standard errors in the vi
 # we use the square for correction
 correct_vi<-function(gdata){gdata$vi = gdata$vi^2;return(gdata)}
@@ -225,7 +250,7 @@ longterm_gene_tables = lapply(longterm_gene_tables,correct_vi)
 longterm_gene_tables_raw = lapply(longterm_gene_tables_raw,correct_vi)
 #################################
 
-# estimation of publication bias
+# Estimation of publication bias
 publication_bias_res = list()
 
 acute_c2n = sapply(acute_metadata,function(x)length(x$gsms))
@@ -240,11 +265,11 @@ longterm_c2n[names(c2num_ts)] = longterm_c2n[names(c2num_ts)]/c2num_ts
 publication_bias_res[["longterm,muscle"]] = sapply(longterm_gene_tables_raw,perform_bias_analysis,c2n=longterm_c2n)
 publication_bias_res[["longterm,blood"]] = sapply(longterm_gene_tables_raw,perform_bias_analysis,c2n=longterm_c2n,tissue="blood")
 
-# par(mfrow=c(2,2))
-# hist(publication_bias_res[["acute"]][1,],main="Acute, Egger test", xlab="p-value")
-# hist(publication_bias_res[["longterm"]][1,],main="Longterm, Egger test", xlab="p-value")
-# hist(publication_bias_res[["acute"]][5,],main="Acute, Egger test", xlab="p-value")
-# hist(publication_bias_res[["longterm"]][5,],main="Longterm, Egger test", xlab="p-value")
+par(mfrow=c(2,2))
+hist(publication_bias_res[["acute,muscle"]][1,],main="Acute, Egger test", xlab="p-value")
+hist(publication_bias_res[["longterm,muscle"]][1,],main="Longterm, Egger test", xlab="p-value")
+hist(publication_bias_res[["acute,blood"]][1,],main="Acute, Egger test", xlab="p-value")
+hist(publication_bias_res[["longterm,blood"]][1,],main="Longterm, Egger test", xlab="p-value")
 # sapply(publication_bias_res,function(x)table(x[1,]<0.01))
 # 
 # gene = "10891"
@@ -286,11 +311,103 @@ longterm_meta_analysis_results[["random_effects_muscle_with_gse"]] = lapply(long
 
 save(acute_meta_analysis_results,longterm_meta_analysis_results,publication_bias_res,file="PADB_metafor_meta_analysis_results.RData")
 
+################################
+# New analysis: Sept 12 2017: merge time points, used as ordered factors
+# we merge time points such that there are at least 3 datasets per TP
+# Additional analyses:
+# Analyze controls vs. non controls
+# Check model with controls
+# Shave off conrol and/or publication bias genes
+simplify_time_in_gdata<-function(gdata,func=simplify_time_acute){
+  gdata$time = func(gdata$time)
+  gdata$time = ordered(gdata$time)
+  return(gdata)
+}
+acute_gene_tables_simpletime = lapply(acute_gene_tables,simplify_time_in_gdata)
+acute_gene_tables_raw_simpletime = lapply(acute_gene_tables_raw,simplify_time_in_gdata)
+longterm_gene_tables_simpletime = lapply(longterm_gene_tables,simplify_time_in_gdata,func=simplify_time_longterm)
+longterm_gene_tables_raw_simpletime = lapply(longterm_gene_tables_raw,simplify_time_in_gdata,func=simplify_time_longterm)
+
+meta_analysis_results = list()
+meta_analysis_results[["acute,muscle"]] = lapply(acute_gene_tables_simpletime,
+    function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="muscle",],use_mods=T))
+meta_analysis_results[["acute,blood"]] = lapply(acute_gene_tables_simpletime,
+    function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="blood",],use_mods=T))
+meta_analysis_results[["longterm,muscle"]] = lapply(longterm_gene_tables_simpletime,
+    function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="muscle",],use_mods=T))
+meta_analysis_results[["longterm,blood"]] = lapply(longterm_gene_tables_simpletime,
+    function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="blood",],use_mods=T))
+meta_analysis_results[["acute,controls,muscle"]] = sapply(acute_gene_tables_raw_simpletime,
+    function(x)perform_control_test(x[x$tissue=="muscle",]))
+meta_analysis_results[["acute,controls,blood"]] = sapply(acute_gene_tables_raw_simpletime,
+    function(x)perform_control_test(x[x$tissue=="blood",]))
+meta_analysis_results[["longterm,controls,muscle"]] = sapply(longterm_gene_tables_raw_simpletime,
+    function(x)perform_control_test(x[x$tissue=="muscle",]))
+# # longterm blood does not have controls...
+# meta_analysis_results[["longterm,controls,blood"]] = sapply(longterm_gene_tables_raw_simpletime[1:3],
+#     function(x)perform_control_test(x[x$tissue=="blood",]))
+sapply(meta_analysis_results[5:7],hist)
+
+get_ps_for_simpletime_analysis<-function(x){
+  p1 = get_ps(x)
+  p2 = get_ps(x,ind="pval_AllMods")
+  return(cbind(p1,p2))
+}
+meta_analysis_pvals = lapply(meta_analysis_results[1:4],get_ps_for_simpletime_analysis)
+x1 = meta_analysis_pvals[[1]][,2]
+x3 = meta_analysis_pvals[[1]][,1]
+x2 = meta_analysis_results$`acute,controls,muscle`
+plot(-log(x1),-log(x2))
+sort(names(which((x3<0.001 | x1<0.0001)&x2<0.0001)))
+table((x3<0.001 | x1<0.0001),x2<0.0001)
+x1["10891"]
+x2["10891"]
+save(meta_analysis_results,file="New_metafor_analysis_sept_12.RData")
+
+all_ps = c(unlist(meta_analysis_interc_pvals),unlist(meta_analysis_mod_pvals))
+all_ps = all_ps[!is.na(all_ps)]
+pthr = max(all_ps[p.adjust(all_ps,method='BY')<0.01])
+
+sapply(meta_analysis_mod_pvals,function(x)table(x<pthr))
+sapply(meta_analysis_interc_pvals,function(x)table(x<pthr))
+x = get_lfdrs(meta_analysis_mod_pvals[[4]])
+which(x[,2]<0.01)
+
+gene = "634" # TNNT2 - expected but has poor signal
+entrez2symbol[gene]
+gdata = acute_gene_tables[[gene]] 
+get_subset_forest_plot(gdata,"muscle")
+get_subset_forest_plot(gdata,"blood")
+plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = F,mfrow=c(2,2))
+plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL)
+gene_ps = sapply(acute_datasets_effects,function(x)sapply(x,function(y)y[gene,"p"]))
+gene_ps[["GE_A_8"]]
+
+gdata = longterm_gene_tables_simpletime[[gene]]
+#gdata = acute_gene_tables[[gene]]
+gdata = gdata[gdata$tissue=="blood",]
+res1 = func(yi,vi,mods = ~ training + time ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
+res2 = func(yi,vi,data = gdata, random = ~ 1|gse, control=list(maxiter=10000))
+summary(res2)[[2]]
+publication_bias_res[[1]][,gene]
+anova(res1,res3)
+summary(lm(yi~time+training+factor(gse),data=gdata))
+
+#################################
+
+
 ##########################################################
 ##########################################################
 ##########################################################
 ##########################################################
 # Gene selection and display items
+get_matrix_p_adjust<-function(x,q=0.1,...){
+  v = c(x)
+  v = v[!is.na(x)]
+  vq = p.adjust(v,...)
+  thr = max(v[vq<=q])
+  return(thr)
+}
 
 load("PADB_metafor_meta_analysis_results.RData")
 acute_ps_intersect = sapply(acute_meta_analysis_results,get_ps)
@@ -305,8 +422,8 @@ longterm_ps_tr = sapply(longterm_meta_analysis_results[3:4],get_ps,ind="pval_tra
 longterm_ps = cbind(longterm_ps_intersect,longterm_ps_time,longterm_ps_tr)
 colnames(longterm_ps)[5:6] = c("blood, time","muscle,time")
 colnames(longterm_ps)[7:8] = c("blood, training","muscle,training")
-acute_qs = apply(acute_ps,2,p.adjust,method='fdr')
-longterm_qs = apply(longterm_ps,2,p.adjust,method='fdr')
+acute_qs_thr = get_matrix_p_adjust(acute_ps,0.1,method='fdr')
+longterm_qs_thr = get_matrix_p_adjust(longterm_ps,0.1,method='fdr')
 acute_lfdrs = apply(acute_ps,2,function(x)get_lfdrs(x)[,2])
 longterm_lfdrs = apply(longterm_ps,2,function(x)get_lfdrs(x)[,2])
 longterm_zzs = apply(longterm_ps,2,function(x)get_lfdrs(x)[,3])
@@ -314,12 +431,17 @@ acute_zzs = apply(acute_ps,2,function(x)get_lfdrs(x)[,3])
 
 metafor_gene_sets = list()
 metafor_gene_sets[["0.1fdr"]] = c(
-  apply(acute_qs,2,function(x,y)y[x<=0.1 & !is.na(x)],y=rownames(acute_ps)),
-  apply(longterm_qs,2,function(x,y)y[x<=0.1 & !is.na(x)],y=rownames(longterm_ps))
+  apply(acute_ps,2,function(x,y)y[x<=acute_qs_thr & !is.na(x)],y=rownames(acute_ps)),
+  apply(longterm_ps,2,function(x,y)y[x<=longterm_qs_thr & !is.na(x)],y=rownames(longterm_ps))
 )
 names(metafor_gene_sets[["0.1fdr"]]) = paste("longterm",names(metafor_gene_sets[["0.1fdr"]]),sep=",")
 names(metafor_gene_sets[["0.1fdr"]])[1:ncol(acute_ps)] = gsub(pattern="longterm,",
                   names(metafor_gene_sets[["0.1fdr"]])[1:ncol(acute_ps)],replace="acute,")
+sapply(metafor_gene_sets[[1]],length)
+
+sapply(metafor_gene_sets[[1]],length)
+pb_genes = publication_bias_res$`acute,blood`[1,]<0.01
+intersect(metafor_gene_sets[[1]]$`acute,blood, time`,names(which(pb_genes)))
 
 metafor_gene_sets[["0.1lfdr"]] = list()
 for(j in 1:ncol(acute_ps)){
@@ -330,16 +452,7 @@ for(j in 1:ncol(longterm_ps)){
   nn = paste("longterm",colnames(longterm_ps)[j],sep=',')
   metafor_gene_sets[["0.1lfdr"]][[nn]] = rownames(longterm_ps)[longterm_lfdrs[,j]<=0.1 & longterm_zzs[,j]<(-1)]
 }
-
-metafor_gene_sets[["0.2lfdr"]] = list()
-for(j in 1:ncol(acute_ps)){
-  nn = paste("acute",colnames(acute_ps)[j],sep=',')
-  metafor_gene_sets[["0.2lfdr"]][[nn]] = rownames(acute_ps)[acute_lfdrs[,j]<=0.2 & acute_zzs[,j]<(-1)]
-}
-for(j in 1:ncol(longterm_ps)){
-  nn = paste("longterm",colnames(longterm_ps)[j],sep=',')
-  metafor_gene_sets[["0.2lfdr"]][[nn]] = rownames(longterm_ps)[longterm_lfdrs[,j]<=0.2 & longterm_zzs[,j]<(-1)]
-}
+sapply(metafor_gene_sets[[2]],length)
 
 metafor_gene_sets = lapply(metafor_gene_sets,function(x)x[sapply(x,length)>0])
 metafor_sets_enrichments = run_topgo_enrichment_fisher(metafor_gene_sets[[2]],rownames(acute_ps))
@@ -486,6 +599,9 @@ cluster_homogeneities<-function(x,cl,...){
   return(hs)
 }
 #########################################################
+library(org.Hs.eg.db)
+entrez2symbol = as.list(org.Hs.egSYMBOL)
+
 weighted_avg_matrices=list()
 weighted_avg_matrices[["acute"]] = t(sapply(acute_gene_tables_raw,get_gene_weighted_avg_pattern))
 weighted_avg_matrices[["longterm"]] = t(sapply(longterm_gene_tables_raw,get_gene_weighted_avg_pattern))
@@ -498,15 +614,11 @@ print_drem_matrices(weighted_avg_matrices$acute,"processed_avg_effects_matrices/
 print_drem_matrices(weighted_avg_matrices$longterm,"processed_avg_effects_matrices/longterm/")
 metafor_gene_sets_names_0.2 = lapply(metafor_gene_sets[[3]],function(x,y)sort(unlist(y[x])),y=entrez2symbol)
 metafor_gene_sets_names_0.2_all_genes = sort(unique(unlist(metafor_gene_sets_names_0.2)))
-dir.create("processed_avg_effects_matrices/acute_metaanalysis_genes/")
-dir.create("processed_avg_effects_matrices/longterm_metaanalysis_genes/")
-print_drem_matrices(weighted_avg_matrices$acute,"processed_avg_effects_matrices/acute_metaanalysis_genes/",geneset = metafor_gene_sets_names_0.2_all_genes)
-print_drem_matrices(weighted_avg_matrices$longterm,"processed_avg_effects_matrices/longterm_metaanalysis_genes/",geneset = metafor_gene_sets_names_0.2_all_genes)
 
 # Specific examples
-library(org.Hs.eg.db)
-entrez2symbol = as.list(org.Hs.egSYMBOL)
-metafor_gene_sets_names = lapply(metafor_gene_sets[[2]],function(x,y)sort(unlist(y[x])),y=entrez2symbol)
+metafor_gene_sets_names = lapply(metafor_gene_sets[[1]],function(x,y)sort(unlist(y[x])),y=entrez2symbol)
+pb_genes = lapply(publication_bias_res,function(x)names(which(x[1,]<0.01)))
+pb_genes = lapply(pb_genes,function(x,y)sort(unlist(y[x])),y=entrez2symbol)
 all_genes = sort(unique(unlist(metafor_gene_sets_names)))
 known_genes = c("PPARGC1A","COX1","NDUFA","PDK4","VEGFA","KDR","THY1","MYL4",
                 "MYH1","COL1A1","ACTC1","TNNT2","GADD45G","MMP9","NR4A1")
@@ -514,6 +626,7 @@ which(sapply(known_genes,function(x,y)any(grepl(x,y)),y=all_genes))
 intersect(all_genes,known_genes)
 intersect(known_genes,unlist(entrez2symbol[rownames(acute_ps)]))
 sapply(metafor_gene_sets_names,intersect,y=known_genes)
+sapply(pb_genes,intersect,y=known_genes)
 
 gene = "10891"
 gdata = acute_gene_tables[[gene]] # PGC1 in acute response
@@ -561,6 +674,42 @@ longterm_ps[gene,]
 plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = T,mfrow=c(2,2))
 plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL)
 
+gene = "7070" # THY1
+gdata = longterm_gene_tables[[gene]] 
+get_subset_forest_plot(gdata,"muscle")
+get_subset_forest_plot(gdata,"blood")
+plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = F,mfrow=c(2,2))
+plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL,tosmooth = F)
+
+gdata = longterm_gene_tables_simpletime[[gene]]
+gdata = acute_gene_tables[[gene]]
+gdata = gdata[gdata$tissue=="blood",]
+res1 = func(yi,vi,mods = ~ training + time ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
+res2 = func(yi,vi,mods = ~ training + ordered(time) ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
+res3 = func(yi,vi,data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
+summary(res2)[[2]]
+publication_bias_res[[1]][,gene]
+anova(res1,res3)
+summary(lm(yi~time+training+factor(gse),data=gdata))
+
+table(gdata$training,gdata$time)
+table(gdata$training,gdata$gse)
+
+# # simulations, metafor
+# ns = 10
+# yi = rt(ns,df=10) 
+# vi = rchisq(ns,df=10)/10
+# yi[1] = yi[1] + 10
+# yi[3] = yi[3] + 10
+# gse = 1:10
+# m = rep(0,10)
+# m[1:3] = 1
+# rma.mv(yi,vi,random=~1|gse,mods = ~m)
+# rma.mv(yi,vi,random=~1|m,mods = ~gse)
+# rma.mv(yi,vi,random=~1|m)
+# regtest(rma(yi,vi))
+# funnel(rma.mv(yi,vi))
+# forest(rma(yi,vi))
 
 # Clustering and plots
 # Step 1: take a selected list of genes, in a specific tissue 

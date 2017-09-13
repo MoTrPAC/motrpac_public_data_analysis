@@ -56,23 +56,48 @@ get_subject_info_from_gsms<-function(subj,gsms,metadata,colname,sample2subject){
   return(unique(currdata)[1])
 }
 
+# Sept 2017 time windows: selected to have at least 3 cohorts in a tp
+# The method below gives:
+# blood muscle
+# 1     17      5
+# 4      4      8
+# 24     6      7
 simplify_time_acute<-function(tt){
-  tt[tt==0.5 | tt==1] = 0.75
-  tt[tt==2.5] = 3
-  tt[tt==20] = 24
-  tt[tt==72 | tt==96] = 80
-  tt[tt==4 | tt==5] = 4.5
-  tt[tt==48 | tt==80] = 48
+  tt[tt<=2.5] = 1
+  tt[tt>2.5 & tt<=5] = 4
+  tt[tt>=20] = 24
   return(tt)
 }
-
-simplify_time_longterm<-function(tt){
-  tt = sample2time[samps]
-  tt[tt==70.1 | tt==70.2] = 80
+simplify_time_longterm_blood<-function(tt){
+  tt[tt<=200] = 100
+  return(tt)
+}
+simplify_time_longterm_muscle<-function(tt){
+  tt[tt<=150] = 100
+  tt[tt>150] = 200
+  return(tt)
+}
+simplify_time_longterm<-function(tt,type="muscle"){
+  if(type=="muscle"){
+    return (simplify_time_longterm_muscle(tt))
+  }
+  if(type=="blood"){
+    return(simplify_time_longterm_blood(tt))
+  }
+  tt[tt==70.1 | tt==70.2 | tt == 70] = 80
   tt[tt==84] = 80
   tt[tt>100 & tt<200] = 150
   return(tt)
 }
+
+# # Before Sept 2017
+# simplify_time_acute<-function(tt){
+#   tt[tt<=1] = 0.5
+#   tt[tt>=2.5 & tt<=5] = 4
+#   tt[tt==20] = 24
+#   tt[tt==72 | tt==96] = 48
+#   return(tt)
+# }
 
 
 ####################### Working with GPL tables ####################
