@@ -59,11 +59,16 @@ time_point_metaanalysis<-function(gdata,remove_other=T){
   has_tr = length(unique(gdata_e$training))>1
   if(has_tr){
     success = F
-    try({
+    gdata_e = tryCatch({
       obj_e = rma.mv(yi,vi,1/vi,data = gdata_e,random= ~1|gse,mods = ~training,
                      control=list(iter.max=10000))
       success = T
-    })
+    },error = function (e){
+          if(grepl("Ratio of largest to smallest sampling variance extremely large",e)){
+            gdata_e$vi = pmax(gdata_e$vi,0.001)
+          }
+          return(gdata_e)}
+    )
     if(!success){
       try({
         obj_e = rma.mv(yi,vi,1/vi,data = gdata_e,random= ~1|gse,mods = ~training,
@@ -72,17 +77,24 @@ time_point_metaanalysis<-function(gdata,remove_other=T){
       })
     }
     if(!success){
-      obj_e = rma.mv(yi,vi,1/vi,data = gdata_e,random= ~1|gse,mods = ~training,
-                     control=list(iter.max=10000,rel.tol=1e-7)) 
+      try({
+        obj_e = rma.mv(yi,vi,1/vi,data = gdata_e,random= ~1|gse,mods = ~training,
+                       control=list(iter.max=10000,rel.tol=1e-7))
+      })
     }
   }
   else{
     success = F
-    try({
+    gdata_e = tryCatch({
       obj_e = rma.mv(yi,vi,1/vi,data = gdata_e,random= ~1|gse,
                      control=list(iter.max=10000))
       success = T
-    })
+    },error = function (e){
+      if(grepl("Ratio of largest to smallest sampling variance extremely large",e)){
+        gdata_e$vi = pmax(gdata_e$vi,0.001)
+      }
+      return(gdata_e)}
+    )
     if(!success){
       try({
         obj_e = rma.mv(yi,vi,1/vi,data = gdata_e,random= ~1|gse,
@@ -95,6 +107,8 @@ time_point_metaanalysis<-function(gdata,remove_other=T){
                      control=list(iter.max=10000,rel.tol=1e-7)) 
     }
   }
+  # The tryCatch may had removed gdata_e, we recreate it here
+  gdata_e = gdata[gdata$training!="control",]
   betas_e = obj_e$beta[,1]
   b_e_0 = betas_e[1]
   # SCORE 1
@@ -116,8 +130,10 @@ time_point_metaanalysis<-function(gdata,remove_other=T){
   }
   egger_test_p = NA
   if(!is.null(dim(gdata_egger)) && nrow(gdata_egger)>2){
-    egger_test = regtest(rma(yi,vi,weights = 1/vi,data=gdata_egger,control=list(maxiter=10000,stepadj=0.5)))
-    egger_test_p = egger_test$pval
+    try({
+      egger_test = regtest(rma(yi,vi,weights = 1/vi,data=gdata_egger,control=list(maxiter=10000,stepadj=0.5)))
+      egger_test_p = egger_test$pval
+    })
   }
   # Prepare outpus
   significance_e = c(obj_e$pval[1],obj_e$QMp)
@@ -165,10 +181,10 @@ get_tps_betas<-function(out){
 tp_meta_analysis_results = list()
 
 tp_meta_analysis_results[["longterm,muscle"]] = list()
-# for(g in setdiff(names(acute_gene_tables_raw_simpletime),names(tp_meta_analysis_results[["longterm,muscle"]]))){
-#   tp_meta_analysis_results[["longterm,muscle"]][[g]] = perform_timepoint_metaanalyses(longterm_gene_tables_raw[[g]],
-#                                                        time_simp_func=simplify_time_longterm_muscle,tissue="muscle")
-# }
+for(g in setdiff(names(acute_gene_tables_raw_simpletime),names(tp_meta_analysis_results[["longterm,muscle"]]))){
+  tp_meta_analysis_results[["longterm,muscle"]][[g]] = perform_timepoint_metaanalyses(longterm_gene_tables_raw[[g]],
+                                                       time_simp_func=simplify_time_longterm_muscle,tissue="muscle")
+}
 tp_meta_analysis_results[["acute,muscle"]] = t(sapply(acute_gene_tables_raw_simpletime,perform_timepoint_metaanalyses,tissue="muscle"))
 tp_meta_analysis_results[["acute,blood"]] = t(sapply(acute_gene_tables_raw_simpletime,perform_timepoint_metaanalyses,tissue="blood"))
 tp_meta_analysis_results[["longterm,muscle"]] = t(sapply(longterm_gene_tables_raw,perform_timepoint_metaanalyses,
@@ -180,7 +196,7 @@ save(tp_meta_analysis_results,file="tp_meta_analysis_results.RData")
 # Analysis of the results
 pval_matrices = lapply(tp_meta_analysis_results,function(x)t(apply(x,1,get_tps_pvalues)))
 sapply(pval_matrices,colnames)
-par(mfrow=c(1,2))
+par(mfrow=c(2,2))
 sapply(pval_matrices,hist)
 all_ps = c(unlist(pval_matrices))
 all_ps = all_ps[!is.na(all_ps)]
@@ -188,27 +204,60 @@ all_ps_thr = max(all_ps[p.adjust(all_ps,method='fdr')<0.1])
 print(length(all_ps))
 print(all_ps_thr)
 pval_matrices_binary = lapply(pval_matrices,function(x,y)x<=y,y=all_ps_thr)
+
+tp_vecs = sapply(pval_matrices_binary,function(x)sapply(colnames(x),function(x)strsplit(x,split=';')[[1]][1]))
+for(i in 1:length(pval_matrices_binary)){
+  tp_v = tp_vecs[[i]]
+  m = t(apply(pval_matrices_binary[[i]],1,function(x,y)tapply(x,y,any),y=tp_v))
+  if(nrow(m)==1){m=t(m)}
+  pval_matrices_binary[[i]] = m
+}
 pval_selected_genes = lapply(pval_matrices_binary,function(x)rownames(x)[rowSums(x)>0])
-
 control_filter_tests = lapply(tp_meta_analysis_results,function(x)t(apply(x,1,perform_filter_1_on_tps)))
-non_all_false_filter1 = lapply(control_filter_tests,function(x)rownames(x)[rowSums(x)>0])
+for(i in 1:length(control_filter_tests)){
+  if(nrow(control_filter_tests[[i]])){
+    control_filter_tests[[i]] = t(control_filter_tests[[i]])
+  }
+}
 
-selected_genes_acute_muscle = unlist(entrez2symbol[intersect(non_all_false_filter1[[3]],pval_selected_genes[[1]])])
+pass_test_matrices = list()
+for(i in 1:length(pval_matrices_binary)){
+  m1 = pval_matrices_binary[[i]]
+  if(nrow(m1)==1){m1=t(m1)}
+  m2 = control_filter_tests[[i]]
+  if(nrow(m2)==1){m2=t(m2)}
+  if(ncol(m2)>1){m2 = m2[,colnames(m1)]}
+  m3 = m1 & m2
+  if(nrow(m3)==1){m3 = t(m3)}
+  pass_test_matrices[[i]] = m3
+}
+names(pass_test_matrices) = names(pval_matrices_binary)
+pvals_filter1_selected_genes = lapply(pass_test_matrices,function(x)rownames(x)[rowSums(x)>0])
+pvals_filter1_selected_genes_names = lapply(pvals_filter1_selected_genes,function(x,y)unlist(y[x]),y=entrez2symbol)
 known_genes = c("PPARGC1A","COX1","NDUFA","PDK4","VEGFA","KDR","THY1","MYL4",
                 "MYH1","COL1A1","ACTC1","TNNT2","GADD45G","MMP9","NR4A1")
-intersect(selected_genes_acute_muscle,known_genes)
-selected_genes_acute_muscle[grepl("^COL",selected_genes_acute_muscle)]
+sapply(pvals_filter1_selected_genes_names,intersect,y=known_genes)
+pvals_filter1_selected_genes_names[[1]][grepl("^COL",pvals_filter1_selected_genes_names[[1]])]
 
-# gdata = longterm_gene_tables_raw[["65121"]]
-# #gdata = gdata[gdata$tissue=="muscle",]
-# gdata$time = simplify_time_longterm_muscle(gdata$time)
-# out = perform_timepoint_metaanalyses(gdata,tissue="muscle",time_simp_func=simplify_time_longterm_muscle)
-# out = perform_timepoint_metaanalyses(gdata,tissue="blood",time_simp_func=simplify_time_longterm_blood)
-# perform_filter_1_on_tps(out)
-# get_tps_pvalues(out)
-# get_tps_egger_tests(out)
-# get_tps_betas(out)
-# 
+# compare sizes
+sapply(pvals_filter1_selected_genes_names,length)
+sapply(pval_selected_genes,length)
+
+pval_matrices[[1]]["5166",]
+pass_test_matrices[[1]]["5166",]
+control_filter_tests[[1]]["5166",]
+tp_meta_analysis_results[[1]]["5166",]
+
+gdata = acute_gene_tables_raw[["5166"]]
+#gdata = gdata[gdata$tissue=="muscle",]
+gdata$time = simplify_time_longterm_muscle(gdata$time)
+out = perform_timepoint_metaanalyses(gdata,tissue="muscle",time_simp_func=simplify_time_longterm_muscle)
+out = perform_timepoint_metaanalyses(gdata,tissue="blood",time_simp_func=simplify_time_longterm_blood)
+perform_filter_1_on_tps(out)
+get_tps_pvalues(out)
+get_tps_egger_tests(out)
+get_tps_betas(out)
+
 # gdata = acute_gene_tables_raw_simpletime[["10891"]]
 # gdata = acute_gene_tables_raw_simpletime[["10161"]]
 # gdata = gdata[gdata$tissue=="blood",]
