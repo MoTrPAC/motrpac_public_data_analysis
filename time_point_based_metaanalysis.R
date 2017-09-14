@@ -2,6 +2,7 @@ setwd('/Users/David/Desktop/MoTrPAC/PA_database')
 library(metafor)
 library(org.Hs.eg.db)
 source('repos/motrpac/helper_functions.R')
+entrez2symbol = as.list(org.Hs.egSYMBOL)
 
 # Get the datasets and their metadata
 load("PADB_univariate_results_and_preprocessed_data_acute.RData")
@@ -47,6 +48,7 @@ time_point_metaanalysis<-function(gdata,remove_other=T){
   if(remove_other){
     gdata = gdata[gdata$training!="other",]
   }
+  gdata = gdata[gdata$vi>0,]
   gdata_e = gdata[gdata$training!="control",]
   gdata_c = gdata[gdata$training=="control",]
   beta_c = NA
@@ -73,10 +75,25 @@ time_point_metaanalysis<-function(gdata,remove_other=T){
       obj_e = rma.mv(yi,vi,1/vi,data = gdata_e,random= ~1|gse,mods = ~training,
                      control=list(iter.max=10000,rel.tol=1e-7)) 
     }
-    
   }
   else{
-    obj_e = rma.mv(yi,vi,1/vi,data = gdata_e,random= ~1|gse,control=list(iter.max=10000))
+    success = F
+    try({
+      obj_e = rma.mv(yi,vi,1/vi,data = gdata_e,random= ~1|gse,
+                     control=list(iter.max=10000))
+      success = T
+    })
+    if(!success){
+      try({
+        obj_e = rma.mv(yi,vi,1/vi,data = gdata_e,random= ~1|gse,
+                       control=list(iter.max=10000,rel.tol=1e-8)) 
+        success = T
+      })
+    }
+    if(!success){
+      obj_e = rma.mv(yi,vi,1/vi,data = gdata_e,random= ~1|gse,
+                     control=list(iter.max=10000,rel.tol=1e-7)) 
+    }
   }
   betas_e = obj_e$beta[,1]
   b_e_0 = betas_e[1]
@@ -146,9 +163,11 @@ get_tps_betas<-function(out){
 }
 
 tp_meta_analysis_results = list()
-# tp_meta_analysis_results[["acute,muscle"]] = list()
-# for(g in setdiff(names(acute_gene_tables_raw_simpletime),names(tp_meta_analysis_results[["acute,muscle"]]))){
-#   tp_meta_analysis_results[["acute,muscle"]][[g]] = perform_timepoint_metaanalyses(acute_gene_tables_raw_simpletime[[g]],tissue = "muscle")
+
+tp_meta_analysis_results[["longterm,muscle"]] = list()
+# for(g in setdiff(names(acute_gene_tables_raw_simpletime),names(tp_meta_analysis_results[["longterm,muscle"]]))){
+#   tp_meta_analysis_results[["longterm,muscle"]][[g]] = perform_timepoint_metaanalyses(longterm_gene_tables_raw[[g]],
+#                                                        time_simp_func=simplify_time_longterm_muscle,tissue="muscle")
 # }
 tp_meta_analysis_results[["acute,muscle"]] = t(sapply(acute_gene_tables_raw_simpletime,perform_timepoint_metaanalyses,tissue="muscle"))
 tp_meta_analysis_results[["acute,blood"]] = t(sapply(acute_gene_tables_raw_simpletime,perform_timepoint_metaanalyses,tissue="blood"))
@@ -158,7 +177,31 @@ tp_meta_analysis_results[["longterm,blood"]] = t(sapply(longterm_gene_tables_raw
          time_simp_func=simplify_time_longterm_blood,tissue="blood"))
 save(tp_meta_analysis_results,file="tp_meta_analysis_results.RData")
 
-# gdata = longterm_gene_tables_raw[["10891"]]
+# Analysis of the results
+pval_matrices = lapply(tp_meta_analysis_results,function(x)t(apply(x,1,get_tps_pvalues)))
+sapply(pval_matrices,colnames)
+par(mfrow=c(1,2))
+sapply(pval_matrices,hist)
+all_ps = c(unlist(pval_matrices))
+all_ps = all_ps[!is.na(all_ps)]
+all_ps_thr = max(all_ps[p.adjust(all_ps,method='fdr')<0.1])
+print(length(all_ps))
+print(all_ps_thr)
+pval_matrices_binary = lapply(pval_matrices,function(x,y)x<=y,y=all_ps_thr)
+pval_selected_genes = lapply(pval_matrices_binary,function(x)rownames(x)[rowSums(x)>0])
+
+control_filter_tests = lapply(tp_meta_analysis_results,function(x)t(apply(x,1,perform_filter_1_on_tps)))
+non_all_false_filter1 = lapply(control_filter_tests,function(x)rownames(x)[rowSums(x)>0])
+
+selected_genes_acute_muscle = unlist(entrez2symbol[intersect(non_all_false_filter1[[3]],pval_selected_genes[[1]])])
+known_genes = c("PPARGC1A","COX1","NDUFA","PDK4","VEGFA","KDR","THY1","MYL4",
+                "MYH1","COL1A1","ACTC1","TNNT2","GADD45G","MMP9","NR4A1")
+intersect(selected_genes_acute_muscle,known_genes)
+selected_genes_acute_muscle[grepl("^COL",selected_genes_acute_muscle)]
+
+# gdata = longterm_gene_tables_raw[["65121"]]
+# #gdata = gdata[gdata$tissue=="muscle",]
+# gdata$time = simplify_time_longterm_muscle(gdata$time)
 # out = perform_timepoint_metaanalyses(gdata,tissue="muscle",time_simp_func=simplify_time_longterm_muscle)
 # out = perform_timepoint_metaanalyses(gdata,tissue="blood",time_simp_func=simplify_time_longterm_blood)
 # perform_filter_1_on_tps(out)
@@ -166,17 +209,16 @@ save(tp_meta_analysis_results,file="tp_meta_analysis_results.RData")
 # get_tps_egger_tests(out)
 # get_tps_betas(out)
 # 
-
-gdata = acute_gene_tables_raw_simpletime[["10891"]]
-gdata = acute_gene_tables_raw_simpletime[["79679"]]
-gdata = gdata[gdata$tissue=="muscle",]
-out = perform_timepoint_metaanalyses(gdata,tissue="muscle")
-out = perform_timepoint_metaanalyses(gdata,tissue="blood")
-out = perform_timepoint_metaanalyses(gdata,tissue="blood|muscle")
-perform_filter_1_on_tps(out)
-get_tps_pvalues(out)
-get_tps_egger_tests(out)
-get_tps_betas(out)
+# gdata = acute_gene_tables_raw_simpletime[["10891"]]
+# gdata = acute_gene_tables_raw_simpletime[["10161"]]
+# gdata = gdata[gdata$tissue=="blood",]
+# out = perform_timepoint_metaanalyses(gdata,tissue="muscle")
+# out = perform_timepoint_metaanalyses(gdata,tissue="blood")
+# out = perform_timepoint_metaanalyses(gdata,tissue="blood|muscle")
+# perform_filter_1_on_tps(out)
+# get_tps_pvalues(out)
+# get_tps_egger_tests(out)
+# get_tps_betas(out)
 
 
 
