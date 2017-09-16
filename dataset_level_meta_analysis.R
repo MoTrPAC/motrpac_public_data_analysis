@@ -496,6 +496,9 @@ gene_nums = t(t(sapply(metafor_gene_sets[[2]],length)))
 enrich_res = extract_top_go_results(metafor_sets_enrichments)
 get_most_sig_enrichments_by_groups(enrich_res)
 
+
+######## "Advanced" analyses: functions ############
+# Get average effect per time point x training
 get_subset_forest_plot<-function(gdata,tissue="all",training="all",sortby = "time",labelsby=c("gse","time"),...){
   if(!tissue=="all"){
     gdata = gdata[gdata$tissue==tissue,]
@@ -512,10 +515,8 @@ get_subset_forest_plot<-function(gdata,tissue="all",training="all",sortby = "tim
   forest(res,slab=apply(gdata[,labelsby],1,paste,collapse=','),...)
 }
 
-######## "Advanced" analyses: functions ############
-# Get average effect per time point x training
 get_gene_weighted_avg_pattern <-function(gdata){
-  gdata$wt = 1/gdata$vi
+  gdata$wt = 1/(pmax(gdata$vi,1e-3))
   res = by(gdata, paste(gdata$tissue,gdata$training,gdata$time,sep=','), function(x) weighted.mean(x$yi, x$wt),simplify = T)
   v = as.numeric(res);names(v) = names(res)
   return(v)
@@ -550,7 +551,7 @@ print_drem_matrices<-function(x,dir_name,gene_conv = entrez2symbol,min_time_poin
     }
   }
 }
-plot_gene_pattern<-function(x,tosmooth=T,min_time_points=3,
+plot_gene_pattern<-function(x,errs = NULL,tosmooth=T,min_time_points=3,
                             tr2col=c(control="red",endurance="blue",resistance="green",both="purple"),
                             legend.x="topright",legend.cex=0.8,legend.ncol=2,
                             mfrow = c(1,2),main_prefix = "acute",y_lim_add = 0.5,y_lim_min = 1.5,
@@ -561,6 +562,7 @@ plot_gene_pattern<-function(x,tosmooth=T,min_time_points=3,
   if(!is.null(mfrow)){par(mfrow=mfrow)}
   for(tissue in rownames(tb)){
     xx = x[cn[1,]==tissue]
+    if(!is.null(errs)){yy = errs[cn[1,]==tissue]}
     if(length(xx)<min_time_points){next}
     times = as.numeric(cn[3,cn[1,]==tissue])
     trs = cn[2,cn[1,]==tissue]
@@ -574,6 +576,10 @@ plot_gene_pattern<-function(x,tosmooth=T,min_time_points=3,
       if(length(xx1)<min_time_points){next}
       tt1 = c(-1,times[trs==tr])
       lines(xx1,x=tt1,type='l',lwd=2,col=tr2col[tr],pch=20)
+      if(!is.null(errs)){
+        yy1 = c(0,yy[trs==tr])
+        arrows(tt1, xx1-yy1, tt1, xx1+yy1, length=0.05, angle=90, code=3,col=tr2col[tr])
+      }
     }
     legend(x=legend.x,legend = unique(trs),fill=tr2col[unique(trs)],cex=legend.cex,ncol=legend.ncol)  
   }
@@ -585,7 +591,7 @@ perform_gene_clustering<-function(x,fun=pam1,standardize_genes=T,num_pcs=5){
   xx = x
   if(standardize_genes){xx = t(apply(x,1,function(x)(x-mean(x))/(sd(x))))}
   if(num_pcs>1){xx = prcomp(xx)$x[,1:num_pcs]}
-  gs.pam.xx <- clusGap(xx, FUN = fun, K.max = 20, B = 100)
+  gs.pam.xx <- clusGap(xx, FUN = fun, K.max = 10, B = 20)
   num_c = maxSE(gs.pam.xx[[1]][,3],gs.pam.xx[[1]][,4])
   cc = fun(xx,num_c)$cluster
   return(cc)
@@ -593,11 +599,69 @@ perform_gene_clustering<-function(x,fun=pam1,standardize_genes=T,num_pcs=5){
 cluster_homogeneities<-function(x,cl,...){
   hs = c()
   for(cc in unique(cl)){
-    rhos = cor(t(x[cl==cc,]),...)
-    hs[cc] = mean(rhos[lower.tri(rhos)])
+    cc = as.character(cc)
+    if(sum(cl==cc)==1){
+      hs[cc] = 1
+    }
+    else{
+      rhos = cor(t(x[cl==cc,]),...)
+      hs[cc] = mean(rhos[lower.tri(rhos)])
+    }
   }
+  names(hs) = as.character(unique(cl))
   return(hs)
 }
+standardize_rows = function(x){
+  xx = t(apply(x,1,function(x)(x-mean(x))/(sd(x))))
+  return(x)
+}
+options(expressions=10000)
+cluster_genes_by_homogeneity <- function(x,thr=0.5,func=kmeans,...){
+  if(is.null(dim(x))){
+    return (1)
+  }
+  if(nrow(x)<2){
+    return(1)
+  }
+  v = rep(1,nrow(x));names(v) = rownames(x)
+  hs = cluster_homogeneities(x,v)
+  if(hs>=thr){
+    return(v)
+  }
+  k=2
+  while(all(hs<thr) && k < nrow(x)){
+    v = as.numeric(func(x,k)[[1]])
+    names(v) = rownames(x)
+    hs = cluster_homogeneities(x,v)
+    k = k+1
+  }
+  if(k==nrow(x)){
+    v = 1:nrow(x);names(x) = rownames(x)
+    return(v)
+  }
+  for(cl in names(hs)){
+    if(hs[cl]>=thr){next}
+    newx = x[v==cl,]
+    newx_v = as.numeric(cluster_genes_by_homogeneity(newx,thr,func))
+    newx_v = as.numeric(newx_v) + max(as.numeric(v))
+    names(newx_v) = rownames(newx)
+    v[names(newx_v)] = newx_v
+    # print(table(v))
+    # print("###")
+    # print(table(newx_v))
+    # print("###")
+    # print(cluster_homogeneities(newx,newx_v))
+  }
+  v = as.numeric(as.factor(v))
+  names(v) = rownames(x)
+  return(v)
+}
+
+# mm = standardize_rows(m)
+# vv = cluster_genes_by_homogeneity(mm,0.5,pam1)
+# sort(table(vv))
+# cluster_homogeneities(mm,vv)
+
 #########################################################
 library(org.Hs.eg.db)
 entrez2symbol = as.list(org.Hs.egSYMBOL)
