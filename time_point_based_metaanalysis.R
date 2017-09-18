@@ -58,7 +58,6 @@ gd = acute_gene_tables_raw[[1]]
 tb = table(gd$time,gd$tissue)
 gd$time = simplify_time_acute(gd$time)
 tb = table(gd$time,gd$tissue)
-
 gd = longterm_gene_tables_raw[[1]]
 tb = table(gd$time,gd$tissue)
 

@@ -48,8 +48,6 @@ sapply(longterm_datasets_effects,function(x)sapply(x,function(y)sum(is.na(y)|is.
 get_dataset_moderators<-function(metadata){
   arrs = t(sapply(metadata,function(x)c(x$gse,x$tissue,x$training)))
   tr_desc = paste(arrs[,3],sapply(metadata,function(x)x$training_desc),sep=';')
-  arrs[grepl(tr_desc,pattern = 'control',ignore.case = T) | grepl(tr_desc,pattern="untrain",ignore.case = T),3] = "control"
-  arrs[grepl(tr_desc,pattern = 'other;NA',ignore.case = T) | grepl(tr_desc,pattern="untrain",ignore.case = T),3] = "control"
   colnames(arrs) = c("gse","tissue","training")
   return(arrs)
 }
@@ -91,11 +89,13 @@ remove_undesired_datasets<-function(gdata){
   gdata = gdata[!grepl("control",gdata$training),]
   gdata = gdata[!grepl("other",gdata$training),]
   gdata = gdata[!grepl("yoga",gdata$training),]
-  gdata = gdata[!grepl("untr",gdata$training),]
+  gdata = gdata[!grepl("untrained",gdata$training),]
   gdata = gdata[!grepl("fat",gdata$tissue),]
   gdata = gdata[!grepl("adipose",gdata$tissue),]
+  gdata = gdata[!grepl("treatment",gdata$training),]
   return (gdata)
 }
+remove_undesired_datasets(acute_gene_tables[[1]])
 acute_gene_tables_raw = acute_gene_tables
 acute_gene_tables = lapply(acute_gene_tables,remove_undesired_datasets)
 longterm_gene_tables_raw = longterm_gene_tables
