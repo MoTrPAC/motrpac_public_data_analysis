@@ -17,6 +17,8 @@ source('repos/motrpac/helper_functions.R')
 # We exclude samples without time info - happens due to some acute/longterm mixed
 # datasets such as GSE28392. We also exclude samples without subject ids, and samples 
 # whose intervention includes a treatment (very few).
+# Study subgroup represetns different training types or treatments within a study - 
+# i.e., different interventions within a study.
 
 ###############################################
 ###############################################
@@ -340,7 +342,8 @@ for(j in 1:length(cohort_data)){
   }
   cohort_data[[j]][["time2ttest_stats"]] = res1
 }
-save(cohort_data,cohort_metadata,file = OUT_FILE)
+table(sapply(cohort_data,function(x)is.null(x$gene_fold_changes)))
+save(cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE)
 
 ###############################################
 ###############################################
