@@ -36,17 +36,18 @@ simplify_training_type<-function(metadata){
   sample_is_endurance = grepl("endur",raw_training_data,ignore.case = T)
   sample_is_resistance = grepl("resis",raw_training_data,ignore.case = T)| 
     grepl("strength",raw_training_data,ignore.case = T)
-  table(sample_is_endurance,sample_is_resistance)
+  sample_has_treatment = grepl("treatment",raw_training_data,ignore.case = T)
   # The short description of the training program
   sample2training_type = rep("other",nrow(metadata))
   sample2training_type[sample_is_endurance] = "endurance"
   sample2training_type[sample_is_resistance] = "resistance"
   sample2training_type[sample_is_endurance & sample_is_resistance] = "both"
-  sample2training_type[grepl("untrained",dataset_subgroup,ignore.case = T)] = "untrained"
-  sample2training_type[grepl("control",raw_training_data,ignore.case = T)] = "untrained"
+  sample2training_type[grepl("untrained",raw_training_data,ignore.case = T)] = "untrained"
   sample2training_type[grepl("no training",raw_training_data,ignore.case = T)] = "untrained"
+  sample2training_type[grepl("no exercise",raw_training_data,ignore.case = T)] = "untrained"
   sample2training_type[grepl("yoga",raw_training_data,ignore.case = T)] = "yoga"
-  table(sample2training_type)
+  sample2training_type[sample_has_treatment] = paste(sample2training_type[sample_has_treatment],"treatment",sep="_")
+  sample2training_type[raw_training_data==""] = ""
   names(sample2training_type) = metadata[,1]
   return(sample2training_type)
 }
@@ -439,13 +440,14 @@ extract_top_go_results<-function(res,qval=0.1,maxsize=2000){
   res$go_qvals = new_qvals
   return(res[res$go_qvals<=qval,])
 }
-get_most_sig_enrichments_by_groups <- function(res){
+get_most_sig_enrichments_by_groups <- function(res,num=1){
   gs = unique(as.character(res[,1]))
   m = c()
   for(g in gs){
     res0 = res[res[,1]==g,]
     ps = as.numeric(res0$classicFisher)
-    m = rbind(m,res0[ps==min(ps),])
+    thr = sort(ps,decreasing = F)[num]
+    m = rbind(m,res0[ps<=thr,])
   }
   return(m)
 }

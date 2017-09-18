@@ -4,7 +4,19 @@
 setwd('/Users/David/Desktop/MoTrPAC/PA_database')
 library('xlsx');library('GEOquery');library(corrplot)
 source('repos/motrpac/helper_functions.R')
-GEO_destdir = "GEO"
+
+# Comments about the long-term metadata
+# Time series:
+#   0 means pre-treatment
+#   Time is measured in days
+# Training - columns "Training program during experiment type"
+#   The type is generally endurance or resistance
+#   Untrained == controls
+#   There can also be: training with treatment (e.g., LPS), or both endurance and resistance
+#   Column "Study subgroup" contains some additional raw information from the study description
+# We exclude samples without time info - happens due to some acute/longterm mixed
+# datasets such as GSE28392. We also exclude samples without subject ids, and samples 
+# whose intervention includes a treatment (very few).
 
 ###############################################
 ###############################################
@@ -41,7 +53,7 @@ print(dim(metadata))
 sample2training_type = simplify_training_type(metadata)
 table(sample2training_type)
 # Sanity checks
-table(is.na(sample2training_type)|sample2training_type=="")
+table(is.na(sample2training_type)|sample2training_type=="") # ~120 should have "" in their training, see GSE47969
 table(is.na(metadata$GSE)|metadata$GSE=="")
 # Study ids are primarily based on pubmed data
 study_ids = as.character(metadata$pmid)

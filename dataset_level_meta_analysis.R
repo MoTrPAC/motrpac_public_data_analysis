@@ -516,7 +516,7 @@ get_subset_forest_plot<-function(gdata,tissue="all",training="all",sortby = "tim
 }
 
 get_gene_weighted_avg_pattern <-function(gdata){
-  gdata$wt = 1/(pmax(gdata$vi,1e-3))
+  gdata$wt = 1/(sqrt(gdata$vi))
   res = by(gdata, paste(gdata$tissue,gdata$training,gdata$time,sep=','), function(x) weighted.mean(x$yi, x$wt),simplify = T)
   v = as.numeric(res);names(v) = names(res)
   return(v)
@@ -577,7 +577,7 @@ plot_gene_pattern<-function(x,errs = NULL,tosmooth=T,min_time_points=3,
       tt1 = c(-1,times[trs==tr])
       lines(xx1,x=tt1,type='l',lwd=2,col=tr2col[tr],pch=20)
       if(!is.null(errs)){
-        yy1 = c(0,yy[trs==tr])
+        yy1 = c(0.01,yy[trs==tr])
         arrows(tt1, xx1-yy1, tt1, xx1+yy1, length=0.05, angle=90, code=3,col=tr2col[tr])
       }
     }
@@ -745,12 +745,22 @@ get_subset_forest_plot(gdata,"blood")
 plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = F,mfrow=c(2,2))
 plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL,tosmooth = F)
 
+gene = "70" # ACTC1
+gdata = longterm_gene_tables[[gene]] 
+get_subset_forest_plot(gdata,"muscle")
+gdata = acute_gene_tables[[gene]] 
+get_subset_forest_plot(gdata,"muscle",main = "ACTC1, acute, muscle")
+plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = T,mfrow=c(2,2))
+plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL,tosmooth = T)
+
 gdata = longterm_gene_tables_simpletime[[gene]]
 gdata = acute_gene_tables[[gene]]
 gdata = gdata[gdata$tissue=="blood",]
+gdata = gdata[gdata$tissue=="muscle",]
 res1 = func(yi,vi,mods = ~ training + time ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
 res2 = func(yi,vi,mods = ~ training + ordered(time) ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
-res3 = func(yi,vi,data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
+res3 = func(yi,vi,1/sqrt(vi),data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
+res4 = func(yi,vi,1/sqrt(vi),mods = ~ training ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
 summary(res2)[[2]]
 publication_bias_res[[1]][,gene]
 anova(res1,res3)

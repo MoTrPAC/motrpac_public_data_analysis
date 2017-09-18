@@ -23,6 +23,26 @@ longterm_gene_tables = lapply(longterm_gene_tables,correct_vi)
 longterm_gene_tables_raw = lapply(longterm_gene_tables_raw,correct_vi)
 #################################
 
+# ####### Look at datasets with extremely low variances ######
+# variances = list();ps = list()
+# for(nn1 in names(acute_datasets)){
+#   l = acute_datasets[[nn1]]$time2ttest_stats
+#   variances[[nn1]] = sapply(l,function(x)x[,"vi"])
+#   ps[[nn1]] = sapply(l,function(x)x[,"p"])
+# }
+# sapply(variances,dim)
+# variances = variances[sapply(variances,function(x)!is.null(dim(x)))]
+# ps = ps[names(variances)]
+# low_vars_prop = sapply(variances,function(x){x=x*x;table(c(x)<0.001)["TRUE"]/length(x)})
+# low_vars_prop[is.na(low_vars_prop)]=0
+# names(low_vars_prop) = names(variances)
+# cohort2size = sapply(acute_metadata,function(x)length(x$gsms))
+# cohort2size = cohort2size[names(variances)]
+# cohort2num_times = table(acute_gene_tables_raw[[1]]$V1)[names(variances)]
+# cor(low_vars_prop,cohort2size,method='spearman')
+# cor(low_vars_prop,cohort2size/cohort2num_times,method='spearman')
+# plot(low_vars_prop,cohort2size/cohort2num_times)
+# ####################
 simplify_time_in_gdata<-function(gdata,func=simplify_time_acute){
   gdata$time = func(gdata$time)
   gdata$time = ordered(gdata$time)
@@ -231,12 +251,27 @@ save(tp_meta_analysis_results,file="tp_meta_analysis_results.RData")
 pval_matrices = lapply(tp_meta_analysis_results,function(x)t(apply(x,1,get_tps_pvalues)))
 sapply(pval_matrices,colnames)
 par(mfrow=c(2,2))
-sapply(pval_matrices,hist)
+for(nn in names(pval_matrices)){
+  hist(c(pval_matrices[[nn]]),main=nn,xlab="P-value")
+}
 all_ps = c(unlist(pval_matrices))
 all_ps = all_ps[!is.na(all_ps)]
-all_ps_thr = max(all_ps[p.adjust(all_ps,method='fdr')<0.1])
+par(mfrow=c(1,1));hist(all_ps,main="All p-values", xlab="P-value")
+all_ps_thr = max(all_ps[p.adjust(all_ps,method='fdr')<=0.1])
 print(length(all_ps));print(all_ps_thr)
 pval_matrices_binary = lapply(pval_matrices,function(x,y)x<=y,y=all_ps_thr)
+
+# Look at the most significant p
+ppp = 1e-100
+ggg = names(which(apply(pval_matrices[[2]]<=ppp,1,any)))[1]
+gdata = acute_gene_tables_raw_simpletime[[ggg]]
+tp_meta_analysis_results[[2]][ggg,]
+gdata = gdata[gdata$time==4,]
+gdata = gdata[gdata$tissue=="blood",]
+gdata$vi = pmax(gdata$vi,0.01)
+gdata = gdata[gdata$training!="control",]
+get_subset_forest_plot(gdata,"blood",main="PGC1, acute, muscle, 4h")
+rma(yi,vi,1/vi,data=gdata)$pval
 
 tp_vecs = sapply(pval_matrices_binary,function(x)sapply(colnames(x),function(x)strsplit(x,split=';')[[1]][1]))
 for(i in 1:length(pval_matrices_binary)){
@@ -248,7 +283,7 @@ for(i in 1:length(pval_matrices_binary)){
 pval_selected_genes = lapply(pval_matrices_binary,function(x)rownames(x)[rowSums(x)>0])
 sapply(pval_selected_genes,length)
 
-control_filter_tests = lapply(tp_meta_analysis_results,function(x)t(apply(x,1,perform_filter_1_on_tps)))
+control_filter_tests = lapply(tp_meta_analysis_results,function(x)t(apply(x,1,perform_filter_1_on_tps,0.5)))
 for(i in 1:length(control_filter_tests)){
   if(nrow(control_filter_tests[[i]])==1){control_filter_tests[[i]] = t(control_filter_tests[[i]])}
 }
@@ -269,6 +304,14 @@ for(i in 1:length(pval_matrices_binary)){
 names(pass_test_matrices) = names(pval_matrices_binary)
 pvals_filter1_selected_genes = lapply(pass_test_matrices,function(x)rownames(x)[rowSums(x)>0])
 pvals_filter1_selected_genes$`longterm,blood` = pval_selected_genes$`longterm,blood`
+
+# For blood longterm, select the top intercept genes
+longterm_blood_gene_data = 
+  tp_meta_analysis_results[["longterm,blood"]][pvals_filter1_selected_genes$`longterm,blood`,]
+longterm_blood_effects_beta_a = t(apply(longterm_blood_gene_data,1,get_beta_a_vec))
+longterm_blood_effects_beta_a = apply(longterm_blood_effects_beta_a,1,function(x)max(abs(x)))
+pvals_filter1_selected_genes$`longterm,blood` = names(sort(longterm_blood_effects_beta_a,decreasing=T)[1:100])
+
 pvals_filter1_selected_genes_names = lapply(pvals_filter1_selected_genes,function(x,y)unlist(y[x]),y=entrez2symbol)
 pval_selected_genes_names = lapply(pval_selected_genes,function(x,y)unlist(y[x]),y=entrez2symbol)
 known_genes = c("PPARGC1A","COX1","NDUFA","PDK4","VEGFA","KDR","THY1","MYL4",
@@ -281,12 +324,40 @@ pvals_filter1_selected_genes_names[[1]][grepl("^COL",pvals_filter1_selected_gene
 sapply(pvals_filter1_selected_genes_names,length)
 sapply(pval_selected_genes,length)
 
-# For blood longterm, select the top intercept genes
-longterm_blood_gene_data = 
-  tp_meta_analysis_results[["longterm,blood"]][pvals_filter1_selected_genes$`longterm,blood`,]
-longterm_blood_effects_beta_a = t(apply(longterm_blood_gene_data,1,get_beta_a_vec))
-longterm_blood_effects_beta_a = apply(longterm_blood_effects_beta_a,1,function(x)max(abs(x)))
-pvals_filter1_selected_genes$`longterm,blood` = names(sort(longterm_blood_effects_beta_a,decreasing=T)[1:100])
+# Look at publication bias
+egger_test_results = lapply(tp_meta_analysis_results,function(x)apply(x,1,get_tps_egger_tests))
+par(mfrow=c(2,2))
+all_egger_test_ps = unlist(sapply(egger_test_results[1:2],c))
+all_egger_test_ps = all_egger_test_ps[!is.na(all_egger_test_ps)]
+print(length(all_egger_test_ps))
+hist(all_egger_test_ps,main="Egger test, acute studies",xlab="P-value")
+egger_lfdrs = get_lfdrs(all_egger_test_ps)
+
+all_egger_test_ps = unlist(sapply(egger_test_results[3:4],c))
+print(length(all_egger_test_ps))
+all_egger_test_ps = all_egger_test_ps[!is.na(all_egger_test_ps)]
+hist(all_egger_test_ps,main="Egger test, long-term studies",xlab="P-value")
+egger_lfdrs = get_lfdrs(all_egger_test_ps)
+
+par(mfrow=c(2,2))
+for(nn in names(egger_test_results)){
+  if(!is.null(dim(egger_test_results[[nn]]))){
+    selected_genes_test_ps = c(egger_test_results[[nn]][,pvals_filter1_selected_genes[[nn]]])
+  }
+  else{
+    selected_genes_test_ps = c(egger_test_results[[nn]][pvals_filter1_selected_genes[[nn]]])
+  }
+  selected_genes_test_ps = selected_genes_test_ps[!is.na(selected_genes_test_ps)]
+  all_ps = c(egger_test_results[[nn]])
+  all_ps = all_ps[!is.na(all_ps)]
+  print(wilcox.test(qnorm(selected_genes_test_ps),qnorm(all_ps)));abline(0,1)
+  print(table(selected_genes_test_ps<0.01)/length(selected_genes_test_ps))
+  print(table(all_ps<0.01)/length(all_ps))
+  print(length(all_egger_test_ps))
+  # hist(all_egger_test_ps,main="Egger test, acute studies",xlab="P-value")
+  # zz = qnorm(all_egger_test_ps)
+  # lf = locfdr(zz)
+}
 
 # # Manual examinations
 # pval_matrices[[1]]["5166",]
@@ -328,6 +399,10 @@ pvals_filter1_selected_genes$`longterm,blood` = names(sort(longterm_blood_effect
 # is_ctrl = grepl("control",gdata$training)
 # gdata = cbind(is_ctrl,gdata)
 # rma.mv(yi,vi,1/vi,mods = ~is_ctrl,random= ~ 1|gse,data=gdata)
+# gdata = acute_gene_tables_raw_simpletime[["10891"]]
+# gdata = gdata[gdata$time==4,]
+# gdata = gdata[gdata$training!="control",]
+# get_subset_forest_plot(gdata,"muscle",main="PGC1, acute, muscle, 4h")
 
 # Large-scale interpretation
 # Load all functions from dataset_level_meta_analysis.R
@@ -336,21 +411,20 @@ pvals_filter1_selected_genes$`longterm,blood` = names(sort(longterm_blood_effect
 pval_selected_gene_enrichment = run_topgo_enrichment_fisher(pval_selected_genes,
                                 union(names(acute_gene_tables),names(longterm_gene_tables)))
 extract_top_go_results(pval_selected_gene_enrichment)
-get_most_sig_enrichments_by_groups(extract_top_go_results(pval_selected_gene_enrichment,maxsize=100))
+get_most_sig_enrichments_by_groups(extract_top_go_results(pval_selected_gene_enrichment))
 pvals_filter1_selected_gene_enrichments = run_topgo_enrichment_fisher(pvals_filter1_selected_genes,
                                           union(names(acute_gene_tables),names(longterm_gene_tables)))
-get_most_sig_enrichments_by_groups(extract_top_go_results(pvals_filter1_selected_gene_enrichments,maxsize = 500))
+res = extract_top_go_results(pvals_filter1_selected_gene_enrichments)
+table(res$setname)
+get_most_sig_enrichments_by_groups(extract_top_go_results(pvals_filter1_selected_gene_enrichments,0.1,300),1)
 
 # Gene patterns for the analysis
 weighted_avg_matrices=list()
 weighted_avg_matrices[["acute"]] = t(sapply(acute_gene_tables_raw,get_gene_weighted_avg_pattern))
 weighted_avg_matrices[["longterm"]] = t(sapply(longterm_gene_tables_raw,get_gene_weighted_avg_pattern))
 weighted_avg_matrices = lapply(weighted_avg_matrices,reorder_weighted_avg_matrix)
-sapply(weighted_avg_matrices,function(x)table(is.na(x)))
-rownames(weighted_avg_matrices[["longterm"]])[rowSums(is.na(weighted_avg_matrices[["longterm"]]))>0]
-
-acute_selected_genes = union(pvals_filter1_selected_genes[[1]],pvals_filter1_selected_genes[[2]])
-longterm_selected_genes = pvals_filter1_selected_genes[[3]]
+# sapply(weighted_avg_matrices,function(x)table(is.na(x)))
+# rownames(weighted_avg_matrices[["longterm"]])[rowSums(is.na(weighted_avg_matrices[["longterm"]]))>0]
 
 library(corrplot)
 library(gplots)
@@ -366,15 +440,17 @@ run_corrmat_clustering_of_a_gene_set<-function(genes,m,exclude_cols_regex = "fat
 }
 
 # cluster our gene sets by their patterns
+dir.create("timepoint_meta_analysis_gene_clustering")
 pvals_filter1_selected_gene_clusters = list()
 for(i in 1:length(pvals_filter1_selected_genes)){
   nn = names(pvals_filter1_selected_genes)[i]
   m = weighted_avg_matrices$acute
   if(grepl("longterm",nn)){m = weighted_avg_matrices$longterm}
-  pvals_filter1_selected_gene_clusters[[nn]] = run_corrmat_clustering_of_a_gene_set(pvals_filter1_selected_genes[[i]],m)
+  m1 = m[,grepl("muscle",colnames(m))]
+  if(grepl("blood",nn)){m1 = m[,grepl("blood",colnames(m))]}
+  pvals_filter1_selected_gene_clusters[[nn]] = run_corrmat_clustering_of_a_gene_set(pvals_filter1_selected_genes[[i]],m1)
 }
 lapply(pvals_filter1_selected_gene_clusters,function(x)table(x[[1]]))
-
 pvals_filter1_clustered_gene_sets=list()
 for(i in 1:length(pvals_filter1_selected_genes)){
   nn = names(pvals_filter1_selected_genes)[i]
@@ -387,12 +463,14 @@ for(i in 1:length(pvals_filter1_selected_genes)){
 pvals_filter1_clustered_gene_sets_topgo_res = run_topgo_enrichment_fisher(pvals_filter1_clustered_gene_sets,
                   union(names(acute_gene_tables),names(longterm_gene_tables)))
 extract_top_go_results(pvals_filter1_clustered_gene_sets_topgo_res)
-get_most_sig_enrichments_by_groups(extract_top_go_results(pvals_filter1_clustered_gene_sets_topgo_res))
+get_most_sig_enrichments_by_groups(extract_top_go_results(pvals_filter1_clustered_gene_sets_topgo_res),2)
 
-# cluster m
-m = weighted_avg_matrices$acute
-m_1 = m[pvals_filter1_clustered_gene_sets[[2]],]
-plot_gene_pattern(apply(m_1,2,mean),errs = apply(m_1,2,sd),tosmooth = T,mfrow=c(2,1),y_lim_add = 0,y_lim_min = 1)
+# cluster plots
+names(pvals_filter1_clustered_gene_sets)
+m_1 = weighted_avg_matrices$acute[pvals_filter1_clustered_gene_sets[[5]],]
+m_1 = weighted_avg_matrices$longterm[pvals_filter1_clustered_gene_sets[[11]],]
+m_1[is.na(m_1)|is.nan(m_1)]=0
+plot_gene_pattern(apply(m_1,2,mean),errs = apply(m_1,2,sd),tosmooth = T,mfrow=c(2,1),y_lim_add = 0.5,y_lim_min = 1)
 
 
 

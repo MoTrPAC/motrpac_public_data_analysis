@@ -2,9 +2,21 @@
 # creates standardized datasets and metadata and saves
 # it in easy to use objects
 setwd('/Users/David/Desktop/MoTrPAC/PA_database')
-library('xlsx');library('GEOquery')
+library('xlsx');library('GEOquery');library(corrplot)
 source('repos/motrpac/helper_functions.R')
-GEO_destdir = "GEO"
+
+# Comments about the acute metadata
+# Time series:
+#   -1 means pre-treatment
+#   Time is measured in hours
+# Training - columns "Training program during experiment type"
+#   The type is generally endurance or resistance
+#   Untrained == controls
+#   There can also be: training with treatment (e.g., LPS)
+#   Column "Study subgroup" contains some additional raw information from the study description
+# We exclude samples without time info - happens due to some acute/longterm mixed
+# datasets such as GSE28392. We also exclude samples without subject ids, and samples 
+# whose intervention includes a treatment (very few).
 
 ###############################################
 ###############################################
@@ -26,7 +38,7 @@ for(curr_gsm in gsm_duplications){
 metadata = metadata[to_keep,]
 rownames(metadata) = metadata[,1]
 
-# exclude samples without time info - happens due to some acute/longterm mixed
+# Exclude samples without time info - happens due to some acute/longterm mixed
 # datasets such as GSE28392
 sample2time = sample2time = as.numeric(as.character(metadata$Acute..Standardized.Time..hours...1.is.baseline.))
 metadata = metadata[!is.na(sample2time) & sample2time!="",]
@@ -248,16 +260,16 @@ for (dataset in unique(dataset_ids[analysis_samples])){
   gene_fold_changes = NULL; probe_fold_changes = NULL
   if(length(dataset_samples_for_fchange)>0){
     curr_subjects = sample2subject[dataset_samples_for_fchange]
-    probe_fold_changes = get_fold_changes_vs_baseline(data_matrix[,dataset_samples_for_fchange],curr_subjects,curr_times[dataset_samples_for_fchange])
+    # probe_fold_changes = get_fold_changes_vs_baseline(data_matrix[,dataset_samples_for_fchange],curr_subjects,curr_times[dataset_samples_for_fchange])
     gene_fold_changes = get_fold_changes_vs_baseline(genes_data_matrix[,dataset_samples_for_fchange],curr_subjects,curr_times[dataset_samples_for_fchange])
-    corrplot(cor(probe_fold_changes),order="hclust")
+    corrplot(cor(gene_fold_changes),order="hclust")
   }
   
   # add the results to the data containers
   dataset2preprocessed_data[[dataset]] = list()
   dataset2preprocessed_data[[dataset]][["probe_data"]] = data_matrix
   dataset2preprocessed_data[[dataset]][["gene_data"]] = genes_data_matrix
-  dataset2preprocessed_data[[dataset]][["probe_fold_changes"]] = probe_fold_changes
+  # dataset2preprocessed_data[[dataset]][["probe_fold_changes"]] = probe_fold_changes
   dataset2preprocessed_data[[dataset]][["gene_fold_changes"]] = gene_fold_changes
   
   # release memory and save
@@ -278,11 +290,11 @@ for(j in 1:length(dataset2preprocessed_data)){
   full_tissue = c_info[2]
   gpl = c_info[3]
   training = c_info[4]
-  training_desc = NA
-  if(length(c_info)>4){training_desc = c_info[5]}
+  additional_info = NA
+  if(length(c_info)>4){additional_info = c_info[5]}
   tissue = simplify_tissue_info(full_tissue)
   cohort_metadata[[c_id]] = list(gsms=gsms,tissue=tissue,training=training,gse=gse,gpl=gpl,
-                                 full_tissue=full_tissue,training_desc=training_desc)
+                                 full_tissue=full_tissue,additional_info=additional_info)
   curr_times = sample2time[gsms]
   if(length(unique(curr_times))<2){next}
   gene_fchanges = get_fold_changes_vs_baseline(dataset2preprocessed_data[[j]]$gene_data,sample2subject[gsms],curr_times)
