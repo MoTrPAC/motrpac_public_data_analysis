@@ -102,6 +102,16 @@ acute_gene_tables = lapply(acute_gene_tables,remove_undesired_datasets)
 longterm_gene_tables_raw = longterm_gene_tables
 longterm_gene_tables = lapply(longterm_gene_tables,remove_undesired_datasets)
 
+################################
+# Bug fix: Sept 11 2017: the objects have standard errors in the vi
+# we use the square for correction
+correct_vi<-function(gdata){gdata$vi = gdata$vi^2;return(gdata)}
+acute_gene_tables = lapply(acute_gene_tables,correct_vi)
+acute_gene_tables_raw = lapply(acute_gene_tables_raw,correct_vi)
+longterm_gene_tables = lapply(longterm_gene_tables,correct_vi)
+longterm_gene_tables_raw = lapply(longterm_gene_tables_raw,correct_vi)
+#################################
+
 save(acute_gene_tables_raw,acute_gene_tables,longterm_gene_tables_raw,longterm_gene_tables,
      file="PADB_dataset_level_meta_analysis_data.RData")
 

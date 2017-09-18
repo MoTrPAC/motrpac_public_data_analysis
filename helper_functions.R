@@ -64,8 +64,8 @@ get_subject_info_from_gsms<-function(subj,gsms,metadata,colname,sample2subject){
 # 4      4      8
 # 24     6      7
 simplify_time_acute<-function(tt){
-  tt[tt<=2.5] = 1
-  tt[tt>2.5 & tt<=5] = 4
+  tt[tt<2] = 1
+  tt[tt>=2 & tt<=5] = 4
   tt[tt>=20] = 24
   return(tt)
 }
