@@ -72,13 +72,11 @@ tb = table(gd$time,gd$tissue)
 # 7. Return SCORE 1, SCORE 2, and the betas (and their significance) from the exercise meta-analysis
 
 # Input assumption: gdata has a single time point in the $time field
-time_point_metaanalysis<-function(gdata,remove_other=T){
-  if(remove_other){
-    gdata = gdata[gdata$training!="other",]
-  }
-  gdata = gdata[gdata$vi>0,]
-  gdata_e = gdata[gdata$training!="control",]
-  gdata_c = gdata[gdata$training=="control",]
+time_point_metaanalysis<-function(gdata,remove_treatment=T){
+  if(remove_treatment){gdata = gdata[!grepl("treatment",gdata$training),]}
+  gdata$vi = pmax(0.00001,gdata$vi)
+  gdata_e = gdata[!grepl("untrained",gdata$training),]
+  gdata_c = gdata[grepl("untrained",gdata$training),]
   beta_c_est = NA; beta_c_lb = NA; beta_c_ub = NA
   if(nrow(gdata_c)>0){
     obj_c = rma(yi,vi,weights = 1/vi,data=gdata_c)
@@ -99,6 +97,7 @@ time_point_metaanalysis<-function(gdata,remove_other=T){
           }
           return(gdata_e)}
     )
+    gdata_e = gdata[!grepl("untrained",gdata$training),]
     if(!success){
       try({
         obj_e = rma.mv(yi,vi,1/vi,data = gdata_e,random= ~1|gse,mods = ~training,
@@ -106,6 +105,7 @@ time_point_metaanalysis<-function(gdata,remove_other=T){
         success = T
       })
     }
+    gdata_e = gdata[!grepl("untrained",gdata$training),]
     if(!success){
       try({
         obj_e = rma.mv(yi,vi,1/vi,data = gdata_e,random= ~1|gse,mods = ~training,
@@ -125,6 +125,7 @@ time_point_metaanalysis<-function(gdata,remove_other=T){
       }
       return(gdata_e)}
     )
+    gdata_e = gdata[!grepl("untrained",gdata$training),]
     if(!success){
       try({
         obj_e = rma.mv(yi,vi,1/vi,data = gdata_e,random= ~1|gse,
@@ -138,7 +139,7 @@ time_point_metaanalysis<-function(gdata,remove_other=T){
     }
   }
   # The tryCatch may had removed gdata_e, we recreate it here
-  gdata_e = gdata[gdata$training!="control",]
+  gdata_e = gdata[!grepl("untrained",gdata$training),]
   betas_e = obj_e$beta[,1]
   b_e_0 = betas_e[1]
   # SCORE 1
@@ -150,12 +151,26 @@ time_point_metaanalysis<-function(gdata,remove_other=T){
   }
   score1_data = c(beta_c_est,beta_c_lb,beta_c_ub,beta_a)
   names(score1_data)[1:3] = c("beta_c_est","beta_c_lb","beta_c_ub")
-  names(score1_data)[4:length(score1_data)] = paste("beta_a",4:length(score1_data),sep="_")
+  names(score1_data)[4:length(score1_data)] = paste("beta_a",1:(length(score1_data)-3),sep="_")
   score1_ME_p = NA
   if(nrow(gdata_c)>0){
-    is_ctrl = grepl("control",gdata$training)
+    is_ctrl = grepl("untrained",gdata$training)
     gdata = cbind(is_ctrl,gdata)
-    score1_ME_p = rma.mv(yi,vi,1/vi,mods = ~is_ctrl,random= ~ 1|gse,data=gdata)$pval[2]
+    try({
+      score1_ME_p = rma.mv(yi,vi,1/vi,mods = ~is_ctrl,random= ~ 1|gse,data=gdata)$pval[2]
+    })
+    if(is.na(score1_ME_p)){
+      try({
+        score1_ME_p = rma.mv(yi,vi,1/vi,mods = ~is_ctrl,random= ~ 1|gse,data=gdata,
+                             control=list(iter.max=10000,rel.tol=1e-8))$pval[2]
+      })
+    }
+    if(is.na(score1_ME_p)){
+      try({
+        score1_ME_p = rma.mv(yi,vi,1/vi,mods = ~is_ctrl,random= ~ 1|gse,data=gdata,
+                             control=list(iter.max=10000,rel.tol=1e-7))$pval[2]
+      })
+    }
   }
   score1_data = c(score1_data,score1_ME_p)
   names(score1_data)[length(score1_data)] = "score1_ME_p"
@@ -233,8 +248,12 @@ get_beta_a_vec<-function(out){
 }
 
 tp_meta_analysis_results = list()
+# tp_meta_analysis_results[["acute,muscle"]] = list()
+# for(g in setdiff(names(acute_gene_tables_raw_simpletime),names(tp_meta_analysis_results[["acute,muscle"]]))){
+#   tp_meta_analysis_results[["acute,muscle"]][[g]] = perform_timepoint_metaanalyses(acute_gene_tables_raw_simpletime[[g]],tissue="muscle")
+# }
 # tp_meta_analysis_results[["longterm,muscle"]] = list()
-# for(g in setdiff(names(acute_gene_tables_raw_simpletime),names(tp_meta_analysis_results[["longterm,muscle"]]))){
+# for(g in setdiff(names(longterm_gene_tables_raw_simpletime),names(tp_meta_analysis_results[["longterm,muscle"]]))){
 #   tp_meta_analysis_results[["longterm,muscle"]][[g]] = perform_timepoint_metaanalyses(longterm_gene_tables_raw[[g]],
 #                                                        time_simp_func=simplify_time_longterm_muscle,tissue="muscle")
 # }

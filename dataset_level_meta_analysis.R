@@ -96,6 +96,7 @@ remove_undesired_datasets<-function(gdata){
   return (gdata)
 }
 remove_undesired_datasets(acute_gene_tables[[1]])
+remove_undesired_datasets(longterm_gene_tables[[1]])
 acute_gene_tables_raw = acute_gene_tables
 acute_gene_tables = lapply(acute_gene_tables,remove_undesired_datasets)
 longterm_gene_tables_raw = longterm_gene_tables
