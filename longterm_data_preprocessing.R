@@ -111,7 +111,8 @@ for(dataset in unique(dataset_ids)){
   print(curr_table)
 }
 
-sample_metadata = list(age=sample2age,time=sample2time,tissue=sample2tissue,subject=sample2subject,training=sample2training_type,dataset = dataset_ids)
+sample_metadata = list(age=sample2age,time=sample2time,sex=sample2sex,
+                       tissue=sample2tissue,subject=sample2subject,training=sample2training_type,dataset = dataset_ids)
 save(sample_metadata,file="PADB_sample_metadata_longterm.RData")
 
 ###############################################
@@ -294,14 +295,14 @@ for(j in 1:length(dataset2preprocessed_data)){
   if(length(c_info)>4){training_desc = c_info[5]}
   tissue = simplify_tissue_info(full_tissue)
   cohort_metadata[[c_id]] = list(gsms=gsms,tissue=tissue,training=training,gse=gse,gpl=gpl,
-                                 full_tissue=full_tissue,training_desc=training_desc)
+                                 full_tissue=full_tissue,additional_info=training_desc)
   if(length(unique(curr_times))<2){next}
   gene_fchanges = get_fold_changes_vs_baseline(dataset2preprocessed_data[[j]]$gene_data[,gsms],sample2subject[gsms],curr_times)
   dataset2preprocessed_data[[j]][["gene_fchanges"]] = gene_fchanges
 }
 names(dataset2preprocessed_data) = cohort_ids
 cohort_data = dataset2preprocessed_data
-save(cohort_data,cohort_metadata,file = OUT_FILE)
+save(cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE)
 
 rm(CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes,gpl_mappings_to_entrez,gpl_tables)
 gc()

@@ -113,7 +113,8 @@ for(dataset in unique(dataset_ids)){
   #break
 }
 
-sample_metadata = list(age=sample2age,time=sample2time,tissue=sample2tissue,subject=sample2subject,training=sample2training_type,dataset = dataset_ids)
+sample_metadata = list(age=sample2age,sex=sample2sex,
+                       time=sample2time,tissue=sample2tissue,subject=sample2subject,training=sample2training_type,dataset = dataset_ids)
 save(sample_metadata,file="PADB_sample_metadata_acute.RData")
 
 ###############################################
@@ -302,7 +303,7 @@ for(j in 1:length(dataset2preprocessed_data)){
 }
 names(dataset2preprocessed_data) = cohort_ids
 cohort_data = dataset2preprocessed_data
-save(cohort_data,cohort_metadata,file = OUT_FILE)
+save(cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE)
 
 rm(CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes,gpl_mappings_to_entrez,gpl_tables)
 gc()
