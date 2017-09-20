@@ -1,7 +1,7 @@
 ########## !!!!!!!!!! #########
 # TODO:
 # A major change was performed
-# Need to revise this entire code
+# Commented parts need to be revised
 ###############################
 
 # This script interprets the results of the acute and longterm analyses.
@@ -11,6 +11,7 @@
 setwd('/Users/David/Desktop/MoTrPAC/PA_database')
 library('xlsx');library('GEOquery');library(corrplot);library(metafor)
 source('repos/motrpac/helper_functions.R')
+source('repos/motrpac/helper_functions_meta_analaysis.R.R')
 library(org.Hs.eg.db)
 entrez2symbol = as.list(org.Hs.egSYMBOL)
 ######################################################################
