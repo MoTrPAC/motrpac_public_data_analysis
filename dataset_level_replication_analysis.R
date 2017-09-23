@@ -136,7 +136,27 @@ rep_gene_sets_topgo = run_topgo_enrichment_fisher(rep_gene_sets,all_genes)
 table(extract_top_go_results(rep_gene_sets_topgo)[,1])
 get_most_sig_enrichments_by_groups(extract_top_go_results(rep_gene_sets_topgo,0.1),4)
 
+# A similar analysis using a higher lfdr analysis
+rep_lfdr = 0.4
+rep_gene_sets_0.4 = list()
+for(nn in names(screen_res)){
+  currgenes = rownames(screen_res[[nn]])
+  mat = screen_res[[nn]]
+  num_genes = colSums(mat<=rep_lfdr)
+  percents = (2:(1+ncol(mat)))/(1+ncol(mat))
+  ind = which(percents >= 0.5)[1]
+  selected_genes = currgenes[mat[,ind]<=rep_lfdr]
+  if(length(selected_genes)>0){rep_gene_sets_0.4[[nn]] = selected_genes}
+}
+sapply(rep_gene_sets_0.4,length)
+rep_gene_sets_0.4_names = lapply(rep_gene_sets_0.4,function(x,y)sort(unlist(y[x])),y=entrez2symbol)
+sapply(rep_gene_sets_0.4_names,intersect,y=known_genes)
+rep_gene_sets_0.4_topgo = run_topgo_enrichment_fisher(rep_gene_sets_0.4,all_genes)
+table(extract_top_go_results(rep_gene_sets_0.4_topgo)[,1])
+get_most_sig_enrichments_by_groups(extract_top_go_results(rep_gene_sets_0.4_topgo,0.1),4)
+
 save(screen_res,decay_plot_data,rep_gene_sets,rep_gene_sets_topgo,rep_gene_sets_names,
+     rep_gene_sets_0.4,rep_gene_sets_0.4_names,rep_gene_sets_0.4_topgo,
      file="PADB_dataset_level_replicability_analysis_results.RData")
 
 

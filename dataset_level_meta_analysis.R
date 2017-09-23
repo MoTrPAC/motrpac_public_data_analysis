@@ -355,8 +355,6 @@ hist(random_effect_results[["acute,muscle"]][,1])
 hist(random_effect_results[["acute,muscle"]][,4])
 save(random_effect_results,rand_effects_ps,file="PADB_metafor_simple_random_effect_results.RData")
 
-
-
 # # Deprectaed for now: time sampling is highly unbalanced
 # ################################
 # # New analysis: Sept 12 2017: merge time points, used as ordered factors

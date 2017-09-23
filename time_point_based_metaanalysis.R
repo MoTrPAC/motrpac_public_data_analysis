@@ -407,9 +407,11 @@ sapply(gene_selection_all_tests,sum)
 selected_genes_all_tests = sapply(gene_selection_all_tests,function(x)names(which(x)))
 sapply(selected_genes_all_tests,length)
 selected_genes_all_tests = selected_genes_all_tests[sapply(selected_genes_all_tests,length)>0]
+
 save(tp_meta_analysis_results,tp_meta_analysis_results_all_windows,gene_selection_all_tests,
      selected_genes_all_tests,file="tp_meta_analysis_results.RData")
 
+# Wrtie the results into a file
 get_gene_summary_table<-function(l,e2s=entrez2symbol){
   all_genes = unique(unlist(l))
   mat = matrix(F,nrow=length(all_genes),ncol=length(l))
@@ -429,13 +431,11 @@ get_gene_summary_table<-function(l,e2s=entrez2symbol){
   rownames(mat) = NULL
   return(mat)
 }
-
 get_gene_summary_table(selected_genes_all_tests)
-
 write.table(get_gene_summary_table(selected_genes_all_tests),file="metaanalysis_genes.txt",
             sep="\t",col.names = T,row.names = F,quote=F)
 
-# Overlaps
+# Vizualize overlaps
 source("https://bioconductor.org/biocLite.R")
 biocLite("RBGL")
 install.packages("reshape")
@@ -443,7 +443,6 @@ library(RBGL)
 install.packages("Vennerable", repos="http://R-Forge.R-project.org",dependencies = T)
 library('Vennerable')
 vignette("Venn")
-
 V = Venn(selected_genes_all_tests)
 plot(V,doWeights=F)
 
@@ -460,68 +459,16 @@ selected_genes_all_tests_topgo = run_topgo_enrichment_fisher(selected_genes_all_
 table(extract_top_go_results(selected_genes_all_tests_topgo)[,1])
 get_most_sig_enrichments_by_groups(extract_top_go_results(selected_genes_all_tests_topgo,0.1),2)
 
-# Gene patterns for the analysis
-weighted_avg_matrices=list()
-weighted_avg_matrices[["acute"]] = t(sapply(acute_gene_tables_raw,get_gene_weighted_avg_pattern))
-weighted_avg_matrices[["longterm"]] = t(sapply(longterm_gene_tables_raw,get_gene_weighted_avg_pattern))
-weighted_avg_matrices = lapply(weighted_avg_matrices,reorder_weighted_avg_matrix)
+save(tp_meta_analysis_results,tp_meta_analysis_results_all_windows,gene_selection_all_tests,
+     selected_genes_all_tests_topgo,selected_genes_all_tests_names,known_genes,
+     selected_genes_all_tests,file="tp_meta_analysis_results.RData")
 
-library(corrplot)
-library(gplots)
-run_corrmat_clustering_of_a_gene_set<-function(genes,m,exclude_cols_regex = "fat|treatment|yoga",
-                                               min_homogn=0.5,cor_method="spearman",min_clust_size=5){
-  m = m[genes,]
-  m = m[,!grepl(exclude_cols_regex,colnames(m))]
-  mc = cor(t(m),method = "spearman")
-  m_clust = cluster_genes_by_homogeneity(mc,min_homogn,kmeans)
-  selected_clusters = names(which(table(m_clust)>=min_clust_size))
-  m_clust = m_clust[is.element(m_clust,set=selected_clusters)]
-  return(list(clustering=m_clust,homogeneities=cluster_homogeneities(mc,m_clust),mc=mc))
-}
 
-# cluster our gene sets by their patterns
-dir.create("timepoint_meta_analysis_gene_clustering")
-selected_gene_clustering = list()
-for(i in 1:length(gene_selection_all_tests)){
-  nn = names(gene_selection_all_tests)[i]
-  m = weighted_avg_matrices$acute
-  if(grepl("longterm",nn)){m = weighted_avg_matrices$longterm}
-  m1 = m[,grepl("muscle",colnames(m))]
-  if(grepl("blood",nn)){m1 = m[,grepl("blood",colnames(m))]}
-  m1[is.na(m1)] = 0
-  selected_gene_clustering[[nn]] = run_corrmat_clustering_of_a_gene_set(gene_selection_all_tests[[i]],m1)
-}
-lapply(selected_gene_clustering,function(x)table(x[[1]]))
-selected_gene_clusters=list()
-for(i in 1:length(gene_selection_all_tests)){
-  nn = names(gene_selection_all_tests)[i]
-  m_clust = selected_gene_clustering[[nn]][[1]]
-  for(j in unique(m_clust)){
-    selected_gene_clusters[[paste(nn,j,sep="_")]] = names(which(m_clust==j))
-  }
-}
-sapply(selected_gene_clusters,length)
-selected_gene_clusters_names = lapply(selected_gene_clusters,function(x,y)unlist(y[x]),y=entrez2symbol)
-sapply(selected_gene_clusters_names,intersect,y=known_genes)
-
-# cluster plots
-names(selected_gene_clusters)
-par(mfrow=c(3,2))
-for(i in c(3,1,2)){
-  m_1 = weighted_avg_matrices$acute[selected_gene_clusters[[i]],]
-  m_1[is.na(m_1)|is.nan(m_1)]=0
-  m_1 = m_1[,!grepl("treatment",colnames(m_1))]
-  plot_gene_pattern(apply(m_1,2,mean),errs = apply(m_1,2,sd),tosmooth = T,mfrow=NULL,y_lim_add = 0.5,y_lim_min = 1)
-}
-
-m_1 = weighted_avg_matrices$longterm[selected_gene_clusters[[6]],]
-selected_gene_clusters_topgo_res = run_topgo_enrichment_fisher(selected_gene_clusters,
-                  union(names(acute_gene_tables),names(longterm_gene_tables)))
-extract_top_go_results(selected_gene_clusters_topgo_res)
-get_most_sig_enrichments_by_groups(extract_top_go_results(selected_gene_clusters_topgo_res),10)
-table(extract_top_go_results(selected_gene_clusters_topgo_res)[,1])
-
+#######################################################
+#######################################################
 # Look at publication bias
+#######################################################
+#######################################################
 egger_test_results = lapply(tp_meta_analysis_results,function(x)apply(x,1,get_tps_egger_tests))
 par(mfrow=c(2,2))
 all_egger_test_ps = unlist(sapply(egger_test_results[1:2],c))
@@ -553,6 +500,10 @@ for(nn in names(egger_test_results)){
   print(table(all_ps<0.01)/length(all_ps))
   print(length(all_egger_test_ps))
 }
+
+save(tp_meta_analysis_results,tp_meta_analysis_results_all_windows,gene_selection_all_tests,
+     selected_genes_all_tests_topgo,selected_genes_all_tests_names,known_genes,egger_test_results,
+     selected_genes_all_tests,file="tp_meta_analysis_results.RData")
 
 # # Manual examinations
 # pval_matrices[[1]]["5166",]
