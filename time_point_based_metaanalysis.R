@@ -407,6 +407,46 @@ sapply(gene_selection_all_tests,sum)
 selected_genes_all_tests = sapply(gene_selection_all_tests,function(x)names(which(x)))
 sapply(selected_genes_all_tests,length)
 selected_genes_all_tests = selected_genes_all_tests[sapply(selected_genes_all_tests,length)>0]
+save(tp_meta_analysis_results,tp_meta_analysis_results_all_windows,gene_selection_all_tests,
+     selected_genes_all_tests,file="tp_meta_analysis_results.RData")
+
+get_gene_summary_table<-function(l,e2s=entrez2symbol){
+  all_genes = unique(unlist(l))
+  mat = matrix(F,nrow=length(all_genes),ncol=length(l))
+  colnames(mat) = names(l)
+  rownames(mat) = all_genes
+  for(nn in names(l)){
+    mat[l[[nn]],nn] = T
+  }
+  sum_col = apply(mat,1,function(x,y)paste(y[x],collapse=" AND "),y=colnames(mat))
+  table(sum_col)
+  mat = cbind(sum_col,mat)
+  colnames(mat)[1] = "DiscoveredIn"
+  mat = cbind(e2s[all_genes],mat)
+  colnames(mat)[1] = "Symbol"
+  mat = cbind(rownames(mat),mat)
+  colnames(mat)[1] = "Entrez"
+  rownames(mat) = NULL
+  return(mat)
+}
+
+get_gene_summary_table(selected_genes_all_tests)
+
+write.table(get_gene_summary_table(selected_genes_all_tests),file="metaanalysis_genes.txt",
+            sep="\t",col.names = T,row.names = F,quote=F)
+
+# Overlaps
+source("https://bioconductor.org/biocLite.R")
+biocLite("RBGL")
+install.packages("reshape")
+library(RBGL)
+install.packages("Vennerable", repos="http://R-Forge.R-project.org",dependencies = T)
+library('Vennerable')
+vignette("Venn")
+
+V = Venn(selected_genes_all_tests)
+plot(V,doWeights=F)
+
 
 selected_genes_all_tests_names = lapply(selected_genes_all_tests,function(x,y)unlist(y[x]),y=entrez2symbol)
 known_genes = c("PPARGC1A","COX1","NDUFA","PDK4","VEGFA","KDR","THY1","MYL4",
@@ -417,8 +457,8 @@ selected_genes_all_tests_names[[3]][grepl("^COL",selected_genes_all_tests_names[
 
 selected_genes_all_tests_topgo = run_topgo_enrichment_fisher(selected_genes_all_tests,
                                 union(names(acute_gene_tables),names(longterm_gene_tables)))
-extract_top_go_results(selected_genes_all_tests_topgo)
-get_most_sig_enrichments_by_groups(extract_top_go_results(selected_genes_all_tests_topgo,0.1),5)
+table(extract_top_go_results(selected_genes_all_tests_topgo)[,1])
+get_most_sig_enrichments_by_groups(extract_top_go_results(selected_genes_all_tests_topgo,0.1),2)
 
 # Gene patterns for the analysis
 weighted_avg_matrices=list()
@@ -461,20 +501,25 @@ for(i in 1:length(gene_selection_all_tests)){
   }
 }
 sapply(selected_gene_clusters,length)
+selected_gene_clusters_names = lapply(selected_gene_clusters,function(x,y)unlist(y[x]),y=entrez2symbol)
+sapply(selected_gene_clusters_names,intersect,y=known_genes)
 
 # cluster plots
-par(mfrow=c(3,2))
 names(selected_gene_clusters)
-m_1 = weighted_avg_matrices$acute[selected_gene_clusters[[5]],]
-m_1 = weighted_avg_matrices$longterm[selected_gene_clusters[[6]],]
-m_1[is.na(m_1)|is.nan(m_1)]=0
-plot_gene_pattern(apply(m_1,2,mean),errs = apply(m_1,2,sd),tosmooth = T,mfrow=NULL,y_lim_add = 0.5,y_lim_min = 0.5)
+par(mfrow=c(3,2))
+for(i in c(3,1,2)){
+  m_1 = weighted_avg_matrices$acute[selected_gene_clusters[[i]],]
+  m_1[is.na(m_1)|is.nan(m_1)]=0
+  m_1 = m_1[,!grepl("treatment",colnames(m_1))]
+  plot_gene_pattern(apply(m_1,2,mean),errs = apply(m_1,2,sd),tosmooth = T,mfrow=NULL,y_lim_add = 0.5,y_lim_min = 1)
+}
 
+m_1 = weighted_avg_matrices$longterm[selected_gene_clusters[[6]],]
 selected_gene_clusters_topgo_res = run_topgo_enrichment_fisher(selected_gene_clusters,
                   union(names(acute_gene_tables),names(longterm_gene_tables)))
 extract_top_go_results(selected_gene_clusters_topgo_res)
-get_most_sig_enrichments_by_groups(extract_top_go_results(selected_gene_clusters_topgo_res),2)
-
+get_most_sig_enrichments_by_groups(extract_top_go_results(selected_gene_clusters_topgo_res),10)
+table(extract_top_go_results(selected_gene_clusters_topgo_res)[,1])
 
 # Look at publication bias
 egger_test_results = lapply(tp_meta_analysis_results,function(x)apply(x,1,get_tps_egger_tests))

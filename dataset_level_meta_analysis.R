@@ -314,6 +314,7 @@ sapply(rand_effects_ps,function(x)x["1284"])
 sapply(rand_effects_ps,function(x)x["4318"])
 save(random_effect_results,rand_effects_ps,file="PADB_metafor_simple_random_effect_results.RData")
 
+# TODO: debug
 # add control-based analysis
 random_effect_results[["acute,blood,ctrl"]] = t(sapply(acute_gene_tables_raw,
     function(x)perform_simple_control_test(x[x$tissue=="blood",])))
@@ -324,6 +325,37 @@ random_effect_results[["longterm,blood,ctrl"]] = t(sapply(longterm_gene_tables_r
 random_effect_results[["longterm,muscle,ctrl"]] = t(sapply(longterm_gene_tables_raw,
     function(x)perform_simple_control_test(x[x$tissue=="muscle",])))
 save(random_effect_results,rand_effects_ps,file="PADB_metafor_simple_random_effect_results.RData")
+
+# Add acute analysis: include binary time and training
+binaryze_acute_time<-function(gdata){
+  tt = gdata$time
+  tt[gdata$time<10] = "early"
+  tt[gdata$time>=10] = "late"
+  gdata$time = tt
+  return(gdata)
+}
+acute_gene_tables_binary_time = lapply(acute_gene_tables,binaryze_acute_time)
+random_effect_results[["acute,blood,ME"]] = t(sapply(acute_gene_tables_binary_time,
+  function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="blood",],use_mods=T)))
+random_effect_results[["acute,muscle"]] = lapply(acute_gene_tables_binary_time,
+  function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="muscle",],use_mods=T))
+
+transform_list_into_matrix<-function(l){
+  m = c()
+  for(nn in names(l)){
+    if(is.null(l[[nn]])){next}
+    m = rbind(m,l[[nn]])
+    rownames(m)[nrow(m)] = nn
+    if(is.null(colnames(m))){colnames(m) = names(l[[nn]])}
+  }
+    return(m)
+}
+random_effect_results[["acute,muscle"]] = transform_list_into_matrix(random_effect_results[["acute,muscle"]])
+hist(random_effect_results[["acute,muscle"]][,1])
+hist(random_effect_results[["acute,muscle"]][,4])
+save(random_effect_results,rand_effects_ps,file="PADB_metafor_simple_random_effect_results.RData")
+
+
 
 # # Deprectaed for now: time sampling is highly unbalanced
 # ################################
@@ -506,102 +538,102 @@ save(random_effect_results,rand_effects_ps,file="PADB_metafor_simple_random_effe
 # sapply(metafor_gene_sets_names,intersect,y=known_genes)
 # sapply(pb_genes,intersect,y=known_genes)
 
-gene = "634" # TNNT2 - expected but has poor signal
-entrez2symbol[gene]
-gdata = acute_gene_tables[[gene]] 
-get_subset_forest_plot(gdata,"muscle")
-get_subset_forest_plot(gdata,"blood")
-plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = F,mfrow=c(2,2))
-plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL)
-gene_ps = sapply(acute_datasets_effects,function(x)sapply(x,function(y)y[gene,"p"]))
-gene_ps[["GE_A_8"]]
-
-gdata = longterm_gene_tables_simpletime[[gene]]
-#gdata = acute_gene_tables[[gene]]
-gdata = gdata[gdata$tissue=="blood",]
-res1 = func(yi,vi,mods = ~ training + time ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
-res2 = func(yi,vi,data = gdata, random = ~ 1|gse, control=list(maxiter=10000))
-summary(res2)[[2]]
-publication_bias_res[[1]][,gene]
-anova(res1,res3)
-summary(lm(yi~time+training+factor(gse),data=gdata))
-
-gene = "10891"
-gdata = acute_gene_tables[[gene]] # PGC1 in acute response
-get_subset_forest_plot(gdata,"muscle",main="PGC1, acute, muscle")
-get_subset_forest_plot(gdata,"blood",main="PGC1,acute,blood")
-acute_ps[gene,]
-acute_gene_tables[[gene]]
-acute_gene_tables_raw[[gene]]
-plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = T,mfrow=c(2,2))
-plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL)
-
-gene = "1282"
-entrez2symbol[gene]
-gdata = acute_gene_tables[[gene]] # COL4A1 in acute response
-get_subset_forest_plot(gdata,"muscle",main="COL4A1, acute, muscle")
-gdata = longterm_gene_tables[[gene]] # COL4A1 in longterm response
-get_subset_forest_plot(gdata,"muscle",main="COL4A1, longterm, muscle")
-acute_ps[gene,]
-longterm_ps[gene,]
-plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = T,mfrow=c(2,2))
-plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL)
-
-gene = "4318" # MMP9
-entrez2symbol[gene]
-gdata = acute_gene_tables[[gene]]
-get_gene_analysis_pvals_with_gse_correction(gdata[gdata$tissue=="blood",])
-get_subset_forest_plot(gdata,"blood",main="MMP9, acute, blood")
-acute_ps[gene,]
-longterm_ps[gene,]
-gdata$time = ordered(gdata$time)
-get_gene_analysis_pvals_with_gse_correction(gdata[gdata$tissue=="blood",])
-plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = T,mfrow=c(2,2))
-plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL)
-
-gene = "7139" # TNNT2 - expected but has poor signal
-entrez2symbol[gene]
-gdata = acute_gene_tables[[gene]] 
-get_subset_forest_plot(gdata,"muscle")
-get_subset_forest_plot(gdata,"blood")
-gdata = longterm_gene_tables[[gene]] 
-get_subset_forest_plot(gdata,"muscle")
-get_subset_forest_plot(gdata,"blood")
-acute_ps[gene,]
-longterm_ps[gene,]
-plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = T,mfrow=c(2,2))
-plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL)
-
-gene = "7070" # THY1
-gdata = longterm_gene_tables[[gene]] 
-get_subset_forest_plot(gdata,"muscle")
-get_subset_forest_plot(gdata,"blood")
-plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = F,mfrow=c(2,2))
-plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL,tosmooth = F)
-
-gene = "70" # ACTC1
-gdata = longterm_gene_tables[[gene]] 
-get_subset_forest_plot(gdata,"muscle")
-gdata = acute_gene_tables[[gene]] 
-get_subset_forest_plot(gdata,"muscle",main = "ACTC1, acute, muscle")
-plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = T,mfrow=c(2,2))
-plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL,tosmooth = T)
-
-gdata = longterm_gene_tables_simpletime[[gene]]
-gdata = acute_gene_tables[[gene]]
-gdata = gdata[gdata$tissue=="blood",]
-gdata = gdata[gdata$tissue=="muscle",]
-res1 = func(yi,vi,mods = ~ training + time ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
-res2 = func(yi,vi,mods = ~ training + ordered(time) ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
-res3 = func(yi,vi,1/sqrt(vi),data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
-res4 = func(yi,vi,1/sqrt(vi),mods = ~ training ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
-summary(res2)[[2]]
-publication_bias_res[[1]][,gene]
-anova(res1,res3)
-summary(lm(yi~time+training+factor(gse),data=gdata))
-
-table(gdata$training,gdata$time)
-table(gdata$training,gdata$gse)
+# gene = "634" # TNNT2 - expected but has poor signal
+# entrez2symbol[gene]
+# gdata = acute_gene_tables[[gene]] 
+# get_subset_forest_plot(gdata,"muscle")
+# get_subset_forest_plot(gdata,"blood")
+# plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = F,mfrow=c(2,2))
+# plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL)
+# gene_ps = sapply(acute_datasets_effects,function(x)sapply(x,function(y)y[gene,"p"]))
+# gene_ps[["GE_A_8"]]
+# 
+# gdata = longterm_gene_tables_simpletime[[gene]]
+# #gdata = acute_gene_tables[[gene]]
+# gdata = gdata[gdata$tissue=="blood",]
+# res1 = func(yi,vi,mods = ~ training + time ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
+# res2 = func(yi,vi,data = gdata, random = ~ 1|gse, control=list(maxiter=10000))
+# summary(res2)[[2]]
+# publication_bias_res[[1]][,gene]
+# anova(res1,res3)
+# summary(lm(yi~time+training+factor(gse),data=gdata))
+# 
+# gene = "10891"
+# gdata = acute_gene_tables[[gene]] # PGC1 in acute response
+# get_subset_forest_plot(gdata,"muscle",main="PGC1, acute, muscle")
+# get_subset_forest_plot(gdata,"blood",main="PGC1,acute,blood")
+# acute_ps[gene,]
+# acute_gene_tables[[gene]]
+# acute_gene_tables_raw[[gene]]
+# plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = T,mfrow=c(2,2))
+# plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL)
+# 
+# gene = "1282"
+# entrez2symbol[gene]
+# gdata = acute_gene_tables[[gene]] # COL4A1 in acute response
+# get_subset_forest_plot(gdata,"muscle",main="COL4A1, acute, muscle")
+# gdata = longterm_gene_tables[[gene]] # COL4A1 in longterm response
+# get_subset_forest_plot(gdata,"muscle",main="COL4A1, longterm, muscle")
+# acute_ps[gene,]
+# longterm_ps[gene,]
+# plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = T,mfrow=c(2,2))
+# plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL)
+# 
+# gene = "4318" # MMP9
+# entrez2symbol[gene]
+# gdata = acute_gene_tables[[gene]]
+# get_gene_analysis_pvals_with_gse_correction(gdata[gdata$tissue=="blood",])
+# get_subset_forest_plot(gdata,"blood",main="MMP9, acute, blood")
+# acute_ps[gene,]
+# longterm_ps[gene,]
+# gdata$time = ordered(gdata$time)
+# get_gene_analysis_pvals_with_gse_correction(gdata[gdata$tissue=="blood",])
+# plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = T,mfrow=c(2,2))
+# plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL)
+# 
+# gene = "7139" # TNNT2 - expected but has poor signal
+# entrez2symbol[gene]
+# gdata = acute_gene_tables[[gene]] 
+# get_subset_forest_plot(gdata,"muscle")
+# get_subset_forest_plot(gdata,"blood")
+# gdata = longterm_gene_tables[[gene]] 
+# get_subset_forest_plot(gdata,"muscle")
+# get_subset_forest_plot(gdata,"blood")
+# acute_ps[gene,]
+# longterm_ps[gene,]
+# plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = T,mfrow=c(2,2))
+# plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL)
+# 
+# gene = "7070" # THY1
+# gdata = longterm_gene_tables[[gene]] 
+# get_subset_forest_plot(gdata,"muscle")
+# get_subset_forest_plot(gdata,"blood")
+# plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = F,mfrow=c(2,2))
+# plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL,tosmooth = F)
+# 
+# gene = "70" # ACTC1
+# gdata = longterm_gene_tables[[gene]] 
+# get_subset_forest_plot(gdata,"muscle")
+# gdata = acute_gene_tables[[gene]] 
+# get_subset_forest_plot(gdata,"muscle",main = "ACTC1, acute, muscle")
+# plot_gene_pattern(weighted_avg_matrices$acute[gene,],tosmooth = T,mfrow=c(2,2))
+# plot_gene_pattern(weighted_avg_matrices$longterm[gene,],main_prefix = "long-term",mfrow=NULL,tosmooth = T)
+# 
+# gdata = longterm_gene_tables_simpletime[[gene]]
+# gdata = acute_gene_tables[[gene]]
+# gdata = gdata[gdata$tissue=="blood",]
+# gdata = gdata[gdata$tissue=="muscle",]
+# res1 = func(yi,vi,mods = ~ training + time ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
+# res2 = func(yi,vi,mods = ~ training + ordered(time) ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
+# res3 = func(yi,vi,1/sqrt(vi),data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
+# res4 = func(yi,vi,1/sqrt(vi),mods = ~ training ,data=gdata, random = ~ 1|gse, control=list(maxiter=10000))
+# summary(res2)[[2]]
+# publication_bias_res[[1]][,gene]
+# anova(res1,res3)
+# summary(lm(yi~time+training+factor(gse),data=gdata))
+# 
+# table(gdata$training,gdata$time)
+# table(gdata$training,gdata$gse)
 
 # # simulations, metafor
 # ns = 10
