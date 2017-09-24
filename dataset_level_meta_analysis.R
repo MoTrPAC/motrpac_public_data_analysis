@@ -281,11 +281,13 @@ get_lfdrs<-function(pp,...){
 ########################################################################
 ########################################################################
 ########################################################################
+load("PADB_dataset_level_meta_analysis_data.RData")
+acute_gene_tables[["10891"]]
 
 # Simple random effect analysis for finding genes with an overall avg effect
 random_effect_results = list()
-random_effect_results[["acute,blood"]] = t(sapply(acute_gene_tables,
-                function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="blood",],use_mods=F)))
+random_effect_results[["acute,blood"]] = lapply(acute_gene_tables,
+                function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="blood",],use_mods=F))
 random_effect_results[["acute,muscle"]] = lapply(acute_gene_tables,
                 function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="muscle",],use_mods=F))
 random_effect_results[["longterm,blood"]] = lapply(longterm_gene_tables,
@@ -337,10 +339,14 @@ binaryze_acute_time<-function(gdata){
 acute_gene_tables_binary_time = lapply(acute_gene_tables,binaryze_acute_time)
 random_effect_results[["acute,blood,ME"]] = t(sapply(acute_gene_tables_binary_time,
   function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="blood",],use_mods=T)))
-random_effect_results[["acute,muscle"]] = lapply(acute_gene_tables_binary_time,
+random_effect_results[["acute,muscle,ME"]] = lapply(acute_gene_tables_binary_time,
   function(x)get_gene_analysis_pvals_with_gse_correction(x[x$tissue=="muscle",],use_mods=T))
 
 transform_list_into_matrix<-function(l){
+  if(class(l) == "matrix"){
+    if(nrow(l)==1){return(t(l))}
+    return(l)
+  }
   m = c()
   for(nn in names(l)){
     if(is.null(l[[nn]])){next}
@@ -350,9 +356,28 @@ transform_list_into_matrix<-function(l){
   }
     return(m)
 }
-random_effect_results[["acute,muscle"]] = transform_list_into_matrix(random_effect_results[["acute,muscle"]])
-hist(random_effect_results[["acute,muscle"]][,1])
-hist(random_effect_results[["acute,muscle"]][,4])
+random_effect_results = lapply(random_effect_results,transform_list_into_matrix)
+sapply(random_effect_results,dim)
+
+mixed_effects_is_gene_selected_by_pval_and_beta<-function(out,fdr_thr=0.001,effect_thr=0.5,perform_ctrl_test=T,control_effect_thr=0.25){
+  if(is.null(names(out))){return(F)}
+  pvals = out[names(out)=="p" | grepl("p_intrcpt|p_AllMods",names(out))]
+  pval_test = pvals<=fdr_thr
+  if(all(!pval_test)){return(F)}
+  betas = out[grepl("stat_|beta",names(out))]
+  effects_test = abs(betas)>=effect_thr
+  if(all(!effects_test)){return(F)}
+  return(T)
+}
+mixed_effects_pvals<-function(out,fdr_thr=0.001,effect_thr=0.5,perform_ctrl_test=T,control_effect_thr=0.25){
+  if(is.null(names(out))){return(NA)}
+  pvals = out[names(out)=="p" | grepl("p_intrcpt|p_AllMods",names(out))]
+  return(pvals)
+}
+all_pvals = unlist(sapply(random_effect_results[-c(1:2)],function(x)apply(x,1,mixed_effects_pvals)))
+hist(all_pvals)
+gene_selection_objs = lapply(random_effect_results[-c(1:2)],function(x)apply(x,1,mixed_effects_is_gene_selected_by_pval_and_beta))
+
 save(random_effect_results,rand_effects_ps,file="PADB_metafor_simple_random_effect_results.RData")
 
 # # Deprectaed for now: time sampling is highly unbalanced

@@ -337,7 +337,7 @@ sapply(tp_meta_analysis_results_all_windows,dim)
 save(tp_meta_analysis_results,tp_meta_analysis_results_all_windows,file="tp_meta_analysis_results.RData")
 
 get_tps_from_names<-function(x){unique(sapply(x,function(x)strsplit(x,split=';')[[1]][1]))}
-tp_is_gene_selected<-function(out,fdr_thr=0.001,effect_thr=0.5,perform_ctrl_test=T,control_effect_thr=0.25){
+tp_is_gene_selected<-function(out,fdr_thr=0.001,effect_thr=0.5,perform_ctrl_test=T,control_effect_thr=0.5){
   pvals = get_tps_pvalues(out)
   pval_test = pvals<=fdr_thr
   if(all(!pval_test)){return(F)}
@@ -435,17 +435,9 @@ get_gene_summary_table(selected_genes_all_tests)
 write.table(get_gene_summary_table(selected_genes_all_tests),file="metaanalysis_genes.txt",
             sep="\t",col.names = T,row.names = F,quote=F)
 
-# Vizualize overlaps
-source("https://bioconductor.org/biocLite.R")
-biocLite("RBGL")
-install.packages("reshape")
-library(RBGL)
-install.packages("Vennerable", repos="http://R-Forge.R-project.org",dependencies = T)
 library('Vennerable')
-vignette("Venn")
 V = Venn(selected_genes_all_tests)
 plot(V,doWeights=F)
-
 
 selected_genes_all_tests_names = lapply(selected_genes_all_tests,function(x,y)unlist(y[x]),y=entrez2symbol)
 known_genes = c("PPARGC1A","COX1","NDUFA","PDK4","VEGFA","KDR","THY1","MYL4",

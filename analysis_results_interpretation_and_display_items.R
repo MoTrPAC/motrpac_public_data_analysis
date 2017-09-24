@@ -1,20 +1,21 @@
-########## !!!!!!!!!! #########
-# TODO:
-# A major change was performed
-# Commented parts need to be revised
-###############################
 
 # This script interprets the results of the acute and longterm analyses.
 # The summarized analyses here are the mixed effects, replicability, and dataset level analyses.
 # The script is structured by generating one display item or analysis at a time from scratch.
 
 setwd('/Users/David/Desktop/MoTrPAC/PA_database')
-library(corrplot);library(metafor);library(gplots)
+library(corrplot);library(metafor);library(gplots);library(Vennerable)
 source('repos/motrpac/helper_functions.R')
-source('repos/motrpac/helper_functions_meta_analaysis.R.R')
+source('repos/motrpac/helper_functions_meta_analaysis.R')
 library(org.Hs.eg.db)
 entrez2symbol = as.list(org.Hs.egSYMBOL)
 
+# # Vizualize overlaps
+# source("https://bioconductor.org/biocLite.R")
+# biocLite("RBGL")
+# install.packages("reshape")
+# library(RBGL)
+# install.packages("Vennerable", repos="http://R-Forge.R-project.org",dependencies = T)
 
 ######################################################################
 # functions
@@ -68,33 +69,45 @@ save(weighted_avg_matrices,file="effect_weighted_avg_matrices_by_training_and_ti
 load("effect_weighted_avg_matrices_by_training_and_tissues.RData")
 
 # Load all three analysis results
-
-# Load the data and create the average gene pattern matrices
-
 # Meta-analysis: specific time points
 load("tp_meta_analysis_results.RData")
-tp_meta_analysis_gene_sets = gene_selection_all_tests
-# Meta-analysis: all data with binary moderators or simple random effects models
-load("PADB_metafor_simple_random_effect_results.RData")
+tp_meta_analysis_gene_sets = selected_genes_all_tests
+# # Meta-analysis: all data with binary moderators or simple random effects models
+# load("PADB_metafor_simple_random_effect_results.RData")
 # Replication analysis
+load("PADB_dataset_level_replicability_analysis_results.RData")
+rep_gene_sets = rep_gene_sets_0.4
+
+# Some overlaps
+names(rep_gene_sets)
+names(tp_meta_analysis_gene_sets)
+ll = c(rep_gene_sets,tp_meta_analysis_gene_sets)
+names(ll)
+V = Venn(ll[c(3,5,9)])
+plot(V,doWeights=F)
+V = Venn(ll[c(7,8,11)])
+plot(V,doWeights=F)
 
 
 # cluster the gene sets by their patterns
-dir.create("timepoint_meta_analysis_gene_clustering")
 selected_gene_clustering = list()
-for(i in 1:length(gene_selection_all_tests)){
-  nn = names(gene_selection_all_tests)[i]
+for(i in 1:length(tp_meta_analysis_gene_sets)){
+  nn = names(tp_meta_analysis_gene_sets)[i]
   m = weighted_avg_matrices$acute
   if(grepl("longterm",nn)){m = weighted_avg_matrices$longterm}
   m1 = m[,grepl("muscle",colnames(m))]
   if(grepl("blood",nn)){m1 = m[,grepl("blood",colnames(m))]}
   m1[is.na(m1)] = 0
-  selected_gene_clustering[[nn]] = run_corrmat_clustering_of_a_gene_set(gene_selection_all_tests[[i]],m1)
+  curr_genes = tp_meta_analysis_gene_sets[[nn]]
+  curr_rep_genes = unique(unlist(rep_gene_sets[grepl(nn,names(rep_gene_sets))]))
+  curr_genes = union(curr_genes,curr_rep_genes)
+  curr_genes = intersect(curr_genes,rownames(m1)) # REQUIRED since the rep analysis contains more genes
+  selected_gene_clustering[[nn]] = run_corrmat_clustering_of_a_gene_set(curr_genes,m1)
 }
 lapply(selected_gene_clustering,function(x)table(x[[1]]))
 selected_gene_clusters=list()
-for(i in 1:length(gene_selection_all_tests)){
-  nn = names(gene_selection_all_tests)[i]
+for(i in 1:length(tp_meta_analysis_gene_sets)){
+  nn = names(tp_meta_analysis_gene_sets)[i]
   m_clust = selected_gene_clustering[[nn]][[1]]
   for(j in unique(m_clust)){
     selected_gene_clusters[[paste(nn,j,sep="_")]] = names(which(m_clust==j))
@@ -116,7 +129,7 @@ for(i in c(3,1,2)){
 
 m_1 = weighted_avg_matrices$longterm[selected_gene_clusters[[6]],]
 selected_gene_clusters_topgo_res = run_topgo_enrichment_fisher(selected_gene_clusters,
-                                                               union(names(acute_gene_tables),names(longterm_gene_tables)))
+      union(names(acute_gene_tables),names(longterm_gene_tables)))
 extract_top_go_results(selected_gene_clusters_topgo_res)
 get_most_sig_enrichments_by_groups(extract_top_go_results(selected_gene_clusters_topgo_res),10)
 table(extract_top_go_results(selected_gene_clusters_topgo_res)[,1])

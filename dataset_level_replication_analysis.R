@@ -155,6 +155,11 @@ rep_gene_sets_0.4_topgo = run_topgo_enrichment_fisher(rep_gene_sets_0.4,all_gene
 table(extract_top_go_results(rep_gene_sets_0.4_topgo)[,1])
 get_most_sig_enrichments_by_groups(extract_top_go_results(rep_gene_sets_0.4_topgo,0.1),4)
 
+library(Vennerable)
+names(rep_gene_sets_0.4_names)
+V = Venn(rep_gene_sets_0.4_names[c(3,5,7,8)])
+plot(V,doWeights=F)
+
 save(screen_res,decay_plot_data,rep_gene_sets,rep_gene_sets_topgo,rep_gene_sets_names,
      rep_gene_sets_0.4,rep_gene_sets_0.4_names,rep_gene_sets_0.4_topgo,
      file="PADB_dataset_level_replicability_analysis_results.RData")
