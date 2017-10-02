@@ -150,6 +150,9 @@ plot_gene_pattern<-function(x,errs = NULL,tosmooth=T,min_time_points=3,
                             legend.x="topright",legend.cex=0.8,legend.ncol=2,
                             mfrow = c(1,2),main_prefix = "acute",y_lim_add = 0.5,y_lim_min = 1.5,
                             ...){
+  inds = !grepl("yoga|treatment",names(x))
+  x = x[inds]
+  if(!is.null(errs)){errs = errs[inds]}
   cn = names(x)
   cn = sapply(cn,function(x)strsplit(x,split=',')[[1]])
   tb = table(cn[1,],cn[2,])

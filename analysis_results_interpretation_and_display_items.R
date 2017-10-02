@@ -72,6 +72,8 @@ load("effect_weighted_avg_matrices_by_training_and_tissues.RData")
 # Meta-analysis: specific time points
 load("tp_meta_analysis_results.RData")
 tp_meta_analysis_gene_sets = selected_genes_all_tests
+tp_meta_analysis_gene_names = sapply(tp_meta_analysis_gene_sets,function(x,y)unlist(y[x]),y=entrez2symbol)
+sapply(tp_meta_analysis_gene_names,function(x)x[grepl("^MY|^COL",x)])
 # # Meta-analysis: all data with binary moderators or simple random effects models
 # load("PADB_metafor_simple_random_effect_results.RData")
 # Replication analysis
@@ -102,6 +104,7 @@ for(i in 1:length(tp_meta_analysis_gene_sets)){
   curr_rep_genes = unique(unlist(rep_gene_sets[grepl(nn,names(rep_gene_sets))]))
   curr_genes = union(curr_genes,curr_rep_genes)
   curr_genes = intersect(curr_genes,rownames(m1)) # REQUIRED since the rep analysis contains more genes
+  #curr_genes = intersect(curr_rep_genes,rownames(m1)) # test
   selected_gene_clustering[[nn]] = run_corrmat_clustering_of_a_gene_set(curr_genes,m1)
 }
 lapply(selected_gene_clustering,function(x)table(x[[1]]))
@@ -109,7 +112,8 @@ selected_gene_clusters=list()
 for(i in 1:length(tp_meta_analysis_gene_sets)){
   nn = names(tp_meta_analysis_gene_sets)[i]
   m_clust = selected_gene_clustering[[nn]][[1]]
-  for(j in unique(m_clust)){
+  for(j in sort(unique(m_clust))){
+    if (sum(m_clust==j)<10){next}
     selected_gene_clusters[[paste(nn,j,sep="_")]] = names(which(m_clust==j))
   }
 }
@@ -117,24 +121,76 @@ sapply(selected_gene_clusters,length)
 selected_gene_clusters_names = lapply(selected_gene_clusters,function(x,y)unlist(y[x]),y=entrez2symbol)
 sapply(selected_gene_clusters_names,intersect,y=known_genes)
 
+# Enrichments
+all_genes = unique(unlist(sapply(weighted_avg_matrices,rownames)))
+selected_gene_clusters_topgo_res = run_topgo_enrichment_fisher(selected_gene_clusters,all_genes)
+extract_top_go_results(selected_gene_clusters_topgo_res)
+get_most_sig_enrichments_by_groups(extract_top_go_results(selected_gene_clusters_topgo_res),2)
+table(extract_top_go_results(selected_gene_clusters_topgo_res)[,1])
+
 # cluster plots
 names(selected_gene_clusters)
 par(mfrow=c(3,2))
-for(i in c(3,1,2)){
+for(i in c(1:3)){
   m_1 = weighted_avg_matrices$acute[selected_gene_clusters[[i]],]
   m_1[is.na(m_1)|is.nan(m_1)]=0
   m_1 = m_1[,!grepl("treatment",colnames(m_1))]
   plot_gene_pattern(apply(m_1,2,mean),errs = apply(m_1,2,sd),tosmooth = T,mfrow=NULL,y_lim_add = 0.5,y_lim_min = 1)
 }
 
-m_1 = weighted_avg_matrices$longterm[selected_gene_clusters[[6]],]
-selected_gene_clusters_topgo_res = run_topgo_enrichment_fisher(selected_gene_clusters,
-      union(names(acute_gene_tables),names(longterm_gene_tables)))
-extract_top_go_results(selected_gene_clusters_topgo_res)
-get_most_sig_enrichments_by_groups(extract_top_go_results(selected_gene_clusters_topgo_res),10)
-table(extract_top_go_results(selected_gene_clusters_topgo_res)[,1])
+# cluster plots
+names(selected_gene_clusters)
+par(mfrow=c(3,2))
+for(i in c(6:8)){
+  m_1 = weighted_avg_matrices$longterm[selected_gene_clusters[[i]],]
+  m_1[is.na(m_1)|is.nan(m_1)]=0
+  m_1 = m_1[,!grepl("treatment",colnames(m_1))]
+  plot_gene_pattern(apply(m_1,2,mean),errs = apply(m_1,2,sd),tosmooth = T,mfrow=NULL,y_lim_add = 0.5,y_lim_min = 0.5)
+}
+for(i in c(9:11)){
+  m_1 = weighted_avg_matrices$longterm[selected_gene_clusters[[i]],]
+  m_1[is.na(m_1)|is.nan(m_1)]=0
+  m_1 = m_1[,!grepl("treatment",colnames(m_1))]
+  plot_gene_pattern(apply(m_1,2,mean),errs = apply(m_1,2,sd),tosmooth = T,mfrow=NULL,y_lim_add = 0.5,y_lim_min = 0.5)
+}
 
+# cluster plots
+names(selected_gene_clusters)
+par(mfrow=c(2,2))
+for(i in c(4:5)){
+  m_1 = weighted_avg_matrices$acute[selected_gene_clusters[[i]],]
+  m_1[is.na(m_1)|is.nan(m_1)]=0
+  m_1 = m_1[,!grepl("treatment",colnames(m_1))]
+  plot_gene_pattern(apply(m_1,2,mean),errs = apply(m_1,2,sd),tosmooth = T,mfrow=NULL,y_lim_add = 0.5,y_lim_min = 1)
+}
 
+# Selected intersections
+names(tp_meta_analysis_gene_sets)
+t(t(unname(unlist(entrez2symbol[intersect(tp_meta_analysis_gene_sets[[1]],tp_meta_analysis_gene_sets[[3]])]))))
 
+load("PADB_dataset_level_meta_analysis_data.RData")
+par(mfrow=c(1,1))
+get_subset_forest_plot(acute_gene_tables[["70"]],tissue = "muscle")
+par(mfrow=c(2,2))
+plot_gene_pattern(weighted_avg_matrices$acute["70",],tosmooth = T,mfrow=NULL)
+plot_gene_pattern(weighted_avg_matrices$longterm["70",],tosmooth = T,mfrow=NULL)
 
+gene = "4627"
+gdata = acute_gene_tables[[gene]]
+gdata = gdata[gdata$time<10,]
+get_subset_forest_plot(gdata ,tissue = "muscle")
+rma.mv(yi,vi,random=~V1|gse,subset = tissue=="muscle",data=gdata,mods = ~training)
+
+# Expression values
+# Get the datasets and their metadata
+load("PADB_univariate_results_and_preprocessed_data_acute.RData")
+acute_datasets = cohort_data
+acute_metadata = cohort_metadata
+load("PADB_univariate_results_and_preprocessed_data_longterm.RData")
+longterm_datasets = cohort_data
+longterm_metadata = cohort_metadata
+
+sapply(acute_datasets,function(x)mean(x$gene_data[gene,]))
+sapply(acute_datasets,function(x)mean(x$gene_data["51",]))
+sapply(acute_datasets,function(x)mean(x$gene_data))
 
