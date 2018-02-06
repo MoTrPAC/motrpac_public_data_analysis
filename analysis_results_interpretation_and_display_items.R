@@ -58,13 +58,51 @@ run_corrmat_clustering_of_a_gene_set<-function(genes,m,exclude_cols_regex = "fat
 ######################################################################
 ######################################################################
 
+############ Display item: cohort tables ############
+# Get the datasets and their metadata
+load("PADB_univariate_results_and_preprocessed_data_acute.RData")
+load("PADB_sample_metadata_acute.RData")
+acute_datasets = cohort_data
+acute_metadata = cohort_metadata
+acute_subj = sample_metadata$subject
+acute_time = sample_metadata$time
+data_gsms = unique(unlist(sapply(acute_metadata,function(x)x$gsms)))
+write.table(t(table(sample_metadata$tissue[data_gsms],sample_metadata$training[data_gsms])),sep="\t",quote=F)
+load("PADB_univariate_results_and_preprocessed_data_longterm.RData")
+load("PADB_sample_metadata_longterm.RData")
+longterm_datasets = cohort_data
+longterm_metadata = cohort_metadata
+longterm_subj = sample_metadata$subject
+longterm_time = sample_metadata$time
+data_gsms = unique(unlist(sapply(longterm_metadata,function(x)x$gsms)))
+write.table(t(table(sample_metadata$tissue[data_gsms],sample_metadata$training[data_gsms])),sep="\t",quote=F)
+get_metadata_for_table<-function(x,subjs,times){
+  gsms = x$gsms
+  N = length(gsms)
+  S = subjs[gsms]
+  Ns = length(unique(S))
+  Tset = unique(times[gsms])
+  if(min(Tset)<0){Tset[Tset<0] = "Pre"}
+  else{Tset[Tset<=0] = "Pre"}
+  v = c(x$gse,x$tissue,x$training,N,Ns,paste(Tset,collapse=','),x$additional_info)
+  names(v) = c("Dataset","Tissue","Training","Nsample","Nsubject","Time points","AdditionalInfo")
+  return(v)
+}
+acute_cohort_table = t(sapply(acute_metadata,get_metadata_for_table,subjs=acute_subj,times=acute_time))
+longterm_cohort_table = t(sapply(longterm_metadata,get_metadata_for_table,subjs=longterm_subj,times=longterm_time))
+write.table(acute_cohort_table,quote=F,sep="\t")
+write.table(longterm_cohort_table,quote=F,sep="\t")
+
+#####################################################
+
 # Load or compute the gene patterns
 # Gene patterns for the analysis
-weighted_avg_matrices=list()
-weighted_avg_matrices[["acute"]] = t(sapply(acute_gene_tables_raw,get_gene_weighted_avg_pattern))
-weighted_avg_matrices[["longterm"]] = t(sapply(longterm_gene_tables_raw,get_gene_weighted_avg_pattern))
-weighted_avg_matrices = lapply(weighted_avg_matrices,reorder_weighted_avg_matrix)
-save(weighted_avg_matrices,file="effect_weighted_avg_matrices_by_training_and_tissues.RData")
+# # LOAD data structures needed for the lines below: ADD
+# weighted_avg_matrices=list()
+# weighted_avg_matrices[["acute"]] = t(sapply(acute_gene_tables_raw,get_gene_weighted_avg_pattern))
+# weighted_avg_matrices[["longterm"]] = t(sapply(longterm_gene_tables_raw,get_gene_weighted_avg_pattern))
+# weighted_avg_matrices = lapply(weighted_avg_matrices,reorder_weighted_avg_matrix)
+# save(weighted_avg_matrices,file="effect_weighted_avg_matrices_by_training_and_tissues.RData")
 # Or load
 load("effect_weighted_avg_matrices_by_training_and_tissues.RData")
 
@@ -75,6 +113,7 @@ tp_meta_analysis_gene_sets = selected_genes_all_tests
 tp_meta_analysis_gene_names = sapply(tp_meta_analysis_gene_sets,function(x,y)unlist(y[x]),y=entrez2symbol)
 sapply(tp_meta_analysis_gene_names,function(x)x[grepl("^MY|^COL",x)])
 # # Meta-analysis: all data with binary moderators or simple random effects models
+# Deprecated for now: may be highly confounded
 # load("PADB_metafor_simple_random_effect_results.RData")
 # Replication analysis
 load("PADB_dataset_level_replicability_analysis_results.RData")
@@ -83,13 +122,18 @@ rep_gene_sets = rep_gene_sets_0.4
 # Some overlaps
 names(rep_gene_sets)
 names(tp_meta_analysis_gene_sets)
-ll = c(rep_gene_sets,tp_meta_analysis_gene_sets)
-names(ll)
-V = Venn(ll[c(3,5,9)])
+ll = c(rep_gene_sets[c(1,3,5,7,8)],tp_meta_analysis_gene_sets)
+names(ll)[1:5] = paste("REP",names(ll)[1:5],sep="_")
+names(ll)[6:9] = paste("META",names(ll)[6:9],sep="_")
+V = Venn(ll[c(2,3,6)])
 plot(V,doWeights=F)
-V = Venn(ll[c(7,8,11)])
+V = Venn(ll[c(4,5,8)])
 plot(V,doWeights=F)
-
+V = Venn(ll[c(1,7)])
+plot(V,doWeights=F)
+expression_gene_sets = ll
+expression_gene_sets = lapply(expression_gene_sets,function(x,y)sort(unlist(y[x])),y=entrez2symbol)
+save(expression_gene_sets,file="Exercise_data_analysis_gene_sets.RData")
 
 # cluster the gene sets by their patterns
 selected_gene_clustering = list()
@@ -180,17 +224,4 @@ gdata = acute_gene_tables[[gene]]
 gdata = gdata[gdata$time<10,]
 get_subset_forest_plot(gdata ,tissue = "muscle")
 rma.mv(yi,vi,random=~V1|gse,subset = tissue=="muscle",data=gdata,mods = ~training)
-
-# Expression values
-# Get the datasets and their metadata
-load("PADB_univariate_results_and_preprocessed_data_acute.RData")
-acute_datasets = cohort_data
-acute_metadata = cohort_metadata
-load("PADB_univariate_results_and_preprocessed_data_longterm.RData")
-longterm_datasets = cohort_data
-longterm_metadata = cohort_metadata
-
-sapply(acute_datasets,function(x)mean(x$gene_data[gene,]))
-sapply(acute_datasets,function(x)mean(x$gene_data["51",]))
-sapply(acute_datasets,function(x)mean(x$gene_data))
 

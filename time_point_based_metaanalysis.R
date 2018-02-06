@@ -354,6 +354,25 @@ tp_is_gene_selected<-function(out,fdr_thr=0.001,effect_thr=0.5,perform_ctrl_test
   }
   return(length(curr_tps)>0)
 }
+get_selected_tps_pvals_and_effects<-function(out,fdr_thr=0.001,effect_thr=0.5,perform_ctrl_test=T,control_effect_thr=0.5){
+  pvals = get_tps_pvalues(out)
+  effects = get_tps_betas(out)
+  c_effects = out[grepl("beta_c_est",names(out))]
+  tps = get_tps_from_names(names(out))
+  meta_analysis_summary = c()
+  for(tp in tps){
+    effs = effects[grepl(names(effects),pattern=tp)]
+    interc = effs[grepl(names(effs),pattern="intrc")]
+    effs[!grepl(names(effs),pattern="intrc")] = effs[!grepl(names(effs),pattern="intrc")] + interc
+    names(effs)[!grepl(names(effs),pattern="intrc")] = gsub( names(effs)[!grepl(names(effs),pattern="intrc")],pattern="beta_e_training",replace='')
+    names(effs)[grepl(names(effs),pattern="intrc")] = "base"
+    mean_control = c_effects[grepl(names(c_effects),pattern=tp)]
+    v = c(effs,mean_control)
+    names(v)[length(v)] = paste(tp,";untrained_fc",sep='')
+    meta_analysis_summary = c(meta_analysis_summary,v)
+  }
+  return(meta_analysis_summary)
+}
 
 # Analysis of the results: p-values
 pval_matrices = lapply(tp_meta_analysis_results,function(x)t(apply(x,1,get_tps_pvalues)))
@@ -367,10 +386,13 @@ tmp = sapply(pval_matrices,function(x)apply(x,2,hist))
 all_ps = c(unlist(pval_matrices))
 all_ps = all_ps[!is.na(all_ps)]
 par(mfrow=c(1,1));hist(all_ps,main="All p-values", xlab="P-value")
-all_ps_thr = max(all_ps[p.adjust(all_ps,method="BY")<=0.1])
+all_ps_thr = max(all_ps[p.adjust(all_ps,method="fdr")<=0.05])
 print(length(all_ps));print(all_ps_thr)
 pval_matrices_binary = lapply(pval_matrices,function(x,y)x<=y,y=all_ps_thr)
 sapply(pval_matrices_binary,table)
+m = pval_matrices_binary[[1]][,1:2]
+colSums(m)
+table(m[,1],m[,2])
 
 # # vs. controls significance - 
 # # NUMBER OF UNTRAINED COHORTS SEEMS TO BE TOO LOW
@@ -394,6 +416,7 @@ sapply(pval_matrices_binary,table)
 # tp_meta_analysis_results[[3]]["4619",]
 
 # gene selection based on all tests
+# In the analyses below 0.001 threshold for the p-value is similar to using 0.1 BY FDR
 gene_selection_all_tests = list()
 gene_selection_all_tests[["acute,muscle"]]  = apply(tp_meta_analysis_results[["acute,muscle"]],1,tp_is_gene_selected,
       fdr_thr=0.001,effect_thr=0.5,perform_ctrl_test=T,control_effect_thr=0.5)
@@ -496,6 +519,18 @@ for(nn in names(egger_test_results)){
 save(tp_meta_analysis_results,tp_meta_analysis_results_all_windows,gene_selection_all_tests,
      selected_genes_all_tests_topgo,selected_genes_all_tests_names,known_genes,egger_test_results,
      selected_genes_all_tests,file="tp_meta_analysis_results.RData")
+
+# Dec 2017: reformat the main results and extract the summary matrices for the selected genes
+sapply(tp_meta_analysis_results,colnames)
+tp_meta_analysis_results_statistics = list()
+for(nn in names(selected_genes_all_tests)){
+  mm = tp_meta_analysis_results[[nn]][selected_genes_all_tests[[nn]],]
+  rownames(mm) = entrez2symbol[rownames(mm)]
+  tp_meta_analysis_results_statistics[[nn]] = t(apply(mm,1,get_selected_tps_pvals_and_effects))
+}
+sapply(tp_meta_analysis_results_statistics,colnames)
+save(tp_meta_analysis_results_statistics,file = "tp_meta_analysis_results_statistics.RData")
+
 
 # # Manual examinations
 # pval_matrices[[1]]["5166",]
