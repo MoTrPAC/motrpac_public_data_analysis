@@ -1,0 +1,8 @@
+bucket	type	count
+gs://motrpac-portal-transfer-stanford/	xlsx	1
+gs://motrpac-portal-transfer-stanford/	txt	1
+gs://motrpac-portal-transfer-stanford/	html	1
+gs://motrpac-portal-transfer-stanford/	py	1
+gs://motrpac-portal-transfer-stanford/	tab	21
+gs://motrpac-portal-transfer-stanford/	bam	20
+gs://motrpac-portal-transfer-pnnl/	raw	3
