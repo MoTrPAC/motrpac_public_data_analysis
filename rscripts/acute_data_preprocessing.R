@@ -40,8 +40,7 @@ for(curr_gsm in gsm_duplications){
 metadata = metadata[to_keep,]
 rownames(metadata) = metadata[,1]
 
-# Exclude samples without time info - happens due to some acute/longterm mixed datasets
-# datasets such as GSE28392
+# Exclude samples without time info - happens due to some acute/longterm mixed datasets such as GSE28392
 sample2time = sample2time = as.numeric(as.character(metadata$Acute..Standardized.Time..hours...1.is.baseline.))
 metadata = metadata[!is.na(sample2time) & sample2time!="",]
 print(dim(metadata))

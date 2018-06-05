@@ -349,7 +349,6 @@ get_mixed_effect_model_time_apprx_stat_diff<-function(x,frm1,frm0,d1,statistic="
   an =anova(m1,m0)[,statistic]
   return(an[1]-an[2])
 }
-
 get_stats_df_chisq<-function(stats,ps,range,use_log=T,func=abs){
   mse_minus_log = c()
   if(use_log){log_ps = -log(ps,base=10)}
