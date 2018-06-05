@@ -87,9 +87,11 @@ clinic.df[1:5,1:5]
 # and converted into the log space for downstream analyses.
 sapply(omics_data,mean)
 # correct the metabolic range using log10 
-omics_data$metab = log(omics_data$metab+0.5,base=10)
+omics_data$metab = log(omics_data$metab+0.5,base=2)
 omics_data$cytok = log(omics_data$cytok+0.5,base=2)
+omics_data$clinic = log(omics_data$clinic+0.05,base=2)
 sapply(omics_data,function(x)table(is.na(x)))
+sapply(omics_data,function(x)table(x==0))
 
 # med_h_data=list()
 # for(nn in names(omics_data)){
@@ -167,6 +169,8 @@ shared_subjects = rownames(omics_data[[1]])
 for(i in 1:length(omics_data)){shared_subjects=intersect(shared_subjects,rownames(omics_data[[i]]))}
 omics_data_shared = lapply(omics_data,function(x)x[shared_subjects,])
 sapply(omics_data_shared, dim)
+omics_data_shared_meta = lapply(omics_data2meta,function(x){rownames(x)=x[,1];x[shared_subjects,]})
+sapply(omics_data_shared_meta, dim)
 
 ########## MOFA ############
 # http://htmlpreview.github.io/?https://github.com/bioFAM/MOFA/blob/master/MOFAtools/vignettes/MOFA_example_CLL.html
@@ -245,4 +249,90 @@ plotFactorScatters(MOFAobject, factors=1:3, color_by=h$cluster)
 # CF analysis using CausalImpact
 install.packages("CausalImpact")
 library("CausalImpact")
+
+# Analysis using TWIGS
+# Analyzed objects: omics_data_shared and omics_data_shared_meta
+library(devtools)
+devtools::install_github("Biclustering/biclust")
+library(biclust)
+source('http://acgt.cs.tau.ac.il/twigs/TWIGS_gibbs_sampling_v1.R')
+# sanity check
+all(omics_data_shared_meta[[1]]==omics_data_shared_meta[[2]])
+clinicX = omics_data_shared_meta[[1]]
+dates = unname(sapply(clinicX[,3],function(x)strsplit(x,split=" ")[[1]][1]))
+dates = sapply(dates,as.Date,"%m/%d/%y")
+min_size = 3
+subject2data = list()
+for(subj in unique(clinicX[,2])){
+  inds = clinicX[,2]==subj
+  currClin = clinicX[inds,]
+  currdates = dates[inds]
+  currClin = currClin[order(currdates),]
+  is_sick_and_subj =  as.numeric(currClin[,4] !="Healthy")
+  best_i_start = -1
+  best_i_end = -1
+  i = 2
+  while(i<length(is_sick_and_subj)){
+    if(is_sick_and_subj[i-1]!=0){i=i+1;next}
+    currstart=i
+    while(i<length(is_sick_and_subj) && is_sick_and_subj[i]){
+      i=i+1
+    }
+    currend = i-1
+    if((currend-currstart)>(best_i_end-best_i_start)){
+      best_i_end = currend
+      best_i_start = currstart
+    }
+    i=i+1
+  }
+  if(best_i_end-best_i_start+1 < min_size){next}
+  print(currClin[1,2])
+  
+  # get the current dataset
+  selected_samples = currClin[(best_i_start-1):best_i_end,1]
+  curr_data = sapply(omics_data_shared, function(x,y)x[y,],y=selected_samples)
+  subjectX = c()
+  for(n in names(curr_data)){
+    d = t(curr_data[[n]])
+    rownames(d) = paste(n,rownames(d),sep=";")
+    subjectX = rbind(subjectX,d)
+  }
+  subject2data[[currClin[1,2]]] = subjectX[,1:(min_size+1)]
+}
+sapply(subject2data,dim)
+
+get_fc_matrix<-function(x,sname="subj1"){
+  newx = c()
+  for(j in 2:ncol(x)){
+    v = x[,j]-x[,1]
+    newx = cbind(newx,v)
+    colnames(newx)[ncol(newx)] = paste(sname,';TR',j-1,sep="")
+  }
+  rownames(newx)=rownames(x)
+  return(newx)
+}
+
+Z = c()
+for(subj in names(subject2data)){
+  currx = get_fc_matrix(subject2data[[subj]],subj)
+  Z = cbind(Z,currx)
+}
+
+fchange_thr = 1
+Z_bin = Z>=fchange_thr
+mode(Z_bin)="numeric"
+table(apply(Z_bin==0,1,sum))
+
+Z[is.na(Z)]=0
+twigs_sol_up = run_complete_twigs_algorithm(Z > 1,
+    max_num_bics = 10,min_row=10,min_col = 10, gibbs_reps = 50,initial_method='bimax')
+
+
+
+
+
+
+
+
+
 
