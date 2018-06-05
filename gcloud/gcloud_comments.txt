@@ -1,0 +1,463 @@
+# Unix commands reminder
+df -h # check space and quotas
+id # uid, gid indices
+#!/bin/bash # for the start line of a bash script
+
+################### Windows VM ######################
+#####################################################
+# Make sure to use an image with GUI
+# Allow HTTP and HTTPS traffic
+# Enable automatic LAN  (Internet Properties -> Connections -> LAN)
+# Install .NET3.5 - roles and features
+# Enable Javascript (Internet Properties -> Security -> Custom)
+
+################### Ubuntu VM #######################
+#####################################################
+
+# The goal here was to get a GUI Ubuntu VM
+# See: https://medium.com/google-cloud/graphical-user-interface-gui-for-google-compute-engine-instance-78fccda09e5c 
+# Network firewall rules is a bit different
+# Use Remote Desktop VNC free software from the apple store
+
+################# Installing Java ###################
+#####################################################
+
+# Debian
+sudo apt-get --assume-yes update
+sudo apt-get --assume-yes install default-jre
+sudo apt-get --assume-yes install default-jdk
+
+################### Installing R ####################
+#####################################################
+# Update and install needed for the OS (Debian)
+sudo apt-get --assume-yes update
+# For installing packages we need Debian's: 
+#	deb: libcurl4-openssl-dev (Debian, Ubuntu, etc)
+#	deb: libxml2-dev (Debian, Ubuntu, etc)
+#	deb: libssl-dev (Debian, Ubuntu, etc)
+sudo apt-get --assume-yes install libxml2 libxml2-dev
+sudo apt-get --assume-yes install libcurl4-openssl-dev
+sudo apt-get --assume-yes install libssl-dev
+sudo apt-get --assume-yes install libx11-dev
+# based on https://stackoverflow.com/questions/17473547/error-with-readline-yes-default-and-headers-libs-are-not-available
+# direct answer that refer to R installation
+sudo apt-get --assume-yes install build-essential
+sudo apt-get --assume-yes install fort77
+sudo apt-get --assume-yes install xorg-dev
+sudo apt-get --assume-yes install liblzma-dev  libblas-dev gfortran
+sudo apt-get --assume-yes install gcc-multilib
+sudo apt-get --assume-yes install gobjc++
+sudo apt-get --assume-yes install aptitude
+sudo aptitude install libreadline-dev
+# Additional missing packages (added on top of the above solution because config did not work)
+sudo apt-get install libpcre3 libpcre3-dev
+sudo apt-get --assume-yes install libbz2-dev
+# in case pip is not available
+sudo apt-get --assume-yes install python-pip
+# in case git is not available
+sudo apt-get --assume-yes install git
+sudo apt-get install zip unzip
+# do the right extraction software
+sudo apt-get install dtrx
+
+
+# MOFA
+# Python
+sudo pip install git+git://github.com/PMBio/MOFA
+# For MOFA we need R>= 3.4
+# Get the file using curl:
+curl https://cran.r-project.org/src/base/R-3/R-3.4.1.tar.gz | tar xz
+cd R-3.4.1
+sudo ./configure
+sudo make
+sudo make install
+cd ..
+
+# Update PATH:
+PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/games:/usr/games
+
+# For default R installation use:
+# As of April 2018 it gets R 3.3 which is not good enough for us 
+# sudo apt-get --assume-yes install r-base-dev
+# sudo apt-get --assume-yes install r-base r-base-dev
+
+# We can now install packages such as:
+install.packages("curl",dependencies=T)
+install.packages("devtools") # try without dependencies
+install.packages("googleCloudStorageR",dependencies = T)
+
+# Install MOFA:
+library(devtools)
+source("https://bioconductor.org/biocLite.R")
+biocLite("GenomeInfoDbData",dependencies=T)
+devtools::install_github("PMBio/MOFA", subdir="MOFAtools")
+source("https://bioconductor.org/biocLite.R")
+biocLite("MultiAssayExperiment")
+
+library(MOFAtools)
+
+# CF analysis using CausalImpact
+install.packages("CausalImpact")
+library("CausalImpact")
+
+# Another attempt: rstudio
+# source: https://cloudyr.github.io/googleComputeEngineR/
+# Or: http://code.markedmondson.me/setting-up-scheduled-R-scripts-for-an-analytics-team/
+
+########### Installing Docker on Debian #############
+#####################################################
+# Source: https://www.itzgeek.com/how-tos/linux/debian/how-to-install-docker-on-debian-9.html
+sudo apt-get --assume-yes install -y apt-transport-https ca-certificates wget software-properties-common
+wget https://download.docker.com/linux/debian/gpg 
+sudo apt-key add gpg
+echo "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable" | sudo tee -a /etc/apt/sources.list.d/docker.list
+sudo apt-get --assume-yes update
+sudo apt-cache policy docker-ce
+sudo apt-get --assume-yes -y install docker-ce
+# hello world
+sudo docker run hello-world
+# Look at the docker commands
+sudo docker container --help
+
+########### Mounting buckets with FUSE ##############
+#####################################################
+# https://cloud.google.com/storage/docs/gcs-fuse#f1-note
+# Comments: Cloud Storage does not support concurrency and locking. 
+# For example, if multiple Cloud Storage FUSE clients are writing to the same file, the last flush wins.
+# Installation source:
+# https://github.com/GoogleCloudPlatform/gcsfuse/blob/master/docs/installing.md#other-distributions
+# stretch on Debian is newer than jessie
+# sudo -i
+export GCSFUSE_REPO=gcsfuse-`lsb_release -c -s`
+# exit
+echo "deb http://packages.cloud.google.com/apt $GCSFUSE_REPO main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list
+curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+sudo apt-get --assume-yes update
+sudo apt-get --assume-yes install gcsfuse
+
+# mount a bucket
+mkdir buckets
+mkdir buckets/stanford
+# check my id
+id
+# mount with id and group permissions
+# uid=1000(davidama) gid=1001(davidama)
+sudo gcsfuse --uid 1000 --gid 1001 --implicit-dirs motrpac-portal-transfer-stanford /home/davidama/buckets/stanford
+# unmount
+sudo fusermount -u /home/davidama/buckets/stanford
+
+########### Install STAR, RSEM, Bowtie2 #############
+#####################################################
+sudo git clone https://github.com/deweylab/RSEM
+cd RSEM
+sudo make
+sudo make install
+cd ..
+
+# Install STAR
+sudo git clone https://github.com/alexdobin/STAR.git
+cd STAR/source
+sudo make STAR # result: can run source/STAR
+cd ../../
+
+# Get and install bowtie2
+wget https://sourceforge.net/projects/bowtie-bio/files/bowtie2/2.3.4/bowtie2-2.3.4-source.zip
+unzip bowtie2-2.3.4-source.zip
+# add stuff we need for the OS (https://www.biostars.org/p/234467/)
+sudo apt-get --assume-yes install g++
+sudo apt-get --assume-yes install libtbb-dev
+cd bowtie2-2.3.4-source.zip
+sudo make
+sudo make install
+
+# Get and install SAMtools
+sudo apt-get install libncurses5-dev
+wget https://github.com/samtools/samtools/releases/download/1.8/samtools-1.8.tar.bz2
+bunzip2 samtools-1.8.tar.bz2
+tar xvf samtools-1.8.tar  
+cd samtools-1.8    # and similarly for bcftools and htslib
+sudo ./configure
+sudo make
+sudo make install
+
+# Get and install STAR2.5
+cd /home/davidama/
+mkdir STAR2.5
+wget https://github.com/alexdobin/STAR/archive/2.5.4b.tar.gz
+gunzip 2.5.4b.tar.gz
+tar xvf 2.5.4b.tar
+cd STAR-2.5.4b/source
+sudo make
+sudo make install
+
+########## Compile Rat reference data ###############
+#####################################################
+
+mkdir rat_ref
+cd rat_ref
+# get the GTF file
+wget ftp://ftp.ensembl.org/pub/release-76/gtf/rattus_norvegicus//Rattus_norvegicus.Rnor_5.0.76.gtf.gz
+sudo gunzip Rattus_norvegicus.Rnor_5.0.76.gtf.gz
+# Get the Genome
+wget ftp://ftp.ensembl.org/pub/release-79/fasta/rattus_norvegicus/dna/Rattus_norvegicus.Rnor_5.0.dna.toplevel.fa.gz
+sudo gunzip Rattus_norvegicus.Rnor_5.0.dna.toplevel.fa.gz
+# Prepare the reference using rsem
+mkdir rsem_ref
+rsem-prepare-reference --gtf Rattus_norvegicus.Rnor_5.0.76.gtf -p 16 \
+					     --star --star-path /home/davidama/STAR/source \
+   				     Rattus_norvegicus.Rnor_5.0.dna.toplevel.fa rsem_ref &
+
+# Use STAR
+/home/davidama/STAR/source/STAR  --runThreadN 4  --runMode genomeGenerate \
+	--genomeDir .  --genomeFastaFiles Rattus_norvegicus.Rnor_5.0.dna.toplevel.fa \
+    --sjdbGTFfile Ratt us_norvegicus.Rnor_5.0.76.gtf  --sjdbOverhang 100 \
+    --limitGenomeGenerateRAM 14000000000 \
+	--outFileNamePrefix rsem_ref &
+
+################### Some tests ######################
+#####################################################
+
+# Test alignment using STAR
+STAR \
+    --genomeDir $INDEX_DIRECTORY \
+    --genomeFastaFiles $GENOME_FASTA \
+    --sjdbGTFfile $GTF_FILE \
+    --sjdbOverhang $OVERHANG \
+    --readFilesIn <trimmed_fastq_R1> <trimmed_fastq_R2> \
+            --outFileNamePrefix <output_prefix>. \
+            --readFilesCommand zcat \
+            --outSAMattributes NH HI AS NM MD nM\
+            --outFilterType BySJout \
+            --runThreadN 16 \
+            --outSAMtype BAM SortedByCoordinate \
+            --quantMode TranscriptomeSAM\
+            --genomeLoad LoadAndKeep \
+--twopassMode Basic \
+            --limitBAMsortRAM 15000000000
+
+# Run RSEM on the bam files directly using the buckets
+# Tutorial used: https://github.com/bli25broad/RSEM_tutorial
+mkdir rat_pilot
+cd rat_pilot
+sudo rsem-calculate-expression \
+            -p 16 \
+            --paired-end \
+            --no-bam-output \
+            --forward-prob 0.5 \
+            --seed 12345 \
+            --bam /home/davidama/buckets/stanford/montgomery/rat_pilot/RNA-seq/bam/A_R1_S16_Aligned.sortedByCoord.out.bam \
+            /home/davidama/rat_ref/rsem_ref \
+            test1
+
+# Test
+rsem-parse-alignments /home/davidama/rat_ref/rsem_ref test1.temp/test1 test1.stat/test1\
+ /home/davidama/buckets/stanford/montgomery/rat_pilot/RNA-seq/bam/A_R1_S16_Aligned.sortedByCoord.out.bam 3 -tag XM
+
+########### RNA-seq pipelines from MOP ##############
+#####################################################
+
+# Mount the relevant bucket
+sudo gcsfuse --uid 1000 --gid 1001 --implicit-dirs motrpac-portal-transfer-stanford /home/davidama/buckets/stanford
+
+# 4.1.1 Build Genome Index with STAR
+#!/bin/bash
+cd /home/davidama/rat_pilot
+# All samples have sequences of a single length (101bp).
+#mkdir ref_index
+GENOME_FASTA="/home/davidama/rat_ref/Rattus_norvegicus.Rnor_5.0.dna.toplevel.fa"
+INDEX_DIRECTORY="/home/davidama/rat_pilot/ref_index"
+GTF_FILE="/home/davidama/rat_ref/Rattus_norvegicus.Rnor_5.0.76.gtf"
+OVERHANG=101
+/home/davidama/STAR/source/STAR \
+    --runThreadN 10 \
+    --runMode genomeGenerate \
+    --genomeDir $INDEX_DIRECTORY \
+    --genomeFastaFiles $GENOME_FASTA \
+    --sjdbGTFfile $GTF_FILE \
+    --sjdbOverhang $OVERHANG
+
+# 6.1.3. Alignment with STAR. 
+# Align each trimmed fastq file using STAR. 
+# INDEX_DIRECTORY, GENOME_FASTA, GTF_FILE, and OVERHANG are same as above. 
+# TODO: try changing --genomeLoad to LoadAndKeep
+# filename example: A_R1_S16_R1_001.trimmed.fastq.gz
+#!/bin/bash
+cd /home/davidama/rat_pilot
+GENOME_FASTA="/home/davidama/rat_ref/Rattus_norvegicus.Rnor_5.0.dna.toplevel.fa"
+INDEX_DIRECTORY="/home/davidama/rat_pilot/ref_index"
+GTF_FILE="/home/davidama/rat_ref/Rattus_norvegicus.Rnor_5.0.76.gtf"
+OVERHANG=101
+F1="/home/davidama/buckets/stanford/montgomery/rat_pilot/RNA-seq/fastq/A_R1_S16_R1_001.trimmed.fastq.gz"
+F2="/home/davidama/buckets/stanford/montgomery/rat_pilot/RNA-seq/fastq/A_R1_S16_R2_001.trimmed.fastq.gz"
+OUT_PREFIX="A_R1_S16"
+sudo /home/davidama/STAR2.5/STAR-2.5.4b/source/STAR  \
+    --genomeDir $INDEX_DIRECTORY \
+    --sjdbGTFfile $GTF_FILE \
+    --sjdbOverhang $OVERHANG \
+    --readFilesIn $F1 $F2 \
+            --outFileNamePrefix $OUT_PREFIX \
+            --readFilesCommand zcat \
+            --outSAMattributes NH HI AS NM MD nM\
+            --outFilterType BySJout \
+            --runThreadN 16 \
+            --outSAMtype BAM SortedByCoordinate \
+            --quantMode TranscriptomeSAM\
+            --genomeLoad NoSharedMemory \
+			--twopassMode Basic \
+            --limitBAMsortRAM 45000000000
+
+
+# 7.1.1 Quantification
+#!/bin/bash
+cd /home/davidama/rat_pilot
+INPUT="A_R1_S16Aligned.toTranscriptome.out.bam"
+REF="/home/davidama/rat_ref/rsem_ref"
+SAMPLE_NAME="A_R1_S16"
+
+#!/bin/bash
+cd /home/davidama/rat_pilot/rsem
+INPUT="../rnaseq_star_algn_bams/A_R2_S17Aligned.toTranscriptome.out.bam"
+REF="/home/davidama/rat_ref/rsem_ref"
+SAMPLE_NAME="A_R2_S17"
+rsem-calculate-expression \
+            -p 16 \
+            --paired-end \
+            --no-bam-output \
+            --forward-prob 0.5 \
+            --seed 12345 \
+            --bam $INPUT\
+            $REF \
+            $SAMPLE_NAME > $SAMPLE_NAME.cmd.log &
+           
+############### MOP python scripts ##################
+#####################################################
+
+# 6.1.3. Alignment with STAR. 
+# This script assumes that the input dir contains file pairs
+# and that sorting by names is enough for the --readFilesIn command
+import os
+import re
+
+GENOME_FASTA="/home/davidama/rat_ref/Rattus_norvegicus.Rnor_5.0.dna.toplevel.fa"
+INDEX_DIRECTORY="/home/davidama/rat_pilot/ref_index"
+GTF_FILE="/home/davidama/rat_ref/Rattus_norvegicus.Rnor_5.0.76.gtf"
+OVERHANG=101
+FILES_DIR = "/home/davidama/buckets/stanford/montgomery/rat_pilot/RNA-seq/fastq/"
+OUT_FOLDER = "/home/davidama/rat_pilot/rnaseq_star_algn_bams"
+try:
+    os.mkdir(OUT_FOLDER)
+except:
+    print "output dir already exists"
+os.chdir(OUT_FOLDER)
+files = sorted(os.listdir(FILES_DIR))
+for i in range(0,len(files),2):
+	ff = files[i]
+	if re.match("^Undeterm",ff):
+		continue
+	print(ff)
+	f1 = FILES_DIR + files[i]
+	f2 = FILES_DIR + files[i+1] 
+	out_pref="_".join(ff.split("_")[:3])
+	cmd = "sudo /home/davidama/STAR2.5/STAR-2.5.4b/source/STAR " +\
+              "--genomeDir " + INDEX_DIRECTORY+ " "+\
+              "--sjdbGTFfile " + GTF_FILE + " "+\
+              "--sjdbOverhang " + str(OVERHANG) + " "+\
+              "--readFilesIn " + f1 +" "+ f2 + " "+\
+              "--outFileNamePrefix " + out_pref + " "+\
+              "--readFilesCommand zcat " +\
+              "--outSAMattributes NH HI AS NM MD nM "+\
+              "--outFilterType BySJout "+\
+              "--runThreadN 16 "+\
+              "--outSAMtype BAM SortedByCoordinate "+\
+              "--quantMode TranscriptomeSAM "+\
+              "--genomeLoad NoSharedMemory  "+\
+              "--twopassMode Basic "+\
+              "--limitBAMsortRAM 45000000000"
+	os.system(cmd)
+
+# 7.1.1 Quantification
+import os,re
+REF="/home/davidama/rat_ref/rsem_ref"
+FILES_DIR = "/home/davidama/rat_pilot/rnaseq_star_algn_bams/"
+OUT_FOLDER = "/home/davidama/rat_pilot/rsem/"
+BAM_REGEX = 'Aligned.toTranscriptome'
+try:
+    os.mkdir(OUT_FOLDER)
+except:
+    print "output dir already exists"
+os.chdir(OUT_FOLDER)
+files = sorted(os.listdir(FILES_DIR))
+for ff in files:
+        if not re.search(BAM_REGEX,ff):
+                continue
+        SAMPLE_NAME = ff.split(BAM_REGEX)[0]
+        print(SAMPLE_NAME)
+        cmd = "sudo rsem-calculate-expression " +\
+            "-p 16 --paired-end --no-bam-output " +\
+            "--forward-prob 0.5 --seed 12345 --bam " + FILES_DIR+ff +" " +\
+            REF + " " + SAMPLE_NAME +" > " + SAMPLE_NAME+".cmd.log &"
+		print (cmd)
+		continue
+		os.system(cmd)
+
+
+# Compare our results to those in Montgomery's bucket (R code)
+path1 = "/home/davidama/rat_pilot/A_R1_S16.genes.results"
+path2 = "/home/davidama/buckets/stanford/montgomery/rat_pilot/RNA-seq/STAR_read_counts/A_R1_S16_ReadsPerGene.out.tab"
+path1 = "/home/davidama/rat_pilot/rsem/A_R2_S17.genes.results"
+path2 = "/home/davidama/buckets/stanford/montgomery/rat_pilot/RNA-seq/STAR_read_counts/A_R2_S17_ReadsPerGene.out.tab"
+d1 = read.delim(path1)
+d2 = read.delim(path2)
+rownames(d1) = d1[,1]
+rownames(d2) = d2[,1]
+shared = intersect(d1[,1],d2[,1])
+shared = shared[d1[shared,]$effective_length >0]
+x1 = d1[shared,]$FPKM
+l = d1[shared,]$effective_length
+x2 = d2[shared,2]
+cor(x1,x2/l,method="spearman")
+cor(x1,x2,method="spearman")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
