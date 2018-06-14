@@ -119,6 +119,11 @@ sapply(tp_meta_analysis_gene_names,function(x)x[grepl("^MY|^COL",x)])
 load("PADB_dataset_level_replicability_analysis_results.RData")
 rep_gene_sets = rep_gene_sets_0.4
 
+window_based_metadnalysis_raw_results = tp_meta_analysis_results
+selected_genes = selected_genes_all_tests_names
+topgo_enrichments = selected_genes_all_tests_topgo
+save(window_based_metadnalysis_raw_results,selected_genes,topgo_enrichments,file="time_window_meta_analysis_results.RData")
+
 # Some overlaps
 names(rep_gene_sets)
 names(tp_meta_analysis_gene_sets)
