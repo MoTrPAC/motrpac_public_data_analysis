@@ -1,0 +1,64 @@
+---
+title: "MoTrPAC power calculations"
+author: "David Amar"
+date: "9/15/2018"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## The underlying model
+
+We simulate a linear mixed effects models with a random intercept model, where each subject (g) has its own intercept but the subjects share a common trend.  We use the lme4 and simr packages to calculate the detection power for different parameters.
+
+```{r funcs}
+# Helper functions
+# Simulate a linear mixed effects dataset
+simulate_data<-function(n_t,sigma_between,sigma_within,effects_vec,n_subjects,effect_size,use_arima=F,arima_rho=0.5){
+  intecepts = rnorm(n_subjects,sd = sigma_between)
+  y = c()
+  g = c()
+  tp = c()
+  for(j in 1:n_subjects){
+    errs = rnorm(n_t,sd=sigma_within)
+    if(use_arima){
+      errs = arima.sim(list(order = c(1,0,0), ar = arima_rho), n = n_t,sd = sigma_within) 
+    }
+    effs = effect_size * effects_vec
+    y = c(y,intecepts[j]+errs+effs)
+    g = c(g,rep(j,n_t))
+    tp = c(tp,0:(n_t-1))
+  }
+  d = data.frame(y,g,t=tp)
+  return(d)
+}
+# Plot the trajectories of the subjects
+plot_longi<-function(d,...){
+  plot(y=d$y,d$t,type="n",ylab="abundance",...)
+  points(y=d$y,d$t,type="p",pch=3)
+  for(i in unique(d$g)){lines(y=d$y[d$g==i],d$t[d$g==i],type="l",lty=2)} 
+  lines(lowess(y=d$y,d$t),lwd=3,col="yellow") 
+}
+
+# Example dataset:
+n_t = 5 # one for pre and then four time points
+sigma_between = 2 # random effect standard deviation
+n_subjects = 20
+effects_vec = c(0,0.25,1,0.25,0)
+sigma_within = 0.1
+effect_size = 1
+d = simulate_data(n_t,sigma_between,sigma_within ,effects_vec,n_subjects,effect_size)
+plot_longi(d,xlab="time points")
+```
+
+## Power calculations
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
