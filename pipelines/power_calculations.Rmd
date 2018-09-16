@@ -16,7 +16,8 @@ We simulate a linear mixed effects models with a random intercept model, where e
 ```{r funcs}
 # Helper functions
 # Simulate a linear mixed effects dataset
-simulate_data<-function(n_t,sigma_between,sigma_within,effects_vec,n_subjects,effect_size,use_arima=F,arima_rho=0.5){
+simulate_data<-function(n_t,sigma_between,sigma_within,effects_vec,
+                        n_subjects,effect_size,use_arima=F,arima_rho=0.5){
   intecepts = rnorm(n_subjects,sd = sigma_between)
   y = c()
   g = c()
@@ -24,7 +25,8 @@ simulate_data<-function(n_t,sigma_between,sigma_within,effects_vec,n_subjects,ef
   for(j in 1:n_subjects){
     errs = rnorm(n_t,sd=sigma_within)
     if(use_arima){
-      errs = arima.sim(list(order = c(1,0,0), ar = arima_rho), n = n_t,sd = sigma_within) 
+      errs = arima.sim(list(order = c(1,0,0), ar = arima_rho),
+                       n = n_t,sd = sigma_within) 
     }
     effs = effect_size * effects_vec
     y = c(y,intecepts[j]+errs+effs)
@@ -45,20 +47,125 @@ plot_longi<-function(d,...){
 # Example dataset:
 n_t = 5 # one for pre and then four time points
 sigma_between = 2 # random effect standard deviation
-n_subjects = 20
+n_subjects = 50
 effects_vec = c(0,0.25,1,0.25,0)
-sigma_within = 0.1
 effect_size = 1
+par(mfrow=c(1,2))
+sigma_within = 0.5
 d = simulate_data(n_t,sigma_between,sigma_within ,effects_vec,n_subjects,effect_size)
-plot_longi(d,xlab="time points")
+plot_longi(d,xlab="time points",main="Sigma within: 0.5")
+sigma_within = 0.1
+d = simulate_data(n_t,sigma_between,sigma_within ,effects_vec,n_subjects,effect_size)
+plot_longi(d,xlab="time points",main="Sigma within: 0.1")
 ```
 
 ## Power calculations
 
-You can also embed plots, for example:
+We consider power calculations with different within variance and effect size parameters. We also consider two different methods for analyte discovery: (1) a naive LMM that treats time as factors, and (2) fitting linear and cubic orthogonal polynomials. The R code is given below.
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+```{r implementation}
+library(lme4);library(simr)
+#' Power analysis that treats time as simple factors
+#' 
+#'  @param d A data frame of simulated data. For example, output of simulate_data
+#'  @param effects_var A numeric vector specifying relative weights for a trajectory
+#'  @param effect_size A number. the effect size to multiply effects_var by
+#'  @param max_m A number.  The maximal numer of subjects to consider in calculations
+#'  @param nsim A number. Number of simulations for simr
+#'  @param alpha A number. The significance level for the power calculations
+#'  @param tp A number. The time point of interest. The power calculation focuses on 
+#'  the ability to detect the effect in this time point
+#'  
+#'  @return A power curve
+get_simple_power_plot<-function(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001,tp=1){
+  simr_model = lmer(y~factor(t)+(1|g),data=d)
+  # specify desired effect sizes
+  for(j in 2:n_t){fixef(simr_model)[paste("factor(t)",j-1,sep="")] = effects_vec[j]*effect_size}
+  # Analysis at a range of sample sizes
+  model3 <- extend(simr_model, along="g", n=max_n)
+  pc3 <- powerCurve(model3, along="g",
+                    test=fixed(paste("factor(t)",tp,sep=""),"z"),
+                    alpha=alpha,nsim=nsim)
+  plot(pc3,xlab="Number of subjects")
+  return(pc3)
+}
+
+#' Power analysis that uses polynomials to model time trajectories.
+#' 
+#'  @param d A data frame of simulated data. For example, output of simulate_data
+#'  @param effects_var A numeric vector specifying relative weights for a trajectory
+#'  @param effect_size A number. the effect size to multiply effects_var by
+#'  @param max_m A number.  The maximal numer of subjects to consider in calculations
+#'  @param nsim A number. Number of simulations for simr
+#'  @param alpha A number. The significance level for the power calculations
+#'  @param poly_deg A number. The polynomial degree. The power calculation focuses on 
+#'  the ability to detect the effect in this trajectory type
+#'  
+#'  @return A power curve
+get_poly_power_plot<-function(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001,poly_deg=2){
+ n_t = length(unique(d$t)) 
+ pp = poly(0:(n_t-1),2)
+ yy = effects_vec*effect_size
+ new_effects_vec = lm(yy~pp)$coefficients[-1]
+ rownames(pp) = as.character(0:(n_t-1))
+ d_pp = pp[as.character(d$t),]
+ rownames(d_pp) = NULL
+ d = data.frame(d,d_pp)
+ model = lmer(y~X1+X2+(1|g),data=d)
+ fnames = summary(model)$coefficients
+ fnames = rownames(fnames)[-1]
+ simr_model = model
+ # specify desired effect sizes
+ for(j in 1:length(fnames)){fixef(simr_model)[fnames[j]] = new_effects_vec[j]}
+ # Analysis at a range of sample sizes
+ model3 <- extend(simr_model, along="g", n=max_n)
+ pc3 <- powerCurve(model3, along="g",
+                   test=fixed(fnames[poly_deg],"z"),
+                   alpha=alpha,nsim=nsim)
+ plot(pc3,xlab="Number of subjects")
+ return(pc3)
+}
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+# High effects
+
+```{r}
+n_t = 5 # one for pre and then four time points
+sigma_between = 1 # random effect standard deviation
+n_subjects = 100
+effects_vec = c(0,0.25,1,0.25,0)
+sigma_within = 0.5
+effect_size = 0.25
+nsim=100
+d = simulate_data(n_t,sigma_between,sigma_within ,effects_vec,n_subjects,effect_size)
+par(mfrow=c(2,2))
+get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001,tp=2)
+title("LMM: time as factors, peak effect")
+get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001,tp=1)
+title("LMM: time as factors, first time point")
+par(mfrow=c(1,1))
+get_poly_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001)
+title("LMM: time as poly")
+```
+
+# Low effects
+
+```{r}
+n_t = 5 # one for pre and then four time points
+sigma_between = 1 # random effect standard deviation
+n_subjects = 100
+effects_vec = c(0,0.25,1,0.25,0)
+sigma_within = 0.5
+effect_size = 0.1
+nsim=100
+d = simulate_data(n_t,sigma_between,sigma_within ,effects_vec,n_subjects,effect_size)
+par(mfrow=c(2,2))
+get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001,tp=2)
+title("LMM: time as factors, peak effect")
+get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001,tp=1)
+title("LMM: time as factors, first time point")
+par(mfrow=c(1,1))
+get_poly_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001)
+title("LMM: time as poly")
+```
+
