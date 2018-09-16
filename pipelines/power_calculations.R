@@ -112,13 +112,35 @@ effect_size = 0.25
 nsim=100
 d = simulate_data(n_t,sigma_between,sigma_within ,effects_vec,n_subjects,effect_size)
 par(mfrow=c(2,2))
-get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001,tp=2)
-title("LMM: time as factors, peak effect")
-get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001,tp=1)
-title("LMM: time as factors, first time point")
-par(mfrow=c(1,1))
-get_poly_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001)
-title("LMM: time as poly")
+ps1 = get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001,tp=2)
+ps2 = get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001,tp=1)
+ps3 = get_poly_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001)
+plot_ci_results(list("S:tp=1"=ps1,"S:tp=2"=ps2,"P:q"=ps3))
 
+plot(ps1)
+lines(ps2)
 
+library(gplots)
+#' Auxiliary function for plotting power curves with errors.
+#' 
+#'  @param l A list of powerCurve objects
+#'  @param cols A vector of colors, length(cols)>=length(l)
+#'  @param cols A vector of pch codes, length(pchs)>=length(l)
+#'  @param ... Additional paramaters for legend
+plot_ci_results<-function(l,cols = c("red","green","blue"),pchs=20:24,...){
+  l = lapply(l,summary)
+  plot(l[[1]][,1], l[[1]][,4],ylim=c(0,1.2),type="b",col=cols[1],pch=pchs[1],
+       xlab="Number of subjects",ylab="power")
+  for(j in 1:length(l)){
+    x = l[[j]][,1]
+    ui = pmin(1,l[[j]][,6])
+    li = pmax(0,l[[j]][,5])
+    arrows(x, li, x, ui, length=0.05, angle=90, code=3,col=cols[j])  
+    if(j>1){
+      lines(l[[j]][,1], l[[j]][,4],type="b",col=cols[j],pch=pchs[j])
+    }
+  }
+  abline(h=0.8,lty=2)
+  legend(x="topleft",legend=names(l),pch=pchs,col=cols,lwd=2,ncol=2,...)
+}
 
