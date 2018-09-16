@@ -6,7 +6,7 @@ output: pdf_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = T,message = F)
 ```
 
 ## The underlying model
@@ -77,10 +77,13 @@ library(lme4);library(simr)
 #'  the ability to detect the effect in this time point
 #'  
 #'  @return A power curve
-get_simple_power_plot<-function(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001,tp=1){
+get_simple_power_plot<-function(d,effects_vec,effect_size,
+                                max_n=700,nsim=10,alpha=0.001,tp=1){
   simr_model = lmer(y~factor(t)+(1|g),data=d)
   # specify desired effect sizes
-  for(j in 2:n_t){fixef(simr_model)[paste("factor(t)",j-1,sep="")] = effects_vec[j]*effect_size}
+  for(j in 2:n_t){
+    fixef(simr_model)[paste("factor(t)",j-1,sep="")] = effects_vec[j]*effect_size
+  }
   # Analysis at a range of sample sizes
   model3 <- extend(simr_model, along="g", n=max_n)
   pc3 <- powerCurve(model3, along="g",
@@ -102,7 +105,8 @@ get_simple_power_plot<-function(d,effects_vec,effect_size,max_n=700,nsim=10,alph
 #'  the ability to detect the effect in this trajectory type
 #'  
 #'  @return A power curve
-get_poly_power_plot<-function(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001,poly_deg=2){
+get_poly_power_plot<-function(d,effects_vec,effect_size,
+                              max_n=700,nsim=10,alpha=0.001,poly_deg=2){
  n_t = length(unique(d$t)) 
  pp = poly(0:(n_t-1),2)
  yy = effects_vec*effect_size
@@ -129,7 +133,7 @@ get_poly_power_plot<-function(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=
 
 # High effects
 
-```{r}
+```{r higheffects,echo=FALSE,results='hide'}
 n_t = 5 # one for pre and then four time points
 sigma_between = 1 # random effect standard deviation
 n_subjects = 100
@@ -138,19 +142,19 @@ sigma_within = 0.5
 effect_size = 0.25
 nsim=100
 d = simulate_data(n_t,sigma_between,sigma_within ,effects_vec,n_subjects,effect_size)
-par(mfrow=c(2,2))
+op <- par(mfrow=c(1,2), mar=c(4,4,4,1), oma=c(0.5,0.5,0.5,0))
 get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001,tp=2)
 title("LMM: time as factors, peak effect")
 get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001,tp=1)
 title("LMM: time as factors, first time point")
-par(mfrow=c(1,1))
+par(op)
 get_poly_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001)
 title("LMM: time as poly")
 ```
 
 # Low effects
 
-```{r}
+```{r loweffects,echo=FALSE,results='hide',fig.keep='all',eval=FALSE}
 n_t = 5 # one for pre and then four time points
 sigma_between = 1 # random effect standard deviation
 n_subjects = 100
@@ -159,7 +163,7 @@ sigma_within = 0.5
 effect_size = 0.1
 nsim=100
 d = simulate_data(n_t,sigma_between,sigma_within ,effects_vec,n_subjects,effect_size)
-par(mfrow=c(2,2))
+par(mfrow=c(2,1))
 get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001,tp=2)
 title("LMM: time as factors, peak effect")
 get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=10,alpha=0.001,tp=1)
