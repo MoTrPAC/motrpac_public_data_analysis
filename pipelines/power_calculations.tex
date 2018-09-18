@@ -328,7 +328,7 @@ size}\label{power-curves-as-a-function-of-sample-size}
 \NormalTok{n_subjects =}\StringTok{ }\DecValTok{100}
 \NormalTok{sigma_within =}\StringTok{ }\DecValTok{1}
 \NormalTok{effect_size =}\StringTok{ }\FloatTok{0.5}
-\NormalTok{nsim =}\StringTok{ }\DecValTok{3}
+\NormalTok{nsim =}\StringTok{ }\DecValTok{200}
 \NormalTok{d =}\StringTok{ }\KeywordTok{simulate_data}\NormalTok{(n_t,sigma_between,sigma_within ,effects_vec,n_subjects,effect_size)}
 \NormalTok{ps1 =}\StringTok{ }\KeywordTok{get_simple_power_plot}\NormalTok{(d,effects_vec,effect_size,}\DataTypeTok{max_n=}\DecValTok{700}\NormalTok{,}\DataTypeTok{nsim=}\NormalTok{nsim,}\DataTypeTok{alpha=}\FloatTok{0.001}\NormalTok{,}\DataTypeTok{tp=}\DecValTok{1}\NormalTok{)}
 \NormalTok{ps2 =}\StringTok{ }\KeywordTok{get_simple_power_plot}\NormalTok{(d,effects_vec,effect_size,}\DataTypeTok{max_n=}\DecValTok{700}\NormalTok{,}\DataTypeTok{nsim=}\NormalTok{nsim,}\DataTypeTok{alpha=}\FloatTok{0.001}\NormalTok{,}\DataTypeTok{tp=}\DecValTok{2}\NormalTok{)}
