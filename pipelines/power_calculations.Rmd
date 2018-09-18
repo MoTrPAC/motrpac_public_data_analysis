@@ -92,10 +92,11 @@ library(lme4);library(simr);library(gplots)
 #'  @param alpha A number. The significance level for the power calculations
 #'  @param tp A number. The time point of interest. The power calculation focuses on 
 #'  the ability to detect the effect in this time point
+#'  @param ... additional parameters to powerCurve (simr)
 #'  
 #'  @return A power curve
 get_simple_power_plot<-function(d,effects_vec,effect_size,
-                                max_n=700,nsim=10,alpha=0.001,tp=1){
+                                max_n=700,nsim=10,alpha=0.001,tp=1,...){
   simr_model = lmer(y~factor(t)+(1|g),data=d)
   # specify desired effect sizes
   for(j in 2:n_t){
@@ -105,8 +106,7 @@ get_simple_power_plot<-function(d,effects_vec,effect_size,
   model3 <- extend(simr_model, along="g", n=max_n)
   pc3 <- powerCurve(model3, along="g",
                     test=fixed(paste("factor(t)",tp,sep=""),"z"),
-                    alpha=alpha,nsim=nsim)
-  # plot(pc3,xlab="Number of subjects")
+                    alpha=alpha,nsim=nsim,...)
   return(pc3)
 }
 
@@ -120,10 +120,11 @@ get_simple_power_plot<-function(d,effects_vec,effect_size,
 #'  @param alpha A number. The significance level for the power calculations
 #'  @param poly_deg A number. The polynomial degree. The power calculation focuses on 
 #'  the ability to detect the effect in this trajectory type
+#'  @param ... additional parameters to powerCurve (simr)
 #'  
 #'  @return A power curve
 get_poly_power_plot<-function(d,effects_vec,effect_size,
-                              max_n=700,nsim=10,alpha=0.001,poly_deg=2){
+                              max_n=700,nsim=10,alpha=0.001,poly_deg=2,...){
  n_t = length(unique(d$t)) 
  pp = poly(0:(n_t-1),2)
  yy = effects_vec*effect_size
@@ -142,37 +143,21 @@ get_poly_power_plot<-function(d,effects_vec,effect_size,
  model3 <- extend(simr_model, along="g", n=max_n)
  pc3 <- powerCurve(model3, along="g",
                    test=fixed(fnames[poly_deg],"z"),
-                   alpha=alpha,nsim=nsim)
- # plot(pc3,xlab="Number of subjects")
+                   alpha=alpha,nsim=nsim,...)
  return(pc3)
 }
 
-plot_ci_results<-function(l,cols = c("red","green","blue"),pchs=20:24,...){
-  l = lapply(l,summary)
-  plot(l[[1]][,1], l[[1]][,4],ylim=c(0,1.2),type="b",col=cols[1],pch=pchs[1],
-       xlab="Number of subjects",ylab="power")
-  for(j in 1:length(l)){
-    x = l[[j]][,1]
-    ui = pmin(1,l[[j]][,6])
-    li = pmax(0,l[[j]][,5])
-    arrows(x, li, x, ui, length=0.05, angle=90, code=3,col=cols[j])  
-    if(j>1){
-      lines(l[[j]][,1], l[[j]][,4],type="b",col=cols[j],pch=pchs[j])
-    }
-  }
-  abline(h=0.8,lty=2)
-  legend(x="topleft",legend=names(l),pch=pchs,col=cols,lwd=2,ncol=2,...)
-}
 #' Auxiliary function for plotting power curves with errors.
 #' 
 #'  @param l A list of powerCurve objects
 #'  @param cols A vector of colors, length(cols)>=length(l)
 #'  @param cols A vector of pch codes, length(pchs)>=length(l)
 #'  @param ... Additional paramaters for legend
-plot_ci_results<-function(l,cols = c("red","green","blue"),pchs=20:24,...){
-  l = lapply(l,summary)
+plot_ci_results<-function(l,cols = c("red","green","blue"),pchs=20:24,
+                          xlab="Number of subjects",...){
+  if(class(l[[1]])[1]=="powerCurve"){l = lapply(l,summary)}
   plot(l[[1]][,1], l[[1]][,4],ylim=c(0,1.2),type="b",col=cols[1],pch=pchs[1],
-       xlab="Number of subjects",ylab="power")
+       xlab=xlab,ylab="power")
   for(j in 1:length(l)){
     x = l[[j]][,1]
     ui = pmin(1,l[[j]][,6])
@@ -193,17 +178,19 @@ plot_ci_results<-function(l,cols = c("red","green","blue"),pchs=20:24,...){
 
 We plot the results below. Error bars represent variance detected during the simulations of the simr package. To avoid unnecessary code duplication, we show only one code example (for Figure 2). 
 
+## Power curves as a function of sample size
+
 ```{r vhigheffects1,echo=T,results='hide',fig.cap="High within variance (sigma=1), peak effect size is 0.5. S denotes the simple LMM that treats time points af factors with fixed effects, whereas P denotes a model that fits orthogonal polynomials for detecting the overall trend. For the simple LMM method we condifer the power to detect either the peak effect at the second post-exercise time point, or the previous time point with 25 percent of the peak effect. Naturally, for this effect we get lower power."}
 sigma_between = 1 # random effect standard deviation
 n_subjects = 100
 sigma_within = 1
 effect_size = 0.5
-nsim = 250
+nsim = 200
 d = simulate_data(n_t,sigma_between,sigma_within ,effects_vec,n_subjects,effect_size)
-ps1 = get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001,tp=2)
-ps2 = get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001,tp=1)
+ps1 = get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001,tp=1)
+ps2 = get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001,tp=2)
 ps3 = get_poly_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001)
-plot_ci_results(list("S:tp=1"=ps1,"S:tp=2"=ps2,"P:q"=ps3),cex=1.3)
+plot_ci_results(list("S:tp=2"=ps2,"S:tp=1"=ps1,"P:q"=ps3),cex=1.3)
 ```
 
 
@@ -213,7 +200,7 @@ d = simulate_data(n_t,sigma_between,sigma_within ,effects_vec,n_subjects,effect_
 ps1 = get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001,tp=2)
 ps2 = get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001,tp=1)
 ps3 = get_poly_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001)
-plot_ci_results(list("S:tp=1"=ps1,"S:tp=2"=ps2,"P:q"=ps3))
+plot_ci_results(list("S:tp=2"=ps1,"S:tp=1"=ps2,"P:q"=ps3))
 ```
 
 
@@ -224,7 +211,7 @@ d = simulate_data(n_t,sigma_between,sigma_within ,effects_vec,n_subjects,effect_
 ps1 = get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001,tp=2)
 ps2 = get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001,tp=1)
 ps3 = get_poly_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001)
-plot_ci_results(list("S:tp=1"=ps1,"S:tp=2"=ps2,"P:q"=ps3),cex=1.3)
+plot_ci_results(list("S:tp=2"=ps1,"S:tp=1"=ps2,"P:q"=ps3),cex=1.3)
 ```
 
 
@@ -234,7 +221,7 @@ d = simulate_data(n_t,sigma_between,sigma_within ,effects_vec,n_subjects,effect_
 ps1 = get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001,tp=2)
 ps2 = get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001,tp=1)
 ps3 = get_poly_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001)
-plot_ci_results(list("S:tp=1"=ps1,"S:tp=2"=ps2,"P:q"=ps3))
+plot_ci_results(list("S:tp=2"=ps1,"S:tp=1"=ps2,"P:q"=ps3))
 ```
 
 ```{r loweffects1,echo=FALSE,results='hide',fig.cap="High within variance (sigma=1), peak effect size is 0.1",eval=T}
@@ -244,7 +231,7 @@ d = simulate_data(n_t,sigma_between,sigma_within ,effects_vec,n_subjects,effect_
 ps1 = get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001,tp=2)
 ps2 = get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001,tp=1)
 ps3 = get_poly_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001)
-plot_ci_results(list("S:tp=1"=ps1,"S:tp=2"=ps2,"P:q"=ps3),cex=1.3)
+plot_ci_results(list("S:tp=2"=ps1,"S:tp=1"=ps2,"P:q"=ps3),cex=1.3)
 ```
 
 
@@ -254,7 +241,42 @@ d = simulate_data(n_t,sigma_between,sigma_within ,effects_vec,n_subjects,effect_
 ps1 = get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001,tp=2)
 ps2 = get_simple_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001,tp=1)
 ps3 = get_poly_power_plot(d,effects_vec,effect_size,max_n=700,nsim=nsim,alpha=0.001)
-plot_ci_results(list("S:tp=1"=ps1,"S:tp=2"=ps2,"P:q"=ps3))
+plot_ci_results(list("S:tp=2"=ps1,"S:tp=1"=ps2,"P:q"=ps3))
+```
+
+## Power curves as a function of effect size
+
+We fix the sample size to 120 and examine the power of different effect sizes.
+
+```{r esizes,echo=T,results='hide',fig.cap="Power as a function of peak effect size when treating time as simple factors. Number of subjects is fixed at 120. The different curves represent different within variance.",eval=T}
+n_subjects = 120
+sigma_within_range = c(0.25,0.5,1)
+effect_size_range = seq(0.1,1,by=0.1)
+res_tp2 = list();res_q = list()
+for(sigma_within in sigma_within_range){
+  m1 = c();m2=c()
+  for (effect_size in effect_size_range){
+    d = simulate_data(n_t,sigma_between,sigma_within ,effects_vec,n_subjects,effect_size)
+    ps_tp = get_simple_power_plot(d,effects_vec,effect_size,max_n=n_subjects,
+                                nsim=nsim,alpha=0.001,tp=2,breaks=n_subjects)
+    ps_tp = summary(ps_tp)[1,]
+    ps_tp[1] = effect_size
+    m1 = rbind(m1,ps_tp)
+    ps_q = get_poly_power_plot(d,effects_vec,effect_size,max_n=n_subjects,
+                              nsim=nsim,alpha=0.001,breaks=n_subjects)
+    ps_q = summary(ps_q)[1,]
+    ps_q[1] = effect_size
+    m2 = rbind(m2,ps_q)
+  }
+  res_tp2[[as.character(sigma_within)]] = m1
+  res_q[[as.character(sigma_within)]] = m2
+}
+plot_ci_results(res_tp2,xlab="Peak effect size")
+
+```
+
+```{r esizes2,echo=T,results='hide',fig.cap="Power as a function of peak effect size when fitting polynomials to model time. Number of subjects is fixed at 120. The different curves represent different within variance.",eval=T}
+plot_ci_results(res_q,xlab="Peak effect size")
 ```
 
 # Conclusions
