@@ -258,6 +258,8 @@ rsem-parse-alignments /home/davidama/rat_ref/rsem_ref test1.temp/test1 test1.sta
 
 # Mount the relevant bucket
 sudo gcsfuse --uid 1000 --gid 1001 --implicit-dirs motrpac-portal-transfer-stanford /home/davidama/buckets/stanford
+sudo gcsfuse --uid 1000 --gid 1001 --implicit-dirs motrpac-portal-user-davidama /home/davidama/buckets/davidama
+
 
 # 4.1.1 Build Genome Index with STAR
 #!/bin/bash
@@ -407,19 +409,47 @@ path2 = "/home/davidama/buckets/stanford/montgomery/rat_pilot/RNA-seq/STAR_read_
 path1 = "/home/davidama/rat_pilot/rsem/A_R2_S17.genes.results"
 path2 = "/home/davidama/buckets/stanford/montgomery/rat_pilot/RNA-seq/STAR_read_counts/A_R2_S17_ReadsPerGene.out.tab"
 d1 = read.delim(path1)
-d2 = read.delim(path2)
+d2 = read.delim(path2,header=F)
 rownames(d1) = d1[,1]
 rownames(d2) = d2[,1]
 shared = intersect(d1[,1],d2[,1])
 shared = shared[d1[shared,]$effective_length >0]
 x1 = d1[shared,]$FPKM
 l = d1[shared,]$effective_length
-x2 = d2[shared,2]
+x2 = d2[shared,4]
 cor(x1,x2/l,method="spearman")
 cor(x1,x2,method="spearman")
 
+path1 = "/home/davidama/rat_pilot/rsem/"
+files1 = list.files(path1)
+files1 = files1[grepl("genes.results$",files1)]
+fpkm_matrix = c()
+for(ff in files1){
+	currd = read.delim(paste(path1,ff,sep=""),stringsAsFactors=F)
+	v = currd$FPKM
+	names(v) = currd$gene_id
+	fpkm_matrix = cbind(fpkm_matrix,v)
+	colnames(fpkm_matrix)[ncol(fpkm_matrix)] = strsplit(split='\\.',ff)[[1]][1]
+}
 
+path2 = "/home/davidama/buckets/stanford/montgomery/rat_pilot/RNA-seq/STAR_read_counts/"
+files2 = list.files(path2)
+files2 = files2[grepl("tab$",files2)]
+mlab_gcounts_matrix = c()
+for(ff in files2[1:20]){
+	currd = read.delim(paste(path2,ff,sep=""),stringsAsFactors=F)
+	v = currd[,3]
+	names(v) = currd[,1]
+	mlab_gcounts_matrix = cbind(mlab_gcounts_matrix,v)
+	colnames(mlab_gcounts_matrix)[ncol(mlab_gcounts_matrix)] = strsplit(split='\\.',ff)[[1]][1]
+}
+readme = "this file contains the rna-seq summary matrices from the ashley lab and the montgomery lab (mlab matrix) together with a vector of the shared genes and their lengths"
+save(readme,mlab_gcounts_matrix,fpkm_matrix,shared,l,
+		file = "/home/davidama/rat_pilot/gene_matrices.RData")
 
+# Copy results into buckets (gsutil in shell)
+gsutil cp -r rat_pilot/rsem gs://motrpac-portal-projects/rat_pilot
+gsutil cp -r /home/davidama/rat_pilot/gene_matrices.RData gs://motrpac-portal-projects/rat_pilot
 
 
 
