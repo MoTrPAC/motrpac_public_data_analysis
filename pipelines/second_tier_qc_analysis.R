@@ -1,11 +1,22 @@
 library(SmartSVA)
 library(corrplot)
+library(lme4)
 
 run_wilcox<-function(x,y,...){
   x1 = x[y==y[1]]
   x2 = x[y!=y[1]]
   return(wilcox.test(x1,x2,...)$p.value)
 }
+
+run_test<-function(x,y,func=t.test,...){
+  x1 = x[y==y[1]]
+  x2 = x[y!=y[1]]
+  return(func(x1,x2,...)$p.value)
+}
+#######################################
+#######################################
+#######################################
+# Metabolomics 
 
 # Some preprocessing of the rat pilot data (plasma)
 input_dataset = "/Users/David/Desktop/MoTrPAC/data/pilot/pilot_rat_plasma/CAS Pilot Rat Plasma Compiled.txt"
@@ -65,12 +76,17 @@ corrplot(cor(newX),tl.cex = 0.8)
 # PCA
 par(mfrow=c(1,2))
 pca = prcomp(t(newX))
-pcax = pca$x
-plot(PC1~PC2,data=pcax,main="PC1, PC2")
-text(PC1~PC2,data=pcax,labels = rownames(pcax),pos=4)
-plot(PC2~PC3,data=pcax,main="PC2,PC3")
-text(PC2~PC3,data=pcax,labels = rownames(pcax),pos=4)
 plot(pca)
+cumsum(pca$sdev)/sum(pca$sdev)
+cols = as.factor(newS)
+cols2 = as.factor(grepl("^R",rownames(pcax)))
+pcax = pca$x
+plot(PC1~PC2,data=pcax,main="Blood plasma metabolites (25), explained_variance=0.63",col=cols,lwd=4,pch=20)
+legend("center",legend = unique(cols),fill=unique(cols),cex=2)
+boxplot(PC7~cols2,data=pcax,col=c("red","blue"),names=c("S","R (exercise)"),ylab="PC7")
+
+d1 = data.frame(pcax,site=cols,treatment=cols2,subject = rep(1:10,4))
+summary(lme(PC2~treatment,random = ~1|site + 1|subject,data=d1))
 
 pca_ps = c()
 for(j in 1:ncol(pcax)){
@@ -152,6 +168,76 @@ rownames(hmdb2name) = hmdb2name[,1]
 our_pc = pca$rotation[,1]
 our_pc = cbind(names(our_pc),hmdb2name[names(our_pc),2],our_pc)
 write.table(our_pc,row.names = F,quote=F,sep=",")
+
+#######################################
+#######################################
+#######################################
+# RNA-seq 
+
+# Some preprocessing of the rat pilot data (plasma)
+load("/Users/David/Desktop/MoTrPAC/data/pilot/rna_seq/gene_matrices.RData")
+mlab_gcounts_matrix = log(mlab_gcounts_matrix+1,base=2)
+fpkm_matrix = log(fpkm_matrix+1,base=2)
+boxplot(mlab_gcounts_matrix)
+boxplot(fpkm_matrix)
+
+corrplot(cor(fpkm_matrix),order="hclust")
+corrplot(cor(mlab_gcounts_matrix),order="hclust")
+
+m1 = fpkm_matrix[shared,]
+m2 = mlab_gcounts_matrix[shared,]
+colnames(m2) = gsub("_ReadsPerGene","",colnames(m2))
+corrplot(cor(m1,m2[,colnames(m1)]))
+
+library(preprocessCore)
+m1_qnorm1 = cbind(normalize.quantiles.robust(m1[,1:10]),normalize.quantiles.robust(m1[,11:20]))
+boxplot(m1_qnorm1)
+colSums(m1_qnorm1==0)
+colnames(m1_qnorm1) = colnames(m1)
+rownames(m1_qnorm1) = rownames(m1)
+corrplot(cor(m1_qnorm1))
+
+rnaseq_pca = prcomp(t(m1_qnorm1))
+plot(rnaseq_pca)
+cumsum(rnaseq_pca$sdev)/sum(rnaseq_pca$sdev)
+cols = rep("Muscle",ncol(m1))
+cols[grepl("^A_",colnames(m1))] = "Adipose"
+cols = as.factor(cols)
+pcax = rnaseq_pca$x
+plot(PC2~PC1,data=pcax,main="RNA-seq (20k), explained_variance=0.41",col=cols,lwd=4,pch=20)
+legend("center",legend = unique(cols),fill=unique(cols),cex=2)
+outlier_sample = which(pcax[,"PC2"]< -50)
+colnames(m1)
+
+x_muscle = m1_qnorm1[,11:20]
+x_adipose = m1_qnorm1[,c(1:8,10)]
+muscle_genes = apply(x_muscle>1,1,any)
+adipose_genes = apply(x_adipose>1,1,any)
+x_muscle = x_muscle[muscle_genes,]
+x_adipose = x_adipose[adipose_genes,]
+dim(x_muscle)
+dim(x_adipose)
+is_running = grepl(colnames(x_muscle),pattern = "^\\D_R")
+muscle_ps = apply(x_muscle,1,run_test,y=is_running,paired=F,func=t.test)
+is_running = grepl(colnames(x_adipose),pattern = "^\\D_R")
+adipose_ps = apply(x_adipose,1,run_test,y=is_running,paired=F,func=t.test)
+muscle_qs = p.adjust(muscle_ps,method='fdr')
+adipose_qs = p.adjust(adipose_ps,method='fdr')
+hist(muscle_ps)
+hist(adipose_ps)
+muscle_diff_genes = rownames(x_muscle)[muscle_ps < 0.01]
+adipose_diff_genes = rownames(x_adipose)[adipose_ps < 0.01]
+intersect(muscle_diff_genes,adipose_diff_genes)
+all_diff_genes = union(muscle_diff_genes,adipose_diff_genes)
+corrs1 = cor(t(m1_qnorm1[all_diff_genes,11:20]))
+heatmap(corrs1)
+tmp2 = m1_qnorm1[all_diff_genes,c(1:8,10)]
+tmp2 = tmp2[apply(tmp2,1,sd)>0,]
+corrs2 = cor(t(tmp2))
+library(gplots)
+heatmap.2(corrs2[adipose_diff_genes,adipose_diff_genes],trace="none",labels=NULL)
+heatmap.2(corrs1[adipose_diff_genes,adipose_diff_genes],trace="none",labels=NULL)
+
 
 
 

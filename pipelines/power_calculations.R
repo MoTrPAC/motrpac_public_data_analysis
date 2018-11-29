@@ -34,7 +34,7 @@ plot_longi<-function(d){
 # Example dataset:
 n_t = 5 # one for pre and then four time points
 sigma_between = 1 # random effect standard deviation
-n_subjects = 20
+n_subjects = 100
 effects_vec = c(0,0.25,1,0.25,0)
 sigma_within = 0.1
 effect_size = 1
@@ -146,7 +146,7 @@ plot_ci_results<-function(l,cols = c("red","green","blue"),pchs=20:24,
     }
   }
   abline(h=0.8,lty=2)
-  legend(x="topleft",legend=names(l),pch=pchs,col=cols,lwd=2,ncol=3,...)
+  legend(x="topleft",legend=names(l),pch=pchs,col=cols,lwd=2,ncol=length(cols),...)
 }
 
 n_subjects = 120
