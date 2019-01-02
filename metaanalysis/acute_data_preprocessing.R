@@ -3,7 +3,7 @@
 # it in easy to use objects
 setwd('/Users/David/Desktop/MoTrPAC/PA_database')
 library('xlsx');library('GEOquery');library(corrplot)
-source('repos/motrpac/helper_functions.R')
+source('/Users/David/Desktop/repos/motrpac/metaanalysis/helper_functions.R')
 
 # Comments about the acute metadata
 # Time series:
@@ -22,6 +22,26 @@ source('repos/motrpac/helper_functions.R')
 
 ###############################################
 ###############################################
+############### Set constants #################
+###############################################
+###############################################
+
+# Analysis constants
+# set constants
+# Set constants for the analysis
+OMIC_TYPE = "mRNA" # mRNA, methylation
+EXERCISE_TYPE = "both" # endurance, resistance, both, or other (yoga)
+MIN_NROW = 5000 # minimal number of rows in a datamatrix of a specific dataset
+OUT_FILE = "PADB_univariate_results_and_preprocessed_data_acute.RData"
+
+###############################################
+###############################################
+#################### End ######################
+###############################################
+###############################################
+
+###############################################
+###############################################
 ############# Load the data ###################
 ###############################################
 ###############################################
@@ -37,6 +57,7 @@ for(curr_gsm in gsm_duplications){
   curr_ids = which(metadata[,1]==curr_gsm)
   to_keep[curr_ids[-1]]=F
 }
+table(to_keep)
 metadata = metadata[to_keep,]
 rownames(metadata) = metadata[,1]
 
@@ -81,15 +102,14 @@ table(sample2time)
 # Other important data
 sample2tissue = simplify_tissue_info(tolower(as.character(metadata$Tissue)))
 names(sample2tissue) = metadata[,1]
-sample2age = tolower(as.character(metadata$Age))
-sample2age = gsub(sample2age,pattern = "age: ",replace="")
+sample2age = tolower(as.character(metadata$Numeric_Age))
 names(sample2age) = metadata[,1]
 names(sample2tissue) = metadata[,1]
-sample2sex = simplify_sex_info(tolower(as.character(metadata$Gender)))
+sample2sex = as.character(metadata$Gender)
 names(sample2sex) = metadata[,1]
 sample2replicate_info = as.character(metadata[,"Replicate.info"])
 names(sample2replicate_info) = metadata[,1]
-
+table(sample2sex)
 # Check for irregularities in subject ids
 # Printed tables - do not have the exact same values
 # Datasets with some zeroes are okay - these are datasets with
@@ -115,28 +135,9 @@ for(dataset in unique(dataset_ids)){
 }
 
 sample_metadata = list(age=sample2age,sex=sample2sex,
-                       time=sample2time,tissue=sample2tissue,subject=sample2subject,training=sample2training_type,dataset = dataset_ids)
+    time=sample2time,tissue=sample2tissue,subject=sample2subject,
+    training=sample2training_type,dataset = dataset_ids)
 save(sample_metadata,file="PADB_sample_metadata_acute.RData")
-
-###############################################
-###############################################
-#################### End ######################
-###############################################
-###############################################
-
-###############################################
-###############################################
-############### Set constants #################
-###############################################
-###############################################
-
-# Analysis constants
-# set constants
-# Set constants for the analysis
-OMIC_TYPE = "mRNA" # mRNA, methylation
-EXERCISE_TYPE = "both" # endurance, resistance, both, or other (yoga)
-MIN_NROW = 5000 # minimal number of rows in a datamatrix of a specific dataset
-OUT_FILE = "PADB_univariate_results_and_preprocessed_data_acute.RData"
 
 ###############################################
 ###############################################
@@ -342,6 +343,34 @@ for(j in 1:length(cohort_data)){
   cohort_data[[j]][["time2ttest_stats"]] = res1
 }
 table(sapply(cohort_data,function(x)is.null(x$gene_fold_changes)))
+save(cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE)
+
+###############################################
+###############################################
+#################### End ######################
+###############################################
+###############################################
+
+###############################################
+###############################################
+########### Add cohort sex and age ############
+###############################################
+###############################################
+load(OUT_FILE)
+load("PADB_sample_metadata_acute.RData")
+sample2sex = sample_metadata$sex
+sample2age = sample_metadata$age
+
+for(nn in names(cohort_metadata)){
+  samps = cohort_metadata[[nn]]$gsms
+  curr_avg_age = mean(as.numeric(sample2age[samps]),na.rm=T)
+  is_male = sample2sex[samps] == "M"
+  is_male = is_male[!is.na(is_male)]
+  curr_p = sum(is_male)/length(is_male)
+  cohort_metadata[[nn]]$avg_age = curr_avg_age
+  cohort_metadata[[nn]]$male_prop = curr_p
+  print(paste(cohort_metadata[[nn]]$avg_age,cohort_metadata[[nn]]$male_prop))
+}
 save(cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE)
 
 ###############################################
