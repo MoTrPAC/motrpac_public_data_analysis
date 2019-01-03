@@ -1,10 +1,9 @@
 # In this script we load the datasets and perform meta-analysis using the metafor package
 # This is done both for the acute and longterm datasets
 setwd('/Users/David/Desktop/MoTrPAC/PA_database')
-library(metafor)
-library(org.Hs.eg.db)
+library(metafor);library(org.Hs.eg.db)
 entrez2symbol = as.list(org.Hs.egSYMBOL)
-source('repos/motrpac/helper_functions.R')
+source('/Users/David/Desktop/repos/motrpac/metaanalysis/helper_functions.R')
 
 # Get the datasets and their metadata
 load("PADB_univariate_results_and_preprocessed_data_acute.RData")

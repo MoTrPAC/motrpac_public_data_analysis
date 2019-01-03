@@ -1,7 +1,7 @@
 setwd('/Users/David/Desktop/MoTrPAC/PA_database')
 library(org.Hs.eg.db)
-source('repos/motrpac/helper_functions.R')
-source('repos/motrpac/helper_functions_meta_analaysis.R')
+source('/Users/David/Desktop/repos/motrpac/metaanalysis/helper_functions.R')
+source('/Users/David/Desktop/repos/motrpac/metaanalysis/helper_functions_meta_analaysis.R')
 entrez2symbol = as.list(org.Hs.egSYMBOL)
 
 # Get the datasets and their metadata
@@ -512,7 +512,7 @@ for(nn in names(egger_test_results)){
   all_ps = all_ps[!is.na(all_ps)]
   print(wilcox.test(qnorm(selected_genes_test_ps),qnorm(all_ps)));abline(0,1)
   print(table(selected_genes_test_ps<0.01)/length(selected_genes_test_ps))
-  print(table(all_ps<0.01)/length(all_ps))
+  print(table(all_ps < 0.01)/length(all_ps))
   print(length(all_egger_test_ps))
 }
 
@@ -530,7 +530,6 @@ for(nn in names(selected_genes_all_tests)){
 }
 sapply(tp_meta_analysis_results_statistics,colnames)
 save(tp_meta_analysis_results_statistics,file = "tp_meta_analysis_results_statistics.RData")
-
 
 # # Manual examinations
 # pval_matrices[[1]]["5166",]

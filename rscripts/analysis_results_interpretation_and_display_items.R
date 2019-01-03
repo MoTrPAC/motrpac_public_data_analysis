@@ -5,8 +5,8 @@
 
 setwd('/Users/David/Desktop/MoTrPAC/PA_database')
 library(corrplot);library(metafor);library(gplots);library(Vennerable)
-source('repos/motrpac/helper_functions.R')
-source('repos/motrpac/helper_functions_meta_analaysis.R')
+source('/Users/David/Desktop/repos/motrpac/rscripts/helper_functions.R')
+source('/Users/David/Desktop/repos/motrpac/rscripts/helper_functions_meta_analaysis.R')
 library(org.Hs.eg.db)
 entrez2symbol = as.list(org.Hs.egSYMBOL)
 
