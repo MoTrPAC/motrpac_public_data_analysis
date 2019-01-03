@@ -1,4 +1,4 @@
-# MoTrPAC: Analysis of publicly available exercise genomics datasets
+# MoTrPAC: Analysis of publicly available exercise datasets
 
 ## Human data
 
