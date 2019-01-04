@@ -59,7 +59,7 @@ get_gene_table<-function(gene,dataset_effects,moderators){
   for(nn in names(gene_data)){
     mm = gene_data[[nn]]
     for(j in 1:ncol(mm)){
-      m = rbind(m,c(nn,colnames(mm)[j],moderators[nn,],mm[1:2,j]))
+      m = rbind(m,c(nn,colnames(mm)[j],moderators[nn,],mm[,j]))
     }
   }
   colnames(m)[2]="time"
@@ -67,6 +67,8 @@ get_gene_table<-function(gene,dataset_effects,moderators){
   m = transform(m,yi=as.numeric(yi),vi=as.numeric(vi),time=as.numeric(time))
   return(m)
 }
+
+# get_gene_table("55251",acute_datasets_effects,acute_mod)
 
 # We shall use meta-analyses for single genes at a time. 
 # We therefore reshape the data to make it easier to work with
