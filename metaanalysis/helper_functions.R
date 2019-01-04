@@ -410,19 +410,20 @@ fgsea_wrapper <- function(pathways,scores,nperm=2000,run_nperm=1000,...){
 get_paired_ttest_yi_vi <-function(x,sample2time,t1,t2){
   x1 = x[sample2time==t1]
   x2 = x[sample2time==t2]
-  d = x2-x1
-  n = length(d)
-  sdd = sd(d)/sqrt(length(d))
-  return(c(yi=mean(d),vi=sdd^2))
+  d = x2-x1;n = length(d)
+  sdd = sd(d)/sqrt(n)
+  md = mean(d)
+  tstat = mean(d)/sdd
+  return(c(yi=mean(d),vi=sdd^2,sdd=sdd,df=n-1,tstat=tstat,
+           p=2*pt(-abs(tstat),df=n-1)))
 }
 # # test
 # x1 = rnorm(10);x2=rnorm(10);x=c(x1,x2)
 # s2t = c(rep(0,10),rep(1,10))
 # pp =get_paired_ttest_yi_vi(x,s2t,0,1)
 # pp
-# tt = t.test(x1,x2,paired = T)
-# tt$estimate/tt$statistic
-# tt$estimate
+# tt = t.test(x2,x1,paired = T)
+# tt
 
 get_ttest_yi_vi_per_dataset<-function(mat,metadata){
   dataset_times = metadata$time[colnames(mat)]

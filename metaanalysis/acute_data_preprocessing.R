@@ -3,7 +3,7 @@
 # it in easy to use objects
 setwd('/Users/David/Desktop/MoTrPAC/PA_database')
 library('xlsx');library('GEOquery');library(corrplot)
-source('/Users/David/Desktop/repos/motrpac/metaanalysis/helper_functions.R')
+source('/Users/David/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions.R')
 
 # Comments about the acute metadata
 # Time series:
@@ -272,7 +272,6 @@ for (dataset in unique(dataset_ids[analysis_samples])){
   dataset2preprocessed_data[[dataset]] = list()
   dataset2preprocessed_data[[dataset]][["probe_data"]] = data_matrix
   dataset2preprocessed_data[[dataset]][["gene_data"]] = genes_data_matrix
-  # dataset2preprocessed_data[[dataset]][["probe_fold_changes"]] = probe_fold_changes
   dataset2preprocessed_data[[dataset]][["gene_fold_changes"]] = gene_fold_changes
   
   # release memory and save
@@ -325,22 +324,11 @@ load(OUT_FILE)
 load("PADB_sample_metadata_acute.RData")
 acute_metadata = get(load("PADB_sample_metadata_acute.RData"))
 
-# # test
-# res1 = get_ttest_yi_vi_per_dataset(cohort_data[[1]]$gene_data,acute_metadata)
-# mat1 = cohort_data[[1]]$gene_fchanges
-# res2 = rowMeans(mat1[,grepl(colnames(mat1),pattern='2.5')])
-# max(abs(res1$`2.5`[,"yi"]-res2))
-
 # compute ttest p-values, yi's and vi's
 for(j in 1:length(cohort_data)){
   if(length(cohort_data[[j]])<3){next}
-  res1 = get_ttest_yi_vi_per_dataset(cohort_data[[j]]$gene_data,acute_metadata)
-  res2 = get_ttest_pval_per_dataset(cohort_data[[j]]$gene_data,acute_metadata)
-  for(nn in names(res1)){
-    res1[[nn]] = cbind(res1[[nn]],res2[,nn])
-    colnames(res1[[nn]]) = c("yi","vi","p")
-  }
-  cohort_data[[j]][["time2ttest_stats"]] = res1
+  cohort_data[[j]][["time2ttest_stats"]] =
+    get_ttest_yi_vi_per_dataset(cohort_data[[j]]$gene_data,acute_metadata)
 }
 table(sapply(cohort_data,function(x)is.null(x$gene_fold_changes)))
 save(cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE)
