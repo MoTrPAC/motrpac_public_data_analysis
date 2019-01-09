@@ -93,6 +93,14 @@ longterm_cohort_table = t(sapply(longterm_metadata,get_metadata_for_table,subjs=
 write.table(acute_cohort_table,quote=F,sep="\t")
 write.table(longterm_cohort_table,quote=F,sep="\t")
 
+# Statistics for display items
+# gd = acute_gene_tables_raw[[1]]
+# tb = table(gd$time,gd$tissue)
+# gd$time = simplify_time_acute(gd$time)
+# tb = table(gd$time,gd$tissue)
+# gd = longterm_gene_tables_raw[[1]]
+# tb = table(gd$time,gd$tissue)
+
 #####################################################
 
 # Load or compute the gene patterns

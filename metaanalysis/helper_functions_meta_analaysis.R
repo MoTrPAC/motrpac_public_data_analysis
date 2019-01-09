@@ -261,131 +261,133 @@ cluster_genes_by_homogeneity <- function(x,thr=0.5,func=kmeans,...){
 
 #########################################################
 
-##################################################################
-############## Mixed effect models using lme4 ####################
-##################################################################
-library(ggplot2);library(grid);library(lme4)
-# These functions were used to test methods for analyzing
-# fold change data at the subject level.
+# ##################################################################
+# ############## Mixed effect models using lme4 ####################
+# ##################################################################
+# library(ggplot2);library(grid);library(lme4)
+# # These functions were used to test methods for analyzing
+# # fold change data at the subject level.
+# 
+# # Mixed-effects analysis functions
+# get_dummy_subject_randomized_vector<-function(times,subjects){
+#   dummy_times = times
+#   for(su in unique(subjects)){
+#     inds = which(subjects==su)
+#     if(length(inds)<=1){next}
+#     curr_t = sample(times[inds])
+#     dummy_times[inds] = curr_t
+#   }
+#   return(dummy_times)
+# }
+# run_mixed_effect_model1<-function(x,d1,return_pvals=T){
+#   d = cbind(data.frame(x=x,row.names=rownames(d1)),d1)
+#   lmer_obj_0 = lmer(x ~  factor(tissue) + factor(training) + factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
+#   lmer_obj = lmer(x ~  ordered(timev) + factor(tissue) + factor(training) + factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
+#   lmer_obj_int1 = list()
+#   lmer_obj_int1[["tissue"]] =  lmer(x ~  ordered(timev) * factor(tissue) + factor(training) + factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
+#   lmer_obj_int1[["training"]] =  lmer(x ~  ordered(timev) * factor(training) + factor(tissue) + factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
+#   lmer_obj_int1[["sex"]] =  lmer(x ~  ordered(timev) * factor(sex) + factor(tissue) + factor(training) + (1|dataset/subjs) ,REML=F,data=d)
+#   a1 = get_pairwise_anova_aic_bic_p(lmer_obj,lmer_obj_0)
+#   int_a = sapply(lmer_obj_int1,get_pairwise_anova_aic_bic_p,obj2=lmer_obj)
+#   int_a_0 = sapply(lmer_obj_int1,get_pairwise_anova_aic_bic_p,obj2=lmer_obj_0)
+#   if(return_pvals){
+#     pvals = unlist(c(a1[3],int_a[3,],int_a_0[3,]))
+#     return(pvals)
+#   }
+#   return(list(lmer_obj=lmer_obj,lmer_obj_0=lmer_obj_0,interaction_lmers = lmer_obj_int1,pvals=pvals))
+# }
+# run_mixed_effect_model2<-function(x,d1,return_pvals=T,empirical_pval=T,...){
+#   d = cbind(data.frame(x=x,row.names=rownames(d1)),d1)
+#   lmer_obj_0 = lmer(x ~  factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
+#   lmer_obj = lmer(x ~  ordered(timev) * factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
+#   a1 = get_pairwise_anova_aic_bic_p(lmer_obj,lmer_obj_0)
+#   if(empirical_pval){
+#     rand_scores = get_lmer_model_empirical_null(
+#       x ~  ordered(timev) * factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs),
+#       d,RMEL=F)
+#     emp_p = (1+sum(rand_scores[,2]<=a1[2]))/(1+nrow(rand_scores))
+#     return(emp_p)
+#   }
+#   if(return_pvals){return(as.numeric(a1))}
+#   return(list(lmer_obj=lmer_obj,lmer_obj_0=lmer_obj_0))
+# }
+# get_mixed_effect_model_time_empirical_p<-function(x,frm1,frm0,d1,reps=1000,min_reps=100,statistic="Chisq",thr=0.05,...){
+#   min_reps = min(min_reps,reps)
+#   d = cbind(data.frame(x=x,row.names=rownames(d1)),d1)
+#   rand_scores = c()
+#   m1 = lmer(frm1,d,REML=F)
+#   m0 = lmer(frm0,d,REML=F)
+#   anova_real = as.numeric(anova(m1,m0)[2,statistic])
+#   d_copy=d
+#   for(j in 1:reps){
+#     d_copy$timev = get_dummy_subject_randomized_vector(d$timev,d$subjs)
+#     rand_m1 = lmer(frm1,d_copy,REML=F,control=lmerControl(check.rankX =  "silent.drop.cols"))
+#     rand_m0 = lmer(frm0,d_copy,REML=F,control=lmerControl(check.rankX =  "silent.drop.cols"))
+#     anova_rand = as.numeric(anova(rand_m1,rand_m0)[2,statistic])
+#     rand_scores[j] = anova_rand
+#     if(j>=min_reps){
+#       emp_p = (1+sum(rand_scores>=anova_real))/(j+1)
+#       if(emp_p>thr){break}
+#       print(emp_p)
+#     }
+#   }
+#   return(emp_p)
+# }
+# get_pairwise_anova_aic_bic_p<-function(obj1,obj2){
+#   return(anova(obj1,obj2)[2,c(2,3,8)])
+# }
+# get_mixed_effect_model_time_apprx_p<-function(x,frm1,frm0,d1,statistic="Pr(>Chisq)",...){
+#   d = cbind(data.frame(x=x,row.names=rownames(d1)),d1)
+#   m1 = lmer(frm1,d,REML=F)
+#   m0 = lmer(frm0,d,REML=F)
+#   return(as.numeric(anova(m1,m0)[2,statistic]))
+# }
+# get_mixed_effect_model_time_apprx_stat_diff<-function(x,frm1,frm0,d1,statistic="Pr(>Chisq)",...){
+#   d = cbind(data.frame(x=x,row.names=rownames(d1)),d1)
+#   m1 = lmer(frm1,d,REML=F)
+#   m0 = lmer(frm0,d,REML=F)
+#   an =anova(m1,m0)[,statistic]
+#   return(an[1]-an[2])
+# }
+# get_stats_df_chisq<-function(stats,ps,range,use_log=T,func=abs){
+#   mse_minus_log = c()
+#   if(use_log){log_ps = -log(ps,base=10)}
+#   for(j in range[-1]){
+#     curr_ps = pchisq(stats,df=j,lower.tail = F)
+#     curr_ps[curr_ps<min(ps)] = min(ps)
+#     mse_minus_log[as.character(j)] = mean(func(ps-curr_ps))
+#     if(use_log){
+#       curr_ps = -log(curr_ps,base=10)
+#       mse_minus_log[as.character(j)] = mean(func(log_ps-curr_ps))
+#     }
+#     plot(curr_ps,log_ps,main=j);abline(0,1)
+#   }
+#   return(range[which(mse_minus_log==min(mse_minus_log))[1]])
+# }
+# get_stats_df_chisq2<-function(stats,ps,range){
+#   comparison_ps = c()
+#   for(j in range[-1]){
+#     curr_ps = pchisq(stats,df=j,lower.tail = F)
+#     curr_ps[curr_ps<min(ps)] = min(ps)
+#     p = wilcox.test(ps,curr_ps,alternative = "less",paired=T)$p.value
+#     print(p)
+#     comparison_ps[j]=p
+#     if (p < 1e-50){break}
+#   }
+#   plot(comparison_ps)
+#   return(j)
+# }
+# get_stats_df_chisq3<-function(stats,ps,range){
+#   comparison_ps = c()
+#   for(j in range[-1]){
+#     curr_ps = pchisq(stats,df=j,lower.tail = F)
+#     curr_ps[curr_ps<min(ps)] = min(ps)
+#     if(all(curr_ps>=ps)){break}
+#   }
+#   return(j)
+# }
 
-# Mixed-effects analysis functions
-get_dummy_subject_randomized_vector<-function(times,subjects){
-  dummy_times = times
-  for(su in unique(subjects)){
-    inds = which(subjects==su)
-    if(length(inds)<=1){next}
-    curr_t = sample(times[inds])
-    dummy_times[inds] = curr_t
-  }
-  return(dummy_times)
-}
-run_mixed_effect_model1<-function(x,d1,return_pvals=T){
-  d = cbind(data.frame(x=x,row.names=rownames(d1)),d1)
-  lmer_obj_0 = lmer(x ~  factor(tissue) + factor(training) + factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
-  lmer_obj = lmer(x ~  ordered(timev) + factor(tissue) + factor(training) + factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
-  lmer_obj_int1 = list()
-  lmer_obj_int1[["tissue"]] =  lmer(x ~  ordered(timev) * factor(tissue) + factor(training) + factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
-  lmer_obj_int1[["training"]] =  lmer(x ~  ordered(timev) * factor(training) + factor(tissue) + factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
-  lmer_obj_int1[["sex"]] =  lmer(x ~  ordered(timev) * factor(sex) + factor(tissue) + factor(training) + (1|dataset/subjs) ,REML=F,data=d)
-  a1 = get_pairwise_anova_aic_bic_p(lmer_obj,lmer_obj_0)
-  int_a = sapply(lmer_obj_int1,get_pairwise_anova_aic_bic_p,obj2=lmer_obj)
-  int_a_0 = sapply(lmer_obj_int1,get_pairwise_anova_aic_bic_p,obj2=lmer_obj_0)
-  if(return_pvals){
-    pvals = unlist(c(a1[3],int_a[3,],int_a_0[3,]))
-    return(pvals)
-  }
-  return(list(lmer_obj=lmer_obj,lmer_obj_0=lmer_obj_0,interaction_lmers = lmer_obj_int1,pvals=pvals))
-}
-run_mixed_effect_model2<-function(x,d1,return_pvals=T,empirical_pval=T,...){
-  d = cbind(data.frame(x=x,row.names=rownames(d1)),d1)
-  lmer_obj_0 = lmer(x ~  factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
-  lmer_obj = lmer(x ~  ordered(timev) * factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs) ,REML=F,data=d)
-  a1 = get_pairwise_anova_aic_bic_p(lmer_obj,lmer_obj_0)
-  if(empirical_pval){
-    rand_scores = get_lmer_model_empirical_null(
-      x ~  ordered(timev) * factor(tissue) * factor(training) * factor(sex) + (1|dataset/subjs),
-      d,RMEL=F)
-    emp_p = (1+sum(rand_scores[,2]<=a1[2]))/(1+nrow(rand_scores))
-    return(emp_p)
-  }
-  if(return_pvals){return(as.numeric(a1))}
-  return(list(lmer_obj=lmer_obj,lmer_obj_0=lmer_obj_0))
-}
-get_mixed_effect_model_time_empirical_p<-function(x,frm1,frm0,d1,reps=1000,min_reps=100,statistic="Chisq",thr=0.05,...){
-  min_reps = min(min_reps,reps)
-  d = cbind(data.frame(x=x,row.names=rownames(d1)),d1)
-  rand_scores = c()
-  m1 = lmer(frm1,d,REML=F)
-  m0 = lmer(frm0,d,REML=F)
-  anova_real = as.numeric(anova(m1,m0)[2,statistic])
-  d_copy=d
-  for(j in 1:reps){
-    d_copy$timev = get_dummy_subject_randomized_vector(d$timev,d$subjs)
-    rand_m1 = lmer(frm1,d_copy,REML=F,control=lmerControl(check.rankX =  "silent.drop.cols"))
-    rand_m0 = lmer(frm0,d_copy,REML=F,control=lmerControl(check.rankX =  "silent.drop.cols"))
-    anova_rand = as.numeric(anova(rand_m1,rand_m0)[2,statistic])
-    rand_scores[j] = anova_rand
-    if(j>=min_reps){
-      emp_p = (1+sum(rand_scores>=anova_real))/(j+1)
-      if(emp_p>thr){break}
-      print(emp_p)
-    }
-  }
-  return(emp_p)
-}
-get_pairwise_anova_aic_bic_p<-function(obj1,obj2){
-  return(anova(obj1,obj2)[2,c(2,3,8)])
-}
-get_mixed_effect_model_time_apprx_p<-function(x,frm1,frm0,d1,statistic="Pr(>Chisq)",...){
-  d = cbind(data.frame(x=x,row.names=rownames(d1)),d1)
-  m1 = lmer(frm1,d,REML=F)
-  m0 = lmer(frm0,d,REML=F)
-  return(as.numeric(anova(m1,m0)[2,statistic]))
-}
-get_mixed_effect_model_time_apprx_stat_diff<-function(x,frm1,frm0,d1,statistic="Pr(>Chisq)",...){
-  d = cbind(data.frame(x=x,row.names=rownames(d1)),d1)
-  m1 = lmer(frm1,d,REML=F)
-  m0 = lmer(frm0,d,REML=F)
-  an =anova(m1,m0)[,statistic]
-  return(an[1]-an[2])
-}
-get_stats_df_chisq<-function(stats,ps,range,use_log=T,func=abs){
-  mse_minus_log = c()
-  if(use_log){log_ps = -log(ps,base=10)}
-  for(j in range[-1]){
-    curr_ps = pchisq(stats,df=j,lower.tail = F)
-    curr_ps[curr_ps<min(ps)] = min(ps)
-    mse_minus_log[as.character(j)] = mean(func(ps-curr_ps))
-    if(use_log){
-      curr_ps = -log(curr_ps,base=10)
-      mse_minus_log[as.character(j)] = mean(func(log_ps-curr_ps))
-    }
-    plot(curr_ps,log_ps,main=j);abline(0,1)
-  }
-  return(range[which(mse_minus_log==min(mse_minus_log))[1]])
-}
-get_stats_df_chisq2<-function(stats,ps,range){
-  comparison_ps = c()
-  for(j in range[-1]){
-    curr_ps = pchisq(stats,df=j,lower.tail = F)
-    curr_ps[curr_ps<min(ps)] = min(ps)
-    p = wilcox.test(ps,curr_ps,alternative = "less",paired=T)$p.value
-    print(p)
-    comparison_ps[j]=p
-    if (p < 1e-50){break}
-  }
-  plot(comparison_ps)
-  return(j)
-}
-get_stats_df_chisq3<-function(stats,ps,range){
-  comparison_ps = c()
-  for(j in range[-1]){
-    curr_ps = pchisq(stats,df=j,lower.tail = F)
-    curr_ps[curr_ps<min(ps)] = min(ps)
-    if(all(curr_ps>=ps)){break}
-  }
-  return(j)
-}
+
 ################ Visualization of subject specific data ################
 get_profile_longi_line_plot<-function(x,time,subj,subj_groups=NULL){
   d = data.frame(profile=x,time=time,subj=subj)

@@ -1,5 +1,15 @@
+# Our algorithm for analysis of a single gene
+# Input: datasets for time point t and gene g
+# 1. Run meta-analysis for endurence and resistance (and both)
+# 2. Run meta-analysis for controls
+# 3. Get controls intercept estimation beta_c
+# 4. Get current gene's overall diff expression: beta_e = max(beta_0,beta_0 + beta_endurence)
+# 5. SCORE 1: abs(beta_e-beta_c)
+# 6. SCORE 2: Egger's test of the exercise meta-analysis
+# 7. Return SCORE 1, SCORE 2, and the betas (and their significance) from the exercise meta-analysis
+
 setwd('/Users/David/Desktop/MoTrPAC/PA_database')
-library(org.Hs.eg.db)
+library(org.Hs.eg.db);library(metafor)
 source('/Users/David/Desktop/repos/motrpac/metaanalysis/helper_functions.R')
 source('/Users/David/Desktop/repos/motrpac/metaanalysis/helper_functions_meta_analaysis.R')
 entrez2symbol = as.list(org.Hs.egSYMBOL)
@@ -13,27 +23,9 @@ longterm_datasets = cohort_data
 longterm_metadata = cohort_metadata
 load("PADB_dataset_level_meta_analysis_data.RData")
 
-# ####### Look at datasets with extremely low variances ######
-# variances = list();ps = list()
-# for(nn1 in names(acute_datasets)){
-#   l = acute_datasets[[nn1]]$time2ttest_stats
-#   variances[[nn1]] = sapply(l,function(x)x[,"vi"])
-#   ps[[nn1]] = sapply(l,function(x)x[,"p"])
-# }
-# sapply(variances,dim)
-# variances = variances[sapply(variances,function(x)!is.null(dim(x)))]
-# ps = ps[names(variances)]
-# low_vars_prop = sapply(variances,function(x){x=x*x;table(c(x)<0.001)["TRUE"]/length(x)})
-# low_vars_prop[is.na(low_vars_prop)]=0
-# names(low_vars_prop) = names(variances)
-# cohort2size = sapply(acute_metadata,function(x)length(x$gsms))
-# cohort2size = cohort2size[names(variances)]
-# cohort2num_times = table(acute_gene_tables_raw[[1]]$V1)[names(variances)]
-# cor(low_vars_prop,cohort2size,method='spearman')
-# cor(low_vars_prop,cohort2size/cohort2num_times,method='spearman')
-# plot(low_vars_prop,cohort2size/cohort2num_times)
-# ####################
-
+#' Change the time field from numeric to ordered factor.
+#' @param gdata A data frame with a column "time"
+#' @return A new data frame.
 simplify_time_in_gdata<-function(gdata,func=simplify_time_acute){
   gdata$time = func(gdata$time)
   gdata$time = ordered(gdata$time)
@@ -42,26 +34,46 @@ simplify_time_in_gdata<-function(gdata,func=simplify_time_acute){
 acute_gene_tables_simpletime = lapply(acute_gene_tables,simplify_time_in_gdata)
 acute_gene_tables_raw_simpletime = lapply(acute_gene_tables_raw,simplify_time_in_gdata)
 
-# For display items
-gd = acute_gene_tables_raw[[1]]
-tb = table(gd$time,gd$tissue)
-gd$time = simplify_time_acute(gd$time)
-tb = table(gd$time,gd$tissue)
-gd = longterm_gene_tables_raw[[1]]
-tb = table(gd$time,gd$tissue)
+# Some simple tests
+obj = acute_gene_tables_simpletime[["10891"]]
+obj = obj[obj$tissue=="muscle",]
+colnames(obj)
+# Very simple models without specifying repeated measures
+res = rma(yi,vi,data = obj,mods = ~1+training+time+as.numeric(avg_age)+prop_males,weights = 1/vi)
+res0 = rma(yi,vi,data = obj,weights=1/vi)
+# useful functions: funnel, forest, radial, confint, summary, rstandard, rstudent, residuals
+# Add noise structure to random effects
+# The nested structure is required to have different correlated
+# random effects for time points within a cohort.
+res_mv1 = rma.mv(yi,vi,data = obj,mods = ~1+training+time,
+                 random = ~ V1|gse,struct="AR")
+res_mv2 = rma.mv(yi,vi,data = obj,
+                 mods = ~1+training+time+as.numeric(prop_males),
+                 random = list(~ V1|gse),struct="AR")
+plot(residuals(res_mv2),col=as.factor(obj$gse))
+forest(res_mv2)
+funnel(res_mv1)
+funnel(res_mv2)
 
-# Our algorithm:
-# Input: datasets for time point t and gene g
-# 1. Run meta-analysis for endurence and resistance (and both)
-# 2. Run meta-analysis for controls
-# 3. Get controls' intercept estimation beta_c
-# 4. Get current gene's overall diff expression: beta_e = max(beta_0,beta_0 + beta_endurence)
-# 5. SCORE 1: abs(beta_e-beta_c)
-# 6. SCORE 2: Egger's test of the exercise meta-analysis
-# 7. Return SCORE 1, SCORE 2, and the betas (and their significance) from the exercise meta-analysis
+# A series of helper functions for implementing our algorithm
+controls_meta_analysis<-function(gdata){
+  gdata = gdata[!grepl("treatment",gdata$training),]
+  gdata_c = gdata[grepl("untrained",gdata$training),]
+  beta_c_est = NA; beta_c_lb = NA; beta_c_ub = NA
+  if(nrow(gdata_c)>0){
+    obj_c = rma(yi,vi,weights = 1/vi,data=gdata_c)
+    beta_c_est = obj_c$beta[[1]]
+    beta_c_lb = obj_c$ci.lb[1]
+    beta_c_ub = obj_c$ci.ub[1]
+  }
+  return(c(beta_c_est,beta_c_lb,beta_c_ub))
+}
 
-# Input assumption: gdata has a single time point in the $time field
-time_point_metaanalysis<-function(gdata,remove_treatment=T){
+#' Implementation of our single window analysis
+#' @param gdata A data frame with a single time point in the $time field
+#' @param remove_treatment A logical value indicating whether we want to remove all special treatment cohorts (e.g., drug+exercise).
+#' @return A vector with the results of the meta-analysis.
+time_window_metaanalysis<-function(gdata,remove_treatment=T){
   if(remove_treatment){gdata = gdata[!grepl("treatment",gdata$training),]}
   gdata$vi = pmax(0.00001,gdata$vi)
   gdata_e = gdata[!grepl("untrained",gdata$training),]
@@ -77,7 +89,7 @@ time_point_metaanalysis<-function(gdata,remove_treatment=T){
   if(has_tr){
     success = F
     gdata_e = tryCatch({
-      obj_e = rma.mv(yi,vi,data = gdata_e,random= ~V1|gse,mods = ~training,
+      obj_e = rma.mv(yi,vi,data = gdata_e,random= ~V1|gse,struct="AR",mods = ~training,
                      control=list(iter.max=10000))
       success = T
     },error = function (e){
@@ -89,7 +101,7 @@ time_point_metaanalysis<-function(gdata,remove_treatment=T){
     gdata_e = gdata[!grepl("untrained",gdata$training),]
     if(!success){
       try({
-        obj_e = rma.mv(yi,vi,data = gdata_e,random= ~V1|gse,mods = ~training,
+        obj_e = rma.mv(yi,vi,data = gdata_e,random= ~V1|gse,struct="AR",mods = ~training,
                        control=list(iter.max=10000,rel.tol=1e-8)) 
         success = T
       })
@@ -97,7 +109,7 @@ time_point_metaanalysis<-function(gdata,remove_treatment=T){
     gdata_e = gdata[!grepl("untrained",gdata$training),]
     if(!success){
       try({
-        obj_e = rma.mv(yi,vi,data = gdata_e,random= ~V1|gse,mods = ~training,
+        obj_e = rma.mv(yi,vi,data = gdata_e,random= ~V1|gse,struct="AR",mods = ~training,
                        control=list(iter.max=10000,rel.tol=1e-7))
       })
     }
@@ -105,7 +117,7 @@ time_point_metaanalysis<-function(gdata,remove_treatment=T){
   else{
     success = F
     gdata_e = tryCatch({
-      obj_e = rma.mv(yi,vi,data = gdata_e,random= ~V1|gse,
+      obj_e = rma.mv(yi,vi,data = gdata_e,random= ~V1|gse,struct="AR",
                      control=list(iter.max=10000))
       success = T
     },error = function (e){
@@ -117,13 +129,13 @@ time_point_metaanalysis<-function(gdata,remove_treatment=T){
     gdata_e = gdata[!grepl("untrained",gdata$training),]
     if(!success){
       try({
-        obj_e = rma.mv(yi,vi,data = gdata_e,random= ~V1|gse,
+        obj_e = rma.mv(yi,vi,data = gdata_e,random= ~V1|gse,struct="AR",
                        control=list(iter.max=10000,rel.tol=1e-8)) 
         success = T
       })
     }
     if(!success){
-      obj_e = rma.mv(yi,vi,data = gdata_e,random= ~V1|gse,
+      obj_e = rma.mv(yi,vi,data = gdata_e,random= ~V1|gse,struct="AR",
                      control=list(iter.max=10000,rel.tol=1e-7)) 
     }
   }
@@ -195,7 +207,7 @@ perform_timepoint_metaanalyses<-function(gdata,time_simp_func=NULL,tissue="muscl
   for(tt in unique(gdata$time)){
     currg = gdata[gdata$time == tt,]
     if(length(unique(currg[currg$training!="untrained","gse"]))<min_studies){next}
-    v = time_point_metaanalysis(currg)
+    v = time_window_metaanalysis(currg)
     names(v) = paste(paste("tp",tt,sep="_"),names(v),sep=';')
     out = c(out,v)
   }
@@ -241,84 +253,7 @@ get_control_stat_test_p<-function(out){
   return(out[grepl("score1_ME_p",names(out))])
 }
 
-# # Some tests
-# gdata = acute_gene_tables_raw_simpletime[["10891"]]
-# gdata$vi = pmax(gdata$vi,0.001)
-# gdata = gdata[gdata$time==4&gdata$tissue=="muscle"&gdata$training!="untrained",]
-# res = rma.mv(yi,vi,data=gdata,random=~1|gse,mods = ~ training)$pval
-# print(res)
-# res = rma.mv(yi,vi,data=gdata,random=~V1/gse,mods = ~ training)$pval
-# print(res)
-# gdata = longterm_gene_tables_raw[[1]]
-# gdata$vi = pmax(gdata$vi,0.001)
-# gdata$time = simplify_time_longterm_muscle(gdata$time)
-# gdata = gdata[gdata$tissue=="muscle"&gdata$training!="untrained",]
-# gdata = gdata[gdata$time<=100&gdata$tissue=="muscle"&gdata$training!="untrained",]
-# table(gdata$gse,gdata$time)
-# res = rma.mv(yi,vi,data=gdata,random=~1|gse,mods = ~ training)$pval
-# print(res)
-# res = rma.mv(yi,vi,data=gdata,random=~V1/gse,mods = ~ training)$pval
-# print(res)
-# # compare samples
-# samp = sample(1:10000)[1:300]
-# scores1=c();scores2=c()
-# for(nn in samp){
-#   gdata = acute_gene_tables_raw[[nn]]
-#   gdata$vi = pmax(gdata$vi,0.0001)
-#   gdata$time = simplify_time_acute(gdata$time)
-#   gdata$time = 100
-#   gdata = gdata[gdata$time==100&gdata$tissue=="muscle"&gdata$training!="untrained",]
-#   try({
-#     res1 = rma.mv(yi,vi,data=gdata,random=~1|gse,mods = ~ training)$pval
-#     res2 = rma.mv(yi,vi,data=gdata,random=~V1/gse,struct="HCS",mods = ~ training)$pval
-#     scores1=rbind(scores1,res1)
-#     scores2=rbind(scores2,res2)
-#   })
-# }
-# plot(c(scores1),c(scores2));abline(0,1)
-# hist(scores1);hist(scores2)
-# 
-# # Look at the number of gses per expected analysis group
-# gdata = longterm_gene_tables_raw[[1]]
-# length(unique(gdata[gdata$tissue=="muscle"&gdata$training!="untrained","gse"]))
-# length(unique(gdata[gdata$tissue=="blood"&gdata$training!="untrained","gse"]))
-# gdata = acute_gene_tables_raw[[1]]
-# length(unique(gdata[gdata$tissue=="muscle"&gdata$training!="untrained","gse"]))
-# length(unique(gdata[gdata$tissue=="blood"&gdata$training!="untrained","gse"]))
-# get_num_gses_per_simplified_time_func<-function(gdata,tissue="muscle",func = function(x)x){
-#   gdata$time = func(gdata$time)
-#   gdata = gdata[gdata$tissue==tissue,]
-#   gdata = gdata[!grepl("untrained",gdata$training),]
-#   gdata = gdata[!grepl("treatment",gdata$training),]
-#   return(table(gdata$gse,gdata$time))
-# }
-# gdata = longterm_gene_tables_raw[[1]]
-# gdata = gdata[!grepl("treatment",gdata$training),]
-# get_num_gses_per_simplified_time_func(gdata,"muscle")
-# get_num_gses_per_simplified_time_func(gdata,"blood")
-# gdata = acute_gene_tables_raw_simpletime[[1]]
-# gdata = acute_gene_tables_raw[[1]]
-# gdata = gdata[!grepl("treatment",gdata$training),]
-# get_num_gses_per_simplified_time_func(gdata,"muscle")
-# get_num_gses_per_simplified_time_func(gdata,"blood")
-# gdata = acute_gene_tables_raw[[1]]
-# simplify_time_acute_simple <-function(tt){
-#   tt[tt<10] = 4; tt[tt>=10]=24
-#   return(tt)
-# }
-# get_num_gses_per_simplified_time_func(gdata,"muscle",simplify_time_acute_simple)
-# get_num_gses_per_simplified_time_func(gdata,"blood",simplify_time_acute_simple)
-
-# tp_meta_analysis_results[["acute,muscle"]] = list()
-# for(g in setdiff(names(acute_gene_tables_raw_simpletime),names(tp_meta_analysis_results[["acute,muscle"]]))){
-#   tp_meta_analysis_results[["acute,muscle"]][[g]] = perform_timepoint_metaanalyses(acute_gene_tables_raw_simpletime[[g]],tissue="muscle")
-# }
-# tp_meta_analysis_results[["longterm,muscle"]] = list()
-# for(g in setdiff(names(longterm_gene_tables_raw_simpletime),names(tp_meta_analysis_results[["longterm,muscle"]]))){
-#   tp_meta_analysis_results[["longterm,muscle"]][[g]] = perform_timepoint_metaanalyses(longterm_gene_tables_raw[[g]],
-#                                                        time_simp_func=simplify_time_longterm_muscle,tissue="muscle")
-# }
-
+# Run the flow
 tp_meta_analysis_results = list()
 tp_meta_analysis_results[["acute,muscle"]] = t(sapply(acute_gene_tables_raw_simpletime,perform_timepoint_metaanalyses,tissue="muscle"))
 tp_meta_analysis_results[["acute,blood"]] = t(sapply(acute_gene_tables_raw_simpletime,perform_timepoint_metaanalyses,tissue="blood"))
@@ -531,6 +466,84 @@ for(nn in names(selected_genes_all_tests)){
 sapply(tp_meta_analysis_results_statistics,colnames)
 save(tp_meta_analysis_results_statistics,file = "tp_meta_analysis_results_statistics.RData")
 
+# # Some tests
+# gdata = acute_gene_tables_raw_simpletime[["10891"]]
+# gdata$vi = pmax(gdata$vi,0.001)
+# gdata = gdata[gdata$time==4&gdata$tissue=="muscle"&gdata$training!="untrained",]
+# res = rma.mv(yi,vi,data=gdata,random=~1|gse,mods = ~ training)$pval
+# print(res)
+# res = rma.mv(yi,vi,data=gdata,random=~V1/gse,mods = ~ training)$pval
+# print(res)
+# gdata = longterm_gene_tables_raw[[1]]
+# gdata$vi = pmax(gdata$vi,0.001)
+# gdata$time = simplify_time_longterm_muscle(gdata$time)
+# gdata = gdata[gdata$tissue=="muscle"&gdata$training!="untrained",]
+# gdata = gdata[gdata$time<=100&gdata$tissue=="muscle"&gdata$training!="untrained",]
+# table(gdata$gse,gdata$time)
+# res = rma.mv(yi,vi,data=gdata,random=~1|gse,mods = ~ training)$pval
+# print(res)
+# res = rma.mv(yi,vi,data=gdata,random=~V1/gse,mods = ~ training)$pval
+# print(res)
+# # compare samples
+# samp = sample(1:10000)[1:300]
+# scores1=c();scores2=c()
+# for(nn in samp){
+#   gdata = acute_gene_tables_raw[[nn]]
+#   gdata$vi = pmax(gdata$vi,0.0001)
+#   gdata$time = simplify_time_acute(gdata$time)
+#   gdata$time = 100
+#   gdata = gdata[gdata$time==100&gdata$tissue=="muscle"&gdata$training!="untrained",]
+#   try({
+#     res1 = rma.mv(yi,vi,data=gdata,random=~1|gse,mods = ~ training)$pval
+#     res2 = rma.mv(yi,vi,data=gdata,random=~V1/gse,struct="HCS",mods = ~ training)$pval
+#     scores1=rbind(scores1,res1)
+#     scores2=rbind(scores2,res2)
+#   })
+# }
+# plot(c(scores1),c(scores2));abline(0,1)
+# hist(scores1);hist(scores2)
+# 
+# # Look at the number of gses per expected analysis group
+# gdata = longterm_gene_tables_raw[[1]]
+# length(unique(gdata[gdata$tissue=="muscle"&gdata$training!="untrained","gse"]))
+# length(unique(gdata[gdata$tissue=="blood"&gdata$training!="untrained","gse"]))
+# gdata = acute_gene_tables_raw[[1]]
+# length(unique(gdata[gdata$tissue=="muscle"&gdata$training!="untrained","gse"]))
+# length(unique(gdata[gdata$tissue=="blood"&gdata$training!="untrained","gse"]))
+# get_num_gses_per_simplified_time_func<-function(gdata,tissue="muscle",func = function(x)x){
+#   gdata$time = func(gdata$time)
+#   gdata = gdata[gdata$tissue==tissue,]
+#   gdata = gdata[!grepl("untrained",gdata$training),]
+#   gdata = gdata[!grepl("treatment",gdata$training),]
+#   return(table(gdata$gse,gdata$time))
+# }
+# gdata = longterm_gene_tables_raw[[1]]
+# gdata = gdata[!grepl("treatment",gdata$training),]
+# get_num_gses_per_simplified_time_func(gdata,"muscle")
+# get_num_gses_per_simplified_time_func(gdata,"blood")
+# gdata = acute_gene_tables_raw_simpletime[[1]]
+# gdata = acute_gene_tables_raw[[1]]
+# gdata = gdata[!grepl("treatment",gdata$training),]
+# get_num_gses_per_simplified_time_func(gdata,"muscle")
+# get_num_gses_per_simplified_time_func(gdata,"blood")
+# gdata = acute_gene_tables_raw[[1]]
+# simplify_time_acute_simple <-function(tt){
+#   tt[tt<10] = 4; tt[tt>=10]=24
+#   return(tt)
+# }
+# get_num_gses_per_simplified_time_func(gdata,"muscle",simplify_time_acute_simple)
+# get_num_gses_per_simplified_time_func(gdata,"blood",simplify_time_acute_simple)
+
+# tp_meta_analysis_results[["acute,muscle"]] = list()
+# for(g in setdiff(names(acute_gene_tables_raw_simpletime),names(tp_meta_analysis_results[["acute,muscle"]]))){
+#   tp_meta_analysis_results[["acute,muscle"]][[g]] = perform_timepoint_metaanalyses(acute_gene_tables_raw_simpletime[[g]],tissue="muscle")
+# }
+# tp_meta_analysis_results[["longterm,muscle"]] = list()
+# for(g in setdiff(names(longterm_gene_tables_raw_simpletime),names(tp_meta_analysis_results[["longterm,muscle"]]))){
+#   tp_meta_analysis_results[["longterm,muscle"]][[g]] = perform_timepoint_metaanalyses(longterm_gene_tables_raw[[g]],
+#                                                        time_simp_func=simplify_time_longterm_muscle,tissue="muscle")
+# }
+
 # # Manual examinations
 # pval_matrices[[1]]["5166",]
 # pass_test_matrices[[1]]["5166",]
@@ -576,9 +589,6 @@ save(tp_meta_analysis_results_statistics,file = "tp_meta_analysis_results_statis
 # gdata = gdata[gdata$training!="control",]
 # get_subset_forest_plot(gdata,"muscle",main="PGC1, acute, muscle, 4h")
 
-# Large-scale interpretation
-# Load all functions from dataset_level_meta_analysis.R
-# TODO: move all these to a new functions file
 
 
 
