@@ -198,7 +198,9 @@ datasets[["longterm,blood"]] = lapply(longterm_gene_tables,clean_longterm_table,
 # Reshape data for replication analysis
 rep_datasets = lapply(datasets,function(x)t(sapply(x,function(y)as.numeric(y$p))))
 for(nn in names(rep_datasets)){
-  colnames(rep_datasets[[nn]]) = paste(datasets[[nn]][[1]]$V1,datasets[[nn]][[1]]$time,sep=";")
+  colnames(rep_datasets[[nn]]) = 
+    paste(rownames(datasets[[nn]][[1]]),datasets[[nn]][[1]]$V1,
+          datasets[[nn]][[1]]$time,sep=";")
 }
 sapply(rep_datasets,dim)
 sapply(rep_datasets,rownames)
@@ -213,11 +215,7 @@ sapply(untrained_datasets,function(x)dim(x[[1]]))
 ############################################################################
 ############################################################################
 ############################################################################
-# Exploratory analysis of the simplest RE models
-# Focus here is on RE heterogeneity and significance
-samp = sample(1:15000)[1:500]
-samp_datasets = lapply(datasets,function(x,y)x[y],y=samp)
-
+# Simple random effects analysis - to understand the data
 simple_REs = lapply(datasets, function(x)lapply(x,run_simple_re))
 simple_RE_pvals = lapply(simple_REs,function(x)sapply(x,try_get_field,fname="QMp"))
 simple_RE_I2s = lapply(simple_REs,function(x)sapply(x,try_get_field,fname="I2"))
@@ -266,6 +264,7 @@ for(nn in names(simple_RE_pvals)){
 }
 
 # Example for high I2 and low tau
+# TODO: revise and add some stats to the report
 nn  = 2
 selected_is = names(which(simple_RE_I2s[[nn]] > 60 &
                            simple_RE_tau2s[[nn]] < 0.1 & abs(simple_RE_beta[[nn]]) > 0.25))
@@ -280,56 +279,60 @@ colSums(screen_res_locfdr[[nn]]<0.25)
 ############################################################################
 ############################################################################
 # Replication analysis
-library(kernlab);library(corrplot)
+library(kernlab);library(corrplot);library(locfdr)
 source('~/Desktop/old_projects/screen/supplementary_data/submission_code/SCREEN_code_for_submission.R')
 source('~/Desktop/old_projects/screen/supplementary_data/submission_code/twogroups_methods_for_submission.R')
-extract_study_pairwise_correlations<-function(pvals,lfdr_method='bum',use_power=T,threegroups=T,B=50,...){
+extract_study_pairwise_correlations<-function(pvals,lfdr_method='bum',B=50,...){
   print ("Analyzing each study")
-  mar_est = get_study_marginal_estimation(pvals,lfdr_method=lfdr_method,use_power=use_power,threegroups=threegroups,...)
+  mar_est = get_study_marginal_estimation(pvals,lfdr_method=lfdr_method,use_power=T,...)
   lfdr_objs = mar_est$lfdr_objs
   f_1_mat = mar_est$f_1_mat
   f_0_mat = mar_est$f_0_mat
   print ("Done")
-  corrs = get_study_pair_corr_matrix(f_1_mat,f_0_mat,B=B,convergenceEps=1e-4)
-  colnames(corrs) = colnames(pvals)
-  rownames(corrs) = colnames(corrs)
+  corrs = get_study_pair_corr_matrix(f_1_mat,f_0_mat,B=B,convergenceEps=1e-6)
+  colnames(corrs) = colnames(pvals);rownames(corrs) = colnames(corrs)
   return(corrs)
 }
-res = extract_study_pairwise_correlations(rep_datasets[[2]],B=10)
+res = extract_study_pairwise_correlations(rep_datasets[[1]],B=10)
 corrplot(res) 
 corrplot(res>0.1)
-# Check the marginal estimation
-marg_ests_znormix = get_study_marginal_estimation(rep_datasets[[2]],
-                  lfdr_method='znormix',use_power=T,threegroups=F)
-marg_ests_bum = get_study_marginal_estimation(rep_datasets[[2]],lfdr_method='bum')
-marg_ests_locfdr = get_study_marginal_estimation(rep_datasets[[2]],lfdr_method='locfdr',nulltype=0)
+corrplot(cor(rep_datasets[[1]])>0.1)
+plot(-log(rep_datasets[[1]][,1]),-log(rep_datasets[[1]][,2]))
 
-for(nn in colnames(rep_datasets[[2]])){
+# Check the marginal estimation: nice to check monotonicity of the scores,
+# BUM seems to perform better than the other methods
+marg_ests_znormix = get_study_marginal_estimation(rep_datasets[[1]],
+                  lfdr_method='znormix',use_power=T,threegroups=F)
+marg_ests_bum = get_study_marginal_estimation(rep_datasets[[1]],lfdr_method='bum',use_power = F)
+marg_ests_locfdr = get_study_marginal_estimation(rep_datasets[[1]],
+                                                 lfdr_method='locfdr',nulltype=0)
+estimate_prior(marg_ests_bum$f_1_mat[,1:2],marg_ests_bum$f_0_mat[,1:2])
+estimate_prior(marg_ests_znormix$f_1_mat[,1:2],marg_ests_znormix$f_0_mat[,1:2])
+for(nn in colnames(rep_datasets[[1]])){
   xx = cbind(marg_ests_bum$lfdr_objs[[nn]]$fdr,
              marg_ests_znormix$lfdr_objs[[nn]]$fdr,
              marg_ests_locfdr$lfdr_objs[[nn]]$fdr)
   print(nn)
   print(cor(xx))
+  plot(xx[,1],xx[,3])
 }
-
-diag(cor(marg_ests_bum$f_1_mat,marg_ests_znormix$f_1_mat))
-plot(marg_ests_bum$lfdr_objs$GE_A_23$fdr,marg_ests_znormix$lfdr_objs$GE_A_23$fdr)
-plot(marg_ests_bum$lfdr_objs$GE_A_23$fdr,marg_ests_locfdr$lfdr_objs$GE_A_23$fdr)
-plot(marg_ests_bum$lfdr_objs$GE_A_28$fdr,marg_ests_locfdr$lfdr_objs$GE_A_28$fdr)
-plot(marg_ests_bum$lfdr_objs$GE_A_28$fdr,rep_datasets[[2]][,"GE_A_28"])
-plot(marg_ests_znormix$lfdr_objs$GE_A_28$fdr,rep_datasets[[2]][,"GE_A_28"])
+cor(marg_ests_bum$lfdr_objs$`1;GE_A_1;4`$fdr,marg_ests_bum$lfdr_objs$`2;GE_A_1;4`$fdr)
+marg_ests_bum$pws
+hist(rep_datasets[[1]][,1])
+plot(marg_ests_bum$f_1_mat[,1],marg_ests_znormix$f_1_mat[,1])
+plot(marg_ests_bum$f_1_mat[,1],rep_datasets[[1]][,1])
+plot(marg_ests_znormix$f_1_mat[,1],rep_datasets[[1]][,1])
 
 par(mfrow=c(2,2))
-for(j in 1:12){
-  plot(rep_datasets[[2]][,j],marg_ests$f_1_mat[,j])
+for(j in 1:4){
+  plot(rep_datasets[[1]][,j],marg_ests_bum$f_1_mat[,j])
 }
-fitBumModel(rep_datasets[[2]][,"GE_A_28"])
-
+dev.off()
 
 xx = rep_datasets[[3]]
 xx = xx[!apply(is.na(xx),1,any),]
 scr_res = SCREEN(xx,ks=2:8,nH=1000,threegroups = F)
-scr_res2 = SCREEN(xx,ks=2:8,nH=1000,lfdr_method = "locfdr",nulltype=0)
+scr_res2 = SCREEN(xx,ks=2:8,nH=1000,lfdr_method = "bum")
 colSums(scr_res < 0.2)
 plot(scr_res2[,2],apply(-log(xx),1,median))
 plot(scr_res[,1],apply(-log(xx),1,median))
@@ -339,8 +342,11 @@ cor(scr_res,scr_res2)
 # Additional code
 rep_datasets = lapply(rep_datasets,function(xx)xx[!apply(is.na(xx),1,any),])
 sapply(rep_datasets,dim)
-screen_res_znormix = lapply(rep_datasets,function(x)SCREEN(x,ks=2:ncol(x),nH=20000,threegroups = F))
-screen_res_locfdr = lapply(rep_datasets,function(x)SCREEN(x,ks=2:ncol(x),nH=20000,lfdr_method = "locfdr"))
+screen_res_bum = lapply(rep_datasets,function(x)SCREEN(x,ks=2:ncol(x),nH=20000,
+                                                       lfdr_method = "bum",use_power = F))
+screen_res_znormix = lapply(rep_datasets,function(x)SCREEN(x,ks=2:ncol(x),nH=20000,
+                                                           threegroups = F))
+
 for(nn in names(rep_datasets)){
   rownames(screen_res_znormix[[nn]]) = rownames(rep_datasets[[nn]])
   rownames(screen_res_locfdr[[nn]]) = rownames(rep_datasets[[nn]])
