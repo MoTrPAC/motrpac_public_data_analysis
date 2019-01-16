@@ -86,6 +86,11 @@ acute_gdata_metaanalysis<-function(gdata,permtest=F){
   if(permtest && is.element("rma.uni",set=class(sel$model))){
     sel[["permp"]] = permutest(sel$model)
   }
+  # keep the simple models and the top 2
+  aics = sort(l$aics)
+  selected_models = union(names(aics)[1:2],names(aics)[grepl("base_model",names(aics))])
+  l = list(models = l$models[selected_models],aics=l$aics[selected_models])
+  gc()
   return(list(all_models=l,selected=sel))
 }
 
@@ -102,6 +107,11 @@ longterm_gdata_metaanalysis<-function(gdata,permtest=F){
   if(permtest && is.element("rma.uni",set=class(sel$model))){
     sel[["permp"]] = permutest(sel$model)
   }
+  # keep the simple models and the top 2
+  aics = sort(l$aics)
+  selected_models = union(names(aics)[1:2],names(aics)[grepl("base_model",names(aics))])
+  l = list(models = l$models[selected_models],aics=l$aics[selected_models])
+  gc()
   return(list(all_models=l,selected=sel))
 }
 
