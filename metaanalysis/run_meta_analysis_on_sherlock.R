@@ -148,7 +148,7 @@ for(nn in names(naive_rep_analysis_results)){
     analysis1 = mclapply(curr_dataset,acute_gdata_metaanalysis,mc.cores = num_cores)
   }
   else{
-    analysis1 = mclapply(curr_dataset[1:3],longterm_gdata_metaanalysis,mc.cores = num_cores)
+    analysis1 = mclapply(curr_dataset,longterm_gdata_metaanalysis,mc.cores = num_cores)
   }
   analysis2 = unlist(mclapply(curr_dataset,simple_stouffer_meta_analysis,mc.cores=num_cores))
   all_meta_analysis_res[[nn]] = list(model_selection = analysis1,simple_stouffer = analysis2)

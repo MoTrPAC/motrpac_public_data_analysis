@@ -361,20 +361,28 @@ save(naive_rep_analysis_results,datasets,untrained_datasets,file="meta_analysis_
 # Meta-regression and model selection for selected genes
 library(parallel)
 
-all_meta_analysis_res <- list()
-for(nn in names(naive_rep_analysis_results)){
-  curr_dataset = datasets[[nn]][naive_rep_analysis_results[[nn]]]
-  if(grepl("acute",nn)){
-    analysis1 = mclapply(curr_dataset,acute_gdata_metaanalysis,mc.cores = 4)
-  }
-  else{
-    analysis1 = mclapply(curr_dataset[1:3],longterm_gdata_metaanalysis,mc.cores = 4)
-  }
-  analysis2 = unlist(mclapply(curr_dataset,simple_stouffer_meta_analysis,mc.cores=4))
-  all_meta_analysis_res[[nn]] = list(model_selection = analysis1,simple_stouffer = analysis2)
-  forest(analysis1[[3]]$selected$model)
+# all_meta_analysis_res <- list()
+# for(nn in names(naive_rep_analysis_results)){
+#   curr_dataset = datasets[[nn]][naive_rep_analysis_results[[nn]]]
+#   if(grepl("acute",nn)){
+#     analysis1 = mclapply(curr_dataset,acute_gdata_metaanalysis,mc.cores = 4)
+#   }
+#   else{
+#     analysis1 = mclapply(curr_dataset[1:3],longterm_gdata_metaanalysis,mc.cores = 4)
+#   }
+#   analysis2 = unlist(mclapply(curr_dataset,simple_stouffer_meta_analysis,mc.cores=4))
+#   all_meta_analysis_res[[nn]] = list(model_selection = analysis1,simple_stouffer = analysis2)
+#   forest(analysis1[[3]]$selected$model)
+# }
+# save(all_meta_analysis_res,naive_rep_analysis_results,file="meta_analysis_results.RData")
+
+# Load the results (run on sherlock) instead of running the code above
+load("meta_analysis_results.RData")
+
+for(nn in names(all_meta_analysis_res)){
+  analysis1 = all_meta_analysis_res[[nn]][[1]]
+  ps1 = sapply(analysis1,function(x)x$selected$pval)
 }
-save(all_meta_analysis_res,naive_rep_analysis_results,file="meta_analysis_results.RData")
 
 ps1 = sapply(analysis1,function(x)x$pval);abline(0,1)
 cor(-log(ps1),-log(analysis2),method="spearman")
