@@ -13,7 +13,6 @@ library(org.Hs.eg.db);library(metafor)
 source('/Users/David/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions.R')
 entrez2symbol = as.list(org.Hs.egSYMBOL)
 
-
 ############################################################################
 ############################################################################
 ############################################################################
@@ -136,10 +135,10 @@ acute_gdata_metaanalysis<-function(gdata,permtest=F){
   if(permtest && is.element("rma.uni",set=class(sel$model))){
     sel[["permp"]] = permutest(sel$model)
   }
-  return(sel)
+  return(list(all_models=l,selected=sel))
 }
 
-longterm_gdata_metaanalysis<-function(gdata){
+longterm_gdata_metaanalysis<-function(gdata,permtest=F){
   res1 = model_selection_meta_analysis(gdata,random=list(~ 1|gse))
   res0 = model_selection_meta_analysis(gdata,func=rma.uni)
   l = list(
@@ -152,7 +151,7 @@ longterm_gdata_metaanalysis<-function(gdata){
   if(permtest && is.element("rma.uni",set=class(sel$model))){
     sel[["permp"]] = permutest(sel$model)
   }
-  return(sel)
+  return(list(all_models=l,selected=sel))
 }
 
 simple_stouffer_meta_analysis<-function(gdata){
@@ -267,7 +266,7 @@ for(nn in names(simple_RE_pvals)){
 # TODO: revise and add some stats to the report
 nn  = 2
 selected_is = names(which(simple_RE_I2s[[nn]] > 60 &
-                           simple_RE_tau2s[[nn]] < 0.1 & abs(simple_RE_beta[[nn]]) > 0.25))
+    simple_RE_tau2s[[nn]] < 0.1 & abs(simple_RE_beta[[nn]]) > 0.25))
 selected_i = sample(selected_is)[1]
 forest(simple_REs[[nn]][[selected_i]])
 median(as.numeric(datasets[[nn]][[selected_i]]$p))
@@ -275,120 +274,108 @@ screen_res_znormix[[nn]][selected_i,]
 colSums(screen_res_znormix[[nn]]<0.25)
 colSums(screen_res_locfdr[[nn]]<0.25)
 
+save.image(file="workspace_before_rep_analysis.RData")
+
 ############################################################################
 ############################################################################
 ############################################################################
 # Replication analysis
-library(kernlab);library(corrplot);library(locfdr)
-source('~/Desktop/old_projects/screen/supplementary_data/submission_code/SCREEN_code_for_submission.R')
-source('~/Desktop/old_projects/screen/supplementary_data/submission_code/twogroups_methods_for_submission.R')
-extract_study_pairwise_correlations<-function(pvals,lfdr_method='bum',B=50,...){
-  print ("Analyzing each study")
-  mar_est = get_study_marginal_estimation(pvals,lfdr_method=lfdr_method,use_power=T,...)
-  lfdr_objs = mar_est$lfdr_objs
-  f_1_mat = mar_est$f_1_mat
-  f_0_mat = mar_est$f_0_mat
-  print ("Done")
-  corrs = get_study_pair_corr_matrix(f_1_mat,f_0_mat,B=B,convergenceEps=1e-6)
-  colnames(corrs) = colnames(pvals);rownames(corrs) = colnames(corrs)
-  return(corrs)
+# Naive analysis
+naive_rep_analysis<-function(pvals,gses,thr=0.05,nrep=2){
+  v = pvals <= thr
+  if(sum(v,na.rm=T)==0){return(F)}
+  tt = table(v,gses)["TRUE",]
+  return(sum(tt>0) >= nrep)
 }
-res = extract_study_pairwise_correlations(rep_datasets[[1]],B=10)
-corrplot(res) 
-corrplot(res>0.1)
-corrplot(cor(rep_datasets[[1]])>0.1)
-plot(-log(rep_datasets[[1]][,1]),-log(rep_datasets[[1]][,2]))
 
-# Check the marginal estimation: nice to check monotonicity of the scores,
-# BUM seems to perform better than the other methods
-marg_ests_znormix = get_study_marginal_estimation(rep_datasets[[1]],
-                  lfdr_method='znormix',use_power=T,threegroups=F)
-marg_ests_bum = get_study_marginal_estimation(rep_datasets[[1]],lfdr_method='bum',use_power = F)
-marg_ests_locfdr = get_study_marginal_estimation(rep_datasets[[1]],
-                                                 lfdr_method='locfdr',nulltype=0)
-estimate_prior(marg_ests_bum$f_1_mat[,1:2],marg_ests_bum$f_0_mat[,1:2])
-estimate_prior(marg_ests_znormix$f_1_mat[,1:2],marg_ests_znormix$f_0_mat[,1:2])
-for(nn in colnames(rep_datasets[[1]])){
-  xx = cbind(marg_ests_bum$lfdr_objs[[nn]]$fdr,
-             marg_ests_znormix$lfdr_objs[[nn]]$fdr,
-             marg_ests_locfdr$lfdr_objs[[nn]]$fdr)
-  print(nn)
-  print(cor(xx))
-  plot(xx[,1],xx[,3])
-}
-cor(marg_ests_bum$lfdr_objs$`1;GE_A_1;4`$fdr,marg_ests_bum$lfdr_objs$`2;GE_A_1;4`$fdr)
-marg_ests_bum$pws
-hist(rep_datasets[[1]][,1])
-plot(marg_ests_bum$f_1_mat[,1],marg_ests_znormix$f_1_mat[,1])
-plot(marg_ests_bum$f_1_mat[,1],rep_datasets[[1]][,1])
-plot(marg_ests_znormix$f_1_mat[,1],rep_datasets[[1]][,1])
-
-par(mfrow=c(2,2))
-for(j in 1:4){
-  plot(rep_datasets[[1]][,j],marg_ests_bum$f_1_mat[,j])
-}
-dev.off()
-
-xx = rep_datasets[[3]]
-xx = xx[!apply(is.na(xx),1,any),]
-scr_res = SCREEN(xx,ks=2:8,nH=1000,threegroups = F)
-scr_res2 = SCREEN(xx,ks=2:8,nH=1000,lfdr_method = "bum")
-colSums(scr_res < 0.2)
-plot(scr_res2[,2],apply(-log(xx),1,median))
-plot(scr_res[,1],apply(-log(xx),1,median))
-plot(scr_res[,3],apply(-log(xx),1,median))
-cor(scr_res,scr_res2)
-
-# Additional code
-rep_datasets = lapply(rep_datasets,function(xx)xx[!apply(is.na(xx),1,any),])
-sapply(rep_datasets,dim)
-screen_res_bum = lapply(rep_datasets,function(x)SCREEN(x,ks=2:ncol(x),nH=20000,
-                                                       lfdr_method = "bum",use_power = F))
-screen_res_znormix = lapply(rep_datasets,function(x)SCREEN(x,ks=2:ncol(x),nH=20000,
-                                                           threegroups = F))
-
+naive_rep_analysis_results = list()
 for(nn in names(rep_datasets)){
-  rownames(screen_res_znormix[[nn]]) = rownames(rep_datasets[[nn]])
-  rownames(screen_res_locfdr[[nn]]) = rownames(rep_datasets[[nn]])
+  gses = datasets[[nn]][[1]]$gse
+  currn = ceiling(length(unique(gses))/2)
+  print(currn)
+  naive_rep_analysis_results[[nn]] = apply(rep_datasets[[nn]],1,
+      naive_rep_analysis,gses=gses,thr=0.05,nrep=currn)
 }
+sapply(naive_rep_analysis_results,table)
+sapply(naive_rep_analysis_results,function(x)table(x)/length(x))
+sapply(naive_rep_analysis_results,function(x,y)x[y],y="10891")
+sapply(naive_rep_analysis_results,function(x,y)x[y],y="7139")
+sapply(naive_rep_analysis_results,function(x,y)x[y],y="1277")
+sapply(naive_rep_analysis_results,function(x,y)x[y],y="70")
 
-diag(cor(screen_res_znormix[[1]],screen_res_locfdr[[1]],method="spearman"))
-diag(cor(screen_res_znormix[[2]],screen_res_locfdr[[2]]))
-diag(cor(screen_res_znormix[[1]],screen_res_locfdr[[1]]))
+# # Load repfdr results and compare
+# scr_path = "/Users/David/Desktop/MoTrPAC/PA_database/screen_res/"
+# pvals_files = list.files(scr_path)
+# pvals_files = pvals_files[grepl("pvals.txt",pvals_files)]
+# screen_results = list()
+# for (ff in pvals_files){
+#   currname = gsub("_pvals.txt","",ff)
+#   screen_results[[currname]] = list()
+#   for(m in c("bum","znormix")){
+#     outfile = paste(scr_path,currname,"_",m,".txt",sep="")
+#     screen_results[[currname]][[m]] = read.delim(outfile,row.names = 1,header=T)
+#   }
+# }
+# names(screen_results) = gsub("_",",",names(screen_results))
+# save(screen_results,file=paste(scr_path,"screen_results.RData",sep=""))
+# for(nn in names(screen_results)){
+#   gses = datasets[[nn]][[1]]$gse
+#   currn = ceiling(length(unique(gses))/2)
+#   curr_genes1 = names(which(naive_rep_analysis_results[[nn]]))
+#   x1 = screen_results[[nn]]$bum[curr_genes1,currn]
+#   x2 = screen_results[[nn]]$znormix[curr_genes1,currn]
+#   max_fdr_gene = curr_genes1[x2==max(x2)][1]
+#   print(screen_results[[nn]]$bum[max_fdr_gene,])
+#   print(screen_results[[nn]]$znormix[max_fdr_gene,])
+#   print(rep_datasets[[nn]][max_fdr_gene,])
+#   plot(x1,x2)
+# }
+# sapply(screen_results,function(x)colSums(x$bum < 0.1))
 
-rep_num_genes_per_percent = list()
-rep_lfdr = 0.2
-rep_gene_sets = list(); decay_plot_data = list()
-par(mfrow=c(3,4))
-for(nn in names(screen_res)){
-  currgenes = rownames(screen_res[[nn]])
-  mat = screen_res[[nn]]
-  num_genes = colSums(mat<=rep_lfdr)
-  percents = (2:(1+ncol(mat)))/(1+ncol(mat))
-  plot(x=percents,y=num_genes,type='b',main=nn,ylim = c(0,500))
-  ind = which(percents >= 0.5)[1]
-  selected_genes = currgenes[mat[,ind]<=rep_lfdr]
-  if(length(selected_genes)>0){rep_gene_sets[[nn]] = selected_genes}
-  decay_plot_data[[nn]] = list()
-  decay_plot_data[[nn]][["percents"]] = percents
-  decay_plot_data[[nn]][["num_genes"]] = num_genes
-}
-# Select genes, look at known genes and enrichments
-sapply(rep_gene_sets,length)
-rep_gene_sets_names = lapply(rep_gene_sets,function(x,y)sort(unlist(y[x])),y=entrez2symbol)
-known_genes = c("PPARGC1A","COX1","NDUFA","PDK4","VEGFA","KDR","THY1","MYL4",
-                "MYH1","COL1A1","ACTC1","TNNT2","GADD45G","MMP9","NR4A1")
-sapply(rep_gene_sets_names,intersect,y=known_genes)
+# # Some QA
+# nn = "longterm,muscle"
+# bum_res = screen_results[[nn]]$bum[,7]
+# names(bum_res) = rownames(screen_results[[nn]]$bum)
+# plot(bum_res,rowMeans(rep_datasets[[nn]]))
+# hist(bum_res[naive_rep_analysis_results[[nn]]])
+# xx = rep_datasets[[nn]][names(bum_res[bum_res>0.19 & bum_res < 0.2]),]
+# xx = rep_datasets[[nn]][names(which(naive_rep_analysis_results[[nn]])),]
+# library(gplots)
+# heatmap.2(xx)
+# dim(xx)
+
+# # Select genes, look at known genes and enrichments
+# rep_gene_sets_names = lapply(rep_gene_sets,function(x,y)sort(unlist(y[x])),y=entrez2symbol)
+# known_genes = c("PPARGC1A","COX1","NDUFA","PDK4","VEGFA","KDR","THY1","MYL4",
+#                 "MYH1","COL1A1","ACTC1","TNNT2","GADD45G","MMP9","NR4A1")
+# sapply(rep_gene_sets_names,intersect,y=known_genes)
+# sapply(naive_rep_analysis_results,function(x,y)x[y],y=known_genes)
+
+# Save the data needed for the metanaanalysis and model selection below
+save(naive_rep_analysis_results,datasets,untrained_datasets,file="meta_analysis_input.RData")
 
 
 ############################################################################
 ############################################################################
 ############################################################################
 # Meta-regression and model selection for selected genes
-
 library(parallel)
-analysis1 = mclapply(dataset,acute_gdata_metaanalysis,mc.cores = 6)
-analysis2 = unlist(mclapply(dataset,simple_stouffer_meta_analysis,mc.cores=6))
+
+all_meta_analysis_res <- list()
+for(nn in names(naive_rep_analysis_results)){
+  curr_dataset = datasets[[nn]][naive_rep_analysis_results[[nn]]]
+  if(grepl("acute",nn)){
+    analysis1 = mclapply(curr_dataset,acute_gdata_metaanalysis,mc.cores = 4)
+  }
+  else{
+    analysis1 = mclapply(curr_dataset[1:3],longterm_gdata_metaanalysis,mc.cores = 4)
+  }
+  analysis2 = unlist(mclapply(curr_dataset,simple_stouffer_meta_analysis,mc.cores=4))
+  all_meta_analysis_res[[nn]] = list(model_selection = analysis1,simple_stouffer = analysis2)
+  forest(analysis1[[3]]$selected$model)
+}
+save(all_meta_analysis_res,naive_rep_analysis_results,file="meta_analysis_results.RData")
+
 ps1 = sapply(analysis1,function(x)x$pval);abline(0,1)
 cor(-log(ps1),-log(analysis2),method="spearman")
 qqplot(-log(ps1),-log(analysis2))
