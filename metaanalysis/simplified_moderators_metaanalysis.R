@@ -379,9 +379,11 @@ library(parallel)
 # Load the results (run on sherlock) instead of running the code above
 load("meta_analysis_results.RData")
 
+par(mfrow=c(2,2))
 for(nn in names(all_meta_analysis_res)){
   analysis1 = all_meta_analysis_res[[nn]][[1]]
   ps1 = sapply(analysis1,function(x)x$selected$pval)
+  pvalue_qqplot(ps1);abline(0,1)
 }
 
 ps1 = sapply(analysis1,function(x)x$pval);abline(0,1)

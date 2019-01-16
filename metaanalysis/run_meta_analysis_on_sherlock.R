@@ -140,7 +140,7 @@ pvalue_qqplot<-function(ps,...){
 
 # Load the input
 load("meta_analysis_input.RData")
-
+# Run the analysis
 all_meta_analysis_res <- list()
 for(nn in names(naive_rep_analysis_results)){
   curr_dataset = datasets[[nn]][naive_rep_analysis_results[[nn]]]
@@ -155,4 +155,7 @@ for(nn in names(naive_rep_analysis_results)){
   forest(analysis1[[3]]$selected$model)
 }
 save(all_meta_analysis_res,naive_rep_analysis_results,file="meta_analysis_results.RData")
+
+
+
 
