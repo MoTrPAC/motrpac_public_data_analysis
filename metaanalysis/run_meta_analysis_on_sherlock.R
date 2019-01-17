@@ -82,19 +82,17 @@ acute_gdata_metaanalysis<-function(gdata,permtest=F){
     aics = c(add_prefix_to_names("simple",res0$aics),
              add_prefix_to_names("time_ar",res1$aics))
   )
-  sel = select_model_return_p(l)
-  if(permtest && is.element("rma.uni",set=class(sel$model))){
-    sel[["permp"]] = permutest(sel$model)
-  }
+  # sel = select_model_return_p(l)
+  # if(permtest && is.element("rma.uni",set=class(sel$model))){
+  #   sel[["permp"]] = permutest(sel$model)
+  # }
   # keep the simple models and the top 2
-  aics = sort(l$aics)
-  selected_models = union(names(aics)[1:2],names(aics)[grepl("base_model",names(aics))])
-  l = list(models = l$models[selected_models],aics=l$aics[selected_models])
+  l = keep_main_results_for_model_list(l)
   gc()
-  return(list(all_models=l,selected=sel))
+  return(l)
 }
 
-longterm_gdata_metaanalysis<-function(gdata,permtest=F){
+longterm_gdata_metaanalysis<-function(gdata,permtest=F,simple_output=T){
   res1 = model_selection_meta_analysis(gdata,random=list(~ 1|gse))
   res0 = model_selection_meta_analysis(gdata,func=rma.uni)
   l = list(
@@ -103,16 +101,37 @@ longterm_gdata_metaanalysis<-function(gdata,permtest=F){
     aics = c(add_prefix_to_names("simple",res0$aics),
              add_prefix_to_names("time_ar",res1$aics))
   )
-  sel = select_model_return_p(l)
-  if(permtest && is.element("rma.uni",set=class(sel$model))){
-    sel[["permp"]] = permutest(sel$model)
-  }
+  # sel = select_model_return_p(l)
+  # if(permtest && is.element("rma.uni",set=class(sel$model))){
+  #   sel[["permp"]] = permutest(sel$model)
+  # }
   # keep the simple models and the top 2
-  aics = sort(l$aics)
-  selected_models = union(names(aics)[1:2],names(aics)[grepl("base_model",names(aics))])
-  l = list(models = l$models[selected_models],aics=l$aics[selected_models])
+  l = keep_main_results_for_model_list(l)
   gc()
-  return(list(all_models=l,selected=sel))
+  return(l)
+}
+
+keep_main_results_for_model_list<-function(l,num=2){
+  aics = sort(l$aics)
+  selected_models = union(names(aics)[1:num],names(aics)[grepl("base_model",names(aics))])
+  l = list(models = l$models[selected_models],aics=l$aics[selected_models])
+  model_names = names(l$aics)
+  new_l = list()
+  for(nn in model_names){
+    curr_m = l$models[[nn]]
+    coeffs = cbind(curr_m$beta,curr_m$zval,curr_m$pval,curr_m$ci.lb,curr_m$ci.ub)
+    colnames(curr_coeffs) = c("beta","zval","pval","lb","ub")
+    new_l[[nn]] = list(
+      aic_c = l$aics[nn],
+      coeffs = coeffs,
+      mod_p = try_get_field(curr_m,"QMp"),
+      het_p = try_get_field(curr_m,"QEp"),
+      sigma2 = try_get_field(curr_m,"sigma2"),
+      tau2 = try_get_field(curr_m,"tau2"),
+      I2 = try_get_field(curr_m,"I2")
+    )
+  }
+  return(new_l)
 }
 
 simple_stouffer_meta_analysis<-function(gdata){
