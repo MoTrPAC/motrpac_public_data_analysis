@@ -171,7 +171,6 @@ for(nn in names(naive_rep_analysis_results)){
   }
   analysis2 = unlist(mclapply(curr_dataset,simple_stouffer_meta_analysis,mc.cores=num_cores))
   all_meta_analysis_res[[nn]] = list(model_selection = analysis1,simple_stouffer = analysis2)
-  forest(analysis1[[3]]$selected$model)
 }
 save(all_meta_analysis_res,naive_rep_analysis_results,file="meta_analysis_results.RData")
 
