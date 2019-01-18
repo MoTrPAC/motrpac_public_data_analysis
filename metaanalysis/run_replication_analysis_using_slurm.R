@@ -43,10 +43,10 @@ for (ff in pvals_files){
     currname = paste(currname,"_",m,sep="")
     outfile = paste(curr_dir,currname,".txt",sep="")
     curr_cmd = paste("Rscript /home/users/davidama/repos/screen/R/cmd_line_runnable.R",
-                     ff,"1",m,outfile,"path=/home/users/davidama/R/packages/ emEps=1e-5 nH=10000")
+                     ff,"1",m,outfile,"path=/home/users/davidama/R/packages/ emEps=1e-5 nH=10000 minP=0.001")
     if(m=="bum"){
       curr_cmd = paste("Rscript /home/users/davidama/repos/screen/R/cmd_line_runnable.R ",
-                       ff,"1",m,outfile,"path=/home/users/davidama/R/packages/ emEps=1e-3 nH=10000")
+                       ff,"1",m,outfile,"path=/home/users/davidama/R/packages/ emEps=1e-3 nH=10000 minP=0.001")
     }
     run_sbatch_rscript_command(curr_cmd,curr_dir,currname,get_sh_prefix_one_node_specify_cpu_and_mem)
   }
