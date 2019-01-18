@@ -15,13 +15,10 @@ if(length(args)>0){
 # TODO: we currently have code dup
 # Functions for the meta-analysis
 # ... specifies random effects formula and structure
-model_selection_meta_analysis<-function(gdata,...){
-  mod_names = c("training","time","avg_age","prop_males")
-  gdata_basic = gdata[,c("yi","vi","V1","gse")]
-  gdata_mods = gdata[,mod_names]
-  to_rem = apply(gdata_mods,2,function(x)length(unique(x,na.rm=T))<2)
-  gdata_mods = gdata_mods[,!to_rem]
-  mod_names = colnames(gdata_mods)
+model_selection_meta_analysis<-function(gdata,
+    mod_names = c("training","time","avg_age","prop_males"),...){
+  to_rem = sapply(mod_names,function(x,y)length(unique(y[,x],na.rm=T))<2,y=gdata)
+  mod_names = mod_names[!to_rem] 
   models = list(); aics = c()
   N = 2^length(mod_names)
   for(j in 1:N){
@@ -38,7 +35,7 @@ model_selection_meta_analysis<-function(gdata,...){
       aics[curr_name] = fitstats(curr_model)[5,1]
     }
   }
-  return(list(models=models,aics=aics))
+  return(list(models=models,aics=aics,mod_names=mod_names))
 }
 select_model_return_p<-function(res,aic_thr=2){
   aics_thr = (res$aics[1] - res$aics) > aic_thr
@@ -73,9 +70,10 @@ add_prefix_to_names<-function(pref,l,sep=":"){
   return(l)
 }
 
-acute_gdata_metaanalysis<-function(gdata,permtest=F){
-  res1 = model_selection_meta_analysis(gdata,random=list(~ V1|gse),struct="AR")
-  res0 = model_selection_meta_analysis(gdata,func=rma.uni)
+acute_gdata_metaanalysis<-function(gdata,permtest=F,
+    mod_names = c("training","time","avg_age","prop_males")){
+  res1 = model_selection_meta_analysis(gdata,random=list(~ V1|gse),struct="AR",mod_names=mod_names)
+  res0 = model_selection_meta_analysis(gdata,func=rma.uni,mod_names=mod_names)
   l = list(
     models = c(add_prefix_to_names("simple",res0$models),
                add_prefix_to_names("time_ar",res1$models)),
@@ -92,9 +90,10 @@ acute_gdata_metaanalysis<-function(gdata,permtest=F){
   return(l)
 }
 
-longterm_gdata_metaanalysis<-function(gdata,permtest=F,simple_output=T){
-  res1 = model_selection_meta_analysis(gdata,random=list(~ 1|gse))
-  res0 = model_selection_meta_analysis(gdata,func=rma.uni)
+longterm_gdata_metaanalysis<-function(gdata,permtest=F,simple_output=T,
+    mod_names = c("training","time","avg_age","prop_males")){
+  res1 = model_selection_meta_analysis(gdata,random=list(~ 1|gse),mod_names=mod_names)
+  res0 = model_selection_meta_analysis(gdata,func=rma.uni,mod_names=mod_names)
   l = list(
     models = c(add_prefix_to_names("simple",res0$models),
                add_prefix_to_names("time_ar",res1$models)),
@@ -126,6 +125,7 @@ keep_main_results_for_model_list<-function(l,num=2){
       coeffs = coeffs,
       mod_p = try_get_field(curr_m,"QMp"),
       het_p = try_get_field(curr_m,"QEp"),
+      het_q = try_get_field(curr_m,"QE"),
       sigma2 = try_get_field(curr_m,"sigma2"),
       tau2 = try_get_field(curr_m,"tau2"),
       I2 = try_get_field(curr_m,"I2")
@@ -161,18 +161,20 @@ pvalue_qqplot<-function(ps,...){
 load("meta_analysis_input.RData")
 # Run the analysis
 all_meta_analysis_res <- list()
-for(nn in names(naive_rep_analysis_results)){
-  curr_dataset = datasets[[nn]][naive_rep_analysis_results[[nn]]]
+for(nn in names(meta_reg_datasets)){
+  curr_dataset = meta_reg_datasets[[nn]]
+  curr_mods = meta_reg_to_mods[[nn]]
   if(grepl("acute",nn)){
-    analysis1 = mclapply(curr_dataset,acute_gdata_metaanalysis,mc.cores = num_cores)
+    analysis1 = mclapply(curr_dataset,acute_gdata_metaanalysis,
+                         mod_names=curr_mods,mc.cores = num_cores)
   }
   else{
-    analysis1 = mclapply(curr_dataset,longterm_gdata_metaanalysis,mc.cores = num_cores)
+    analysis1 = mclapply(curr_dataset,longterm_gdata_metaanalysis,
+                         mod_names=curr_mods,mc.cores = num_cores)
   }
-  analysis2 = unlist(mclapply(curr_dataset,simple_stouffer_meta_analysis,mc.cores=num_cores))
-  all_meta_analysis_res[[nn]] = list(model_selection = analysis1,simple_stouffer = analysis2)
+  all_meta_analysis_res[[nn]] = analysis1
 }
-save(all_meta_analysis_res,naive_rep_analysis_results,file="meta_analysis_results.RData")
+save(all_meta_analysis_res,file="meta_analysis_results.RData")
 
 
 

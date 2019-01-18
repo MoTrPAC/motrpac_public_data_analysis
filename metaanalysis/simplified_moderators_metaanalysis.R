@@ -32,6 +32,12 @@ simplify_age_gdata<-function(gdata,func=binarize_feature,...){
   gdata$avg_age = ordered(gdata$avg_age)
   return(gdata)
 }
+simplify_training_for_exercise_analysis<-function(gdata){
+  rows = !is.element(gdata$training,set=c("yoga","control","untrained"))
+  gdata = gdata[rows,]
+  gdata$training[gdata$training=="both"] = "resistance"
+  return(gdata)
+}
 
 # Clean the datasets: from muscle, remove 1 cohort with time point zero
 # From long term exclude all studies with time > 150 days
@@ -43,6 +49,7 @@ clean_acute_table <-function(gdata,tissue="muscle"){
   }
   gdata = simplify_time_in_gdata(gdata,simplify_time_acute)
   gdata = simplify_age_gdata(gdata,thr=40)
+  gdata = simplify_training_for_exercise_analysis(gdata)
   return(gdata)
 }
 clean_longterm_table <-function(gdata,tissue="muscle"){
@@ -50,6 +57,7 @@ clean_longterm_table <-function(gdata,tissue="muscle"){
   gdata$vi = pmax(gdata$vi,1e-5)
   gdata = gdata[as.numeric(gdata$time) < 150 ,]
   gdata = simplify_age_gdata(gdata,thr=40)
+  gdata = simplify_training_for_exercise_analysis(gdata)
   return(gdata)
 }
 get_untrained_table <-function(gdata,tissue="muscle"){
@@ -59,107 +67,17 @@ get_untrained_table <-function(gdata,tissue="muscle"){
   return(gdata[rows,])
 }
 
-############################################################################
-############################################################################
-############################################################################
-# Functions for the meta-analysis
-# ... specifies random effects formula and structure
-model_selection_meta_analysis<-function(gdata,...){
-  mod_names = c("training","time","avg_age","prop_males")
-  gdata_basic = gdata[,c("yi","vi","V1","gse")]
-  gdata_mods = gdata[,mod_names]
-  to_rem = apply(gdata_mods,2,function(x)length(unique(x,na.rm=T))<2)
-  gdata_mods = gdata_mods[,!to_rem]
-  mod_names = colnames(gdata_mods)
-  models = list(); aics = c()
-  N = 2^length(mod_names)
-  for(j in 1:N){
-    curr_group = as.integer(intToBits(j-1))[1:length(mod_names)]
-    curr_mods = mod_names[curr_group==1]
-    curr_frm=NULL;curr_model = NULL;curr_name="base_model"
-    if(length(curr_mods)>0){
-      curr_frm = as.formula(paste("~",paste(curr_mods,collapse="+")))
-      curr_name = paste(curr_mods,collapse=";")
-    }
-    curr_model = meta_analysis_wrapper(gdata,mods=curr_frm,...)
-    if(is.element("rma",class(curr_model))){
-      models[[curr_name]] = curr_model
-      aics[curr_name] = fitstats(curr_model)[5,1]
-    }
-  }
-  return(list(models=models,aics=aics))
-}
-select_model_return_p<-function(res,aic_thr=2){
-  aics_thr = (res$aics[1] - res$aics) > aic_thr
-  best_ind = which(res$aics == min(res$aics,na.rm=T) & aics_thr)[1]
-  if(is.na(best_ind) || length(best_ind)==0){best_ind=1}
-  best_m = res$models[[best_ind]]
-  best_m_name = names(res$models)[best_ind]
-  sapply(res$models,function(x)x$QMp)
-  pval = best_m$QMp
-  return(list(pval=pval,name=best_m_name,model=best_m,aic = min(res$aics,na.rm=T)))
-}
-
 meta_analysis_wrapper<-function(gdata,func = rma.mv,...){
   for(rel.tol in c(1e-8,1e-7,1e-6)){
     cc=list(iter.max=10000,rel.tol=rel.tol)
     res = NULL
     try({
       res = func(yi,vi,data=gdata,...)
-    })
+    },silent=TRUE)
     if(!is.null(res)){return(res)}
   }
   return(NA)
 }
-num_params<-function(model){
-  x = fitstats(model)[,1]
-  k = (2*x[1]+x[3])/2
-  return(unname(k))
-}
-
-add_prefix_to_names<-function(pref,l,sep=":"){
-  names(l) = paste(pref,names(l),sep=sep)
-  return(l)
-}
-
-acute_gdata_metaanalysis<-function(gdata,permtest=F){
-  res1 = model_selection_meta_analysis(gdata,random=list(~ V1|gse),struct="AR")
-  res0 = model_selection_meta_analysis(gdata,func=rma.uni)
-  l = list(
-    models = c(add_prefix_to_names("simple",res0$models),
-               add_prefix_to_names("time_ar",res1$models)),
-    aics = c(add_prefix_to_names("simple",res0$aics),
-             add_prefix_to_names("time_ar",res1$aics))
-  )
-  sel = select_model_return_p(l)
-  if(permtest && is.element("rma.uni",set=class(sel$model))){
-    sel[["permp"]] = permutest(sel$model)
-  }
-  return(list(all_models=l,selected=sel))
-}
-
-longterm_gdata_metaanalysis<-function(gdata,permtest=F){
-  res1 = model_selection_meta_analysis(gdata,random=list(~ 1|gse))
-  res0 = model_selection_meta_analysis(gdata,func=rma.uni)
-  l = list(
-    models = c(add_prefix_to_names("simple",res0$models),
-               add_prefix_to_names("time_ar",res1$models)),
-    aics = c(add_prefix_to_names("simple",res0$aics),
-             add_prefix_to_names("time_ar",res1$aics))
-  )
-  sel = select_model_return_p(l)
-  if(permtest && is.element("rma.uni",set=class(sel$model))){
-    sel[["permp"]] = permutest(sel$model)
-  }
-  return(list(all_models=l,selected=sel))
-}
-
-simple_stouffer_meta_analysis<-function(gdata){
-  gdata = gdata[!is.na(as.numeric(gdata$p)),]
-  p = metap::sumz(as.numeric(gdata$p),weights = as.numeric(gdata$df))$p[1,1]
-  return(p)
-}
-
 run_simple_re<-function(gdata){return(meta_analysis_wrapper(gdata,func=rma.uni))}
 try_get_field<-function(res,fname){
   if(is.element(fname,set=names(res))){
@@ -171,6 +89,11 @@ pvalue_qqplot<-function(ps,...){
   x = runif(5000)
   qqplot(y=-log(ps,10),x=-log(x,10),xlab="Theoretical",ylab="Observed",...)
   abline(0,1,lty=2,lwd=2)
+}
+simple_stouffer_meta_analysis<-function(gdata){
+  gdata = gdata[!is.na(as.numeric(gdata$p)),]
+  p = metap::sumz(as.numeric(gdata$p),weights = as.numeric(gdata$df))$p[1,1]
+  return(p)
 }
 
 ############################################################################
@@ -211,6 +134,7 @@ untrained_datasets[["acute,blood"]] = lapply(acute_gene_tables_raw,get_untrained
 untrained_datasets[["longterm,muscle"]] = lapply(longterm_gene_tables_raw,get_untrained_table,tissue="muscle")
 untrained_datasets[["longterm,blood"]] = lapply(longterm_gene_tables_raw,get_untrained_table,tissue="blood")
 sapply(untrained_datasets,function(x)dim(x[[1]]))
+
 ############################################################################
 ############################################################################
 ############################################################################
@@ -265,95 +189,51 @@ for(nn in names(simple_RE_pvals)){
 # Example for high I2 and low tau
 # TODO: revise and add some stats to the report
 nn  = 2
+table(simple_RE_I2s[[nn]] < 50 & abs(simple_RE_beta[[nn]]) < 0.25)
 selected_is = names(which(simple_RE_I2s[[nn]] > 60 &
     simple_RE_tau2s[[nn]] < 0.1 & abs(simple_RE_beta[[nn]]) > 0.25))
+selected_is = names(which(simple_RE_I2s[[nn]] > 90 &
+    simple_RE_tau2s[[nn]] < 0.01))
+selected_is = names(which(simple_RE_I2s[[nn]] < 25 &
+    simple_RE_pvals[[nn]] < 0.00001 & abs(simple_RE_beta[[nn]]) > 0.25))
+selected_is = names(which(
+    simple_RE_pvals[[nn]] < 1e-8 & abs(simple_RE_beta[[nn]]) > 0.25))
+
 selected_i = sample(selected_is)[1]
 forest(simple_REs[[nn]][[selected_i]])
 median(as.numeric(datasets[[nn]][[selected_i]]$p))
-screen_res_znormix[[nn]][selected_i,]
-colSums(screen_res_znormix[[nn]]<0.25)
-colSums(screen_res_locfdr[[nn]]<0.25)
+simple_REs[[nn]][[selected_i]]
 
+# Filters 1 and 2 of the analysis:
+to_rem1 = sapply(rep_datasets,function(x)apply(x<0.05,1,sum,na.rm=T) <= 1)
+to_rem2 = list()
+for(nn in names(simple_RE_beta)){
+  to_rem2[[nn]] = simple_RE_I2s[[nn]] < 50 & (abs(simple_RE_beta[[nn]]) < 0.25 | simple_RE_pvals[[nn]] > 0.01)
+  print(all(names(to_rem1[[nn]])==names(to_rem2[[nn]]),na.rm=T))
+  print(table(to_rem1[[nn]] | to_rem2[[nn]])/length(to_rem2[[nn]]))
+}
+
+rm(acute_gene_tables_raw);rm(acute_gene_tables)
+rm(longterm_gene_tables_raw);rm(longterm_gene_tables)
 save.image(file="workspace_before_rep_analysis.RData")
 
-############################################################################
-############################################################################
-############################################################################
-# Replication analysis
-# Naive analysis
-naive_rep_analysis<-function(pvals,gses,thr=0.05,nrep=2){
-  v = pvals <= thr
-  if(sum(v,na.rm=T)==0){return(F)}
-  tt = table(v,gses)["TRUE",]
-  return(sum(tt>0) >= nrep)
+# Create the input files for meta-regression and replication analysis
+meta_reg_datasets = list()
+for(nn in names(simple_RE_beta)){
+  print(all(names(to_rem1[[nn]])==names(to_rem2[[nn]]),na.rm=T))
+  to_rem = to_rem1[[nn]] | to_rem2[[nn]]
+  curr_genes = names(which(!to_rem))
+  meta_reg_datasets[[nn]] = datasets[[nn]][curr_genes]
 }
-
-naive_rep_analysis_results = list()
-for(nn in names(rep_datasets)){
-  gses = datasets[[nn]][[1]]$gse
-  currn = ceiling(length(unique(gses))/2)
-  print(currn)
-  naive_rep_analysis_results[[nn]] = apply(rep_datasets[[nn]],1,
-      naive_rep_analysis,gses=gses,thr=0.05,nrep=currn)
-}
-sapply(naive_rep_analysis_results,table)
-sapply(naive_rep_analysis_results,function(x)table(x)/length(x))
-sapply(naive_rep_analysis_results,function(x,y)x[y],y="10891")
-sapply(naive_rep_analysis_results,function(x,y)x[y],y="7139")
-sapply(naive_rep_analysis_results,function(x,y)x[y],y="1277")
-sapply(naive_rep_analysis_results,function(x,y)x[y],y="70")
-
-# # Load repfdr results and compare
-# scr_path = "/Users/David/Desktop/MoTrPAC/PA_database/screen_res/"
-# pvals_files = list.files(scr_path)
-# pvals_files = pvals_files[grepl("pvals.txt",pvals_files)]
-# screen_results = list()
-# for (ff in pvals_files){
-#   currname = gsub("_pvals.txt","",ff)
-#   screen_results[[currname]] = list()
-#   for(m in c("bum","znormix")){
-#     outfile = paste(scr_path,currname,"_",m,".txt",sep="")
-#     screen_results[[currname]][[m]] = read.delim(outfile,row.names = 1,header=T)
-#   }
-# }
-# names(screen_results) = gsub("_",",",names(screen_results))
-# save(screen_results,file=paste(scr_path,"screen_results.RData",sep=""))
-# for(nn in names(screen_results)){
-#   gses = datasets[[nn]][[1]]$gse
-#   currn = ceiling(length(unique(gses))/2)
-#   curr_genes1 = names(which(naive_rep_analysis_results[[nn]]))
-#   x1 = screen_results[[nn]]$bum[curr_genes1,currn]
-#   x2 = screen_results[[nn]]$znormix[curr_genes1,currn]
-#   max_fdr_gene = curr_genes1[x2==max(x2)][1]
-#   print(screen_results[[nn]]$bum[max_fdr_gene,])
-#   print(screen_results[[nn]]$znormix[max_fdr_gene,])
-#   print(rep_datasets[[nn]][max_fdr_gene,])
-#   plot(x1,x2)
-# }
-# sapply(screen_results,function(x)colSums(x$bum < 0.1))
-
-# # Some QA
-# nn = "longterm,muscle"
-# bum_res = screen_results[[nn]]$bum[,7]
-# names(bum_res) = rownames(screen_results[[nn]]$bum)
-# plot(bum_res,rowMeans(rep_datasets[[nn]]))
-# hist(bum_res[naive_rep_analysis_results[[nn]]])
-# xx = rep_datasets[[nn]][names(bum_res[bum_res>0.19 & bum_res < 0.2]),]
-# xx = rep_datasets[[nn]][names(which(naive_rep_analysis_results[[nn]])),]
-# library(gplots)
-# heatmap.2(xx)
-# dim(xx)
-
-# # Select genes, look at known genes and enrichments
-# rep_gene_sets_names = lapply(rep_gene_sets,function(x,y)sort(unlist(y[x])),y=entrez2symbol)
-# known_genes = c("PPARGC1A","COX1","NDUFA","PDK4","VEGFA","KDR","THY1","MYL4",
-#                 "MYH1","COL1A1","ACTC1","TNNT2","GADD45G","MMP9","NR4A1")
-# sapply(rep_gene_sets_names,intersect,y=known_genes)
-# sapply(naive_rep_analysis_results,function(x,y)x[y],y=known_genes)
-
-# Save the data needed for the metanaanalysis and model selection below
-save(naive_rep_analysis_results,datasets,untrained_datasets,file="meta_analysis_input.RData")
-
+sapply(meta_reg_datasets,length)
+meta_reg_to_mods = list(
+  "acute,muscle" = c("time","training"),
+  "acute,blood" = c("time","prop_males"),
+  "longterm,muscle" = c("training","time","avg_age","prop_males"),
+  "longterm,blood" = "training"
+)
+save(meta_reg_datasets,meta_reg_to_mods,
+     untrained_datasets,file="meta_analysis_input.RData")
 
 ############################################################################
 ############################################################################
@@ -382,9 +262,20 @@ load("meta_analysis_results.RData")
 par(mfrow=c(2,2))
 for(nn in names(all_meta_analysis_res)){
   analysis1 = all_meta_analysis_res[[nn]][[1]]
-  ps1 = sapply(analysis1,function(x)x$selected$pval)
-  pvalue_qqplot(ps1);abline(0,1)
+  ps1 = sapply(analysis1,function(x)x[[1]]$mod_p)
+  i2s = sapply(analysis1,function(x)x[[1]]$I2)
+  # pvalue_qqplot(ps1);abline(0,1)
+  plot(ps1,i2s)
 }
+
+gene = "51177"
+gene = "5592"
+forest(simple_REs$`acute,muscle`[[gene]])
+screen_results[[1]]$bum[gene,]
+screen_results[[1]]$znormix[gene,]
+naive_rep_analysis_results[[1]][gene]
+barplot(-log(rep_datasets[[1]][gene,],10))
+table(rep_datasets[[1]][gene,] < 0.01)
 
 ps1 = sapply(analysis1,function(x)x$pval);abline(0,1)
 cor(-log(ps1),-log(analysis2),method="spearman")
@@ -431,38 +322,94 @@ which(p.adjust((pmax(ps1,analysis2)),method='fdr')<0.1)
 #   return(c(beta_c_est,beta_c_lb,beta_c_ub))
 # }
 
-# # Some simple tests
-# gdata = datasets[[1]][["9202"]]
-# gdata = datasets[[3]][["55222"]]
-# colnames(obj)
-# # Very simple models without specifying repeated measures
-# res0_1 = rma.uni(yi,vi,data = gdata,weights=1/vi)
-# AIC(res0_1)
-# res0_2 = rma.uni(yi,vi,data=gdata)
-# AIC(res0_2)
-# res0_3 = rma.mv(yi,vi,data=gdata,random=~1|gse)
-# AIC(res0_3)
-# res0_4 = rma.mv(yi,vi,data=gdata,random=~V1|gse,struct="AR")
-# AIC(res0_4)
-# permutest(res0_2)
-# res0_2$QMp
-# forest(res0_2)
-# res_mv1 = rma.mv(yi,vi,data = gdata,mods = ~1+training+time,
-#                  random = ~ V1|gse,struct="AR")
-# res_mv2 = rma.mv(yi,vi,data = gdata,
-#                  mods = ~1+training+time,
-#                  random = list(~ V1|gse),struct="AR")
-# AIC(res_mv1)
-# AIC(res_mv2)
-# forest(res_mv1)
-# # useful functions: funnel, forest, radial, confint, summary, rstandard, rstudent, residuals
-# # Add noise structure to random effects
-# # The nested structure is required to have different correlated
-# # random effects for time points within a cohort.
-# plot(residuals(res_mv2),col=as.factor(gdata$gse))
-# forest(res_mv2)
-# funnel(res_mv1)
-# funnel(res_mv2)
+############################################################################
+############################################################################
+############################################################################
+# Replication analysis
+# Naive analysis
+naive_rep_analysis<-function(pvals,gses,thr=0.05,nrep=2){
+  v = pvals <= thr
+  if(sum(v,na.rm=T)==0){return(F)}
+  tt = table(v,gses)["TRUE",]
+  return(sum(tt>0) >= nrep)
+}
+
+naive_rep_analysis_results = list()
+for(nn in names(rep_datasets)){
+  gses = datasets[[nn]][[1]]$gse
+  currn = ceiling(length(unique(gses))/2)
+  print(currn)
+  naive_rep_analysis_results[[nn]] = apply(rep_datasets[[nn]],1,
+                                           naive_rep_analysis,gses=gses,thr=0.05,nrep=currn)
+}
+sapply(naive_rep_analysis_results,table)
+sapply(naive_rep_analysis_results,function(x)table(x)/length(x))
+sapply(naive_rep_analysis_results,function(x,y)x[y],y="10891")
+sapply(naive_rep_analysis_results,function(x,y)x[y],y="7139")
+sapply(naive_rep_analysis_results,function(x,y)x[y],y="1277")
+sapply(naive_rep_analysis_results,function(x,y)x[y],y="70")
+
+# Load repfdr results and compare
+scr_path = "/Users/David/Desktop/MoTrPAC/PA_database/screen_res/"
+pvals_files = list.files(scr_path)
+pvals_files = pvals_files[grepl("pvals.txt",pvals_files)]
+screen_results = list()
+for (ff in pvals_files){
+  currname = gsub("_pvals.txt","",ff)
+  screen_results[[currname]] = list()
+  for(m in c("bum","znormix")){
+    outfile = paste(scr_path,currname,"_",m,".txt",sep="")
+    screen_results[[currname]][[m]] = read.delim(outfile,row.names = 1,header=T)
+  }
+}
+names(screen_results) = gsub("_",",",names(screen_results))
+save(screen_results,file=paste(scr_path,"screen_results.RData",sep=""))
+load(paste(scr_path,"screen_results.RData",sep=""))
+for(nn in names(screen_results)){
+  gses = datasets[[nn]][[1]]$gse
+  currn = ceiling(length(unique(gses))/2)
+  curr_genes1 = names(which(naive_rep_analysis_results[[nn]]))
+  x1 = screen_results[[nn]]$bum[curr_genes1,currn]
+  x2 = screen_results[[nn]]$znormix[curr_genes1,currn]
+  max_fdr_gene = curr_genes1[x2==max(x2)][1]
+  print(screen_results[[nn]]$bum[max_fdr_gene,])
+  print(screen_results[[nn]]$znormix[max_fdr_gene,])
+  print(rep_datasets[[nn]][max_fdr_gene,])
+  plot(x1,x2)
+}
+sapply(screen_results,function(x)colSums(x$bum < 0.1))
+
+# Plot rep- and meta-analysis stats
+nn = "acute,muscle"
+meta_analysis_stats = cbind(simple_RE_pvals[[nn]],simple_RE_I2s[[nn]])
+colnames(meta_analysis_stats) = c("pval","I2")
+rep_analysis_stats = screen_results[[nn]]$znormix
+inds = names(which(apply(is.na(meta_analysis_stats),1,sum) == 0))
+meta_analysis_stats = meta_analysis_stats[inds,]
+rep_analysis_stats = rep_analysis_stats[rownames(meta_analysis_stats),]
+num_pvals = rowSums(rep_datasets[[nn]][inds,] < 0.01)
+rep_analysis_stats = cbind(num_pvals,rep_analysis_stats)
+
+library(corrplot)
+corrplot(cor(meta_analysis_stats,rep_analysis_stats,method = "spearman"))
+corrplot(cor(rep_analysis_stats,method = "spearman"))
+plot(rep_analysis_stats[,1],rep_analysis_stats[,4],pch=20,cex=0.5)
+colSums(rep_analysis_stats < 0.2)
+table(rep_analysis_stats[,1])
+
+inds[which(rep_analysis_stats[,1]>=8)]
+gene = inds[rep_analysis_stats[,1] > 5 & rep_analysis_stats[,4] > 0.5]
+gene = "7422"
+forest(simple_REs[[nn]][[gene]])
+screen_results[[nn]]$znormix[gene,]
+rep_datasets[[nn]][gene,]
+
+# # Select genes, look at known genes and enrichments
+# rep_gene_sets_names = lapply(rep_gene_sets,function(x,y)sort(unlist(y[x])),y=entrez2symbol)
+# known_genes = c("PPARGC1A","COX1","NDUFA","PDK4","VEGFA","KDR","THY1","MYL4",
+#                 "MYH1","COL1A1","ACTC1","TNNT2","GADD45G","MMP9","NR4A1")
+# sapply(rep_gene_sets_names,intersect,y=known_genes)
+# sapply(naive_rep_analysis_results,function(x,y)x[y],y=known_genes)
 
 
 
