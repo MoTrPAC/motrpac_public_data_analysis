@@ -344,7 +344,7 @@ run_topgo_enrichment_fisher<-function(genesOfInterest,geneUniverse,go_term_size=
     geneList <- factor(as.integer(geneUniverse %in% genesOfInterest))
     names(geneList) <- geneUniverse
     for(type in go_dags){
-      myGOdata <- new("topGOdata", description="My project", ontology=c("BP"), nodeSize=go_term_size,
+      myGOdata <- new("topGOdata", description="My project", ontology=type, nodeSize=go_term_size,
                   allGenes=geneList, annot = annFUN.org, mapping="org.Hs.eg.db", ID = "entrez")
       allGOs = usedGO(myGOdata)
       resultFisher <- runTest(myGOdata, algorithm="classic", statistic="fisher")
@@ -357,7 +357,7 @@ run_topgo_enrichment_fisher<-function(genesOfInterest,geneUniverse,go_term_size=
     }
   }
   go_pvals = as.numeric(res[,ncol(allRes)])
-  go_pvals[is.na(go_pvals)] = 1e-30
+  go_pvals[is.na(go_pvals)] = 1
   go_qvals = p.adjust(go_pvals,method='fdr')
   res = cbind(res,go_qvals)
   return(res)

@@ -118,7 +118,7 @@ keep_main_results_for_model_list<-function(l,num=2){
   new_l = list()
   for(nn in model_names){
     curr_m = l$models[[nn]]
-    coeffs = cbind(curr_m$beta,curr_m$zval,curr_m$pval,curr_m$ci.lb,curr_m$ci.ub)
+    coeffs = cbind(curr_m$beta,curr_m$se,curr_m$zval,curr_m$pval,curr_m$ci.lb,curr_m$ci.ub)
     colnames(coeffs) = c("beta","zval","pval","lb","ub")
     new_l[[nn]] = list(
       aic_c = l$aics[nn],

@@ -1,7 +1,7 @@
 
 # Input dir: should have some p-value matrices.
 # These are files of the format *pvals.txt
-curr_dir = "/home/users/davidama/motrpac_metaanalysis/"
+curr_dir = "/home/users/davidama/motrpac_metaanalysis/rep_analysis/"
 setwd(curr_dir)
 pvals_files = list.files()
 pvals_files = pvals_files[grepl("pvals.txt",pvals_files)]
