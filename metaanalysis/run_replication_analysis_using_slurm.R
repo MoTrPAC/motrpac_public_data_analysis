@@ -66,25 +66,25 @@ for (ff in pvals_files){
 
 save(screen_results,file="screen_results.RData")
 
-comp_screen_tables<-function(x1,x2,thr=0.2){
-  res=list()
-  for(j in 1:ncol(x1)){
-    res[[j]] = table(x1[,j]<thr,x2[,j]<thr)
-  }
-  return(res)
-}
-
-for(nn in names(screen_results)){
-  print(comp_screen_tables(screen_results[[nn]][[2]],screen_results[[nn]][[3]]))
-}
-
-nn = names(screen_results)[4]
-x1 = screen_results[[nn]][[2]][,6]
-x2 = screen_results[[nn]][[3]][,6]
-names(x1) = rownames(screen_results[[nn]][[2]])
-names(x2) = rownames(screen_results[[nn]][[3]])
-all(names(x1)==names(x2))
-sort(abs(x1-x2),decreasing = T)[1:10]
+# comp_screen_tables<-function(x1,x2,thr=0.2){
+#   res=list()
+#   for(j in 1:ncol(x1)){
+#     res[[j]] = table(x1[,j]<thr,x2[,j]<thr)
+#   }
+#   return(res)
+# }
+# 
+# for(nn in names(screen_results)){
+#   print(comp_screen_tables(screen_results[[nn]][[2]],screen_results[[nn]][[3]]))
+# }
+# 
+# nn = names(screen_results)[4]
+# x1 = screen_results[[nn]][[2]][,6]
+# x2 = screen_results[[nn]][[3]][,6]
+# names(x1) = rownames(screen_results[[nn]][[2]])
+# names(x2) = rownames(screen_results[[nn]][[3]])
+# all(names(x1)==names(x2))
+# sort(abs(x1-x2),decreasing = T)[1:10]
 
 
 

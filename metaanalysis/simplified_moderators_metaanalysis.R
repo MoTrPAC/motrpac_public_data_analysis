@@ -237,6 +237,7 @@ for(nn in names(simple_RE_beta)){
   }
   print(all(names(to_rem1[[nn]])==names(to_rem2[[nn]]),na.rm=T))
   print(table(to_rem1[[nn]] | to_rem2[[nn]])/length(to_rem2[[nn]]))
+  print(sum(to_rem1[[nn]] | to_rem2[[nn]],na.rm = T))
 }
 
 rm(acute_gene_tables_raw);rm(acute_gene_tables)
