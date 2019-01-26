@@ -330,7 +330,8 @@ get_fold_changes_vs_baseline<-function(x,subjs,timev,baseline=NULL,func = functi
 ################ GO enrichment analysis ################
 # GO enrichment
 library(topGO)
-run_topgo_enrichment_fisher<-function(genesOfInterest,geneUniverse,go_term_size=10,go_max_size=1000,go_dags=c("BP","MF"),...){
+run_topgo_enrichment_fisher<-function(genesOfInterest,geneUniverse,
+                                      go_term_size=10,go_dags=c("BP","MF"),...){
   l = list()
   if(class(genesOfInterest)=="character"){
     l[["set1"]] = genesOfInterest

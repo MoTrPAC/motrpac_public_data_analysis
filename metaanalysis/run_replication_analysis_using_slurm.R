@@ -1,7 +1,7 @@
 
 # Input dir: should have some p-value matrices.
 # These are files of the format *pvals.txt
-curr_dir = "/home/users/davidama/motrpac_metaanalysis/rep_analysis/"
+curr_dir = "/home/users/davidama/motrpac_metaanalysis/rep_analysis_0.01/"
 setwd(curr_dir)
 pvals_files = list.files()
 pvals_files = pvals_files[grepl("pvals.txt",pvals_files)]
@@ -43,29 +43,27 @@ for (ff in pvals_files){
     currname = paste(currname,"_",m,sep="")
     outfile = paste(curr_dir,currname,".txt",sep="")
     curr_cmd = paste("Rscript /home/users/davidama/repos/screen/R/cmd_line_runnable.R",
-                     ff,"1",m,outfile,"path=/home/users/davidama/R/packages/ emEps=1e-5 nH=10000 minP=0.001")
+                     ff,"1",m,outfile,"path=/home/users/davidama/R/packages/ emEps=1e-5 nH=10000 minP=0.01")
     if(m=="bum"){
       curr_cmd = paste("Rscript /home/users/davidama/repos/screen/R/cmd_line_runnable.R ",
-                       ff,"1",m,outfile,"path=/home/users/davidama/R/packages/ emEps=1e-3 nH=10000 minP=0.001")
+                       ff,"1",m,outfile,"path=/home/users/davidama/R/packages/ emEps=1e-3 nH=10000 minP=0.01")
     }
     run_sbatch_rscript_command(curr_cmd,curr_dir,currname,get_sh_prefix_one_node_specify_cpu_and_mem)
   }
 }
 
-# Go over the results, save them into an RData file and do some comparisons
-screen_results = list()
-for (ff in pvals_files){
-  currname = gsub("_pvals.txt","",ff)
-  screen_results[[currname]] = list()
-  screen_results[[currname]][["pvals"]] = read.delim(ff,row.names = 1,header=T)
-  for(m in c("bum","znormix")){
-    outfile = paste(curr_dir,currname,"_",m,".txt",sep="")
-    screen_results[[currname]][[m]] = read.delim(outfile,row.names = 1,header=T)
-  }
-}
-
-save(screen_results,file="screen_results.RData")
-
+# # Go over the results, save them into an RData file and do some comparisons
+# screen_results = list()
+# for (ff in pvals_files){
+#   currname = gsub("_pvals.txt","",ff)
+#   screen_results[[currname]] = list()
+#   screen_results[[currname]][["pvals"]] = read.delim(ff,row.names = 1,header=T)
+#   for(m in c("bum","znormix")){
+#     outfile = paste(curr_dir,currname,"_",m,".txt",sep="")
+#     screen_results[[currname]][[m]] = read.delim(outfile,row.names = 1,header=T)
+#   }
+# }
+# save(screen_results,file="screen_results.RData")
 # comp_screen_tables<-function(x1,x2,thr=0.2){
 #   res=list()
 #   for(j in 1:ncol(x1)){
