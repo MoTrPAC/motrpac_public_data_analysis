@@ -530,28 +530,42 @@ colnames(supp_table_enrichments)[1] = "Discovered in"
 write.table(supp_table_enrichments,file=paste(supp_path,"supp_table_enrichments.txt",sep=""),
             sep="\t",quote=F,col.names = T,row.names = F)
 
+
+############################################################################
+############################################################################
+############################################################################
 # Interpretation of the results
+
+# Get effect matrices - mean responses - t statistics
+mean_effect_matrices = lapply(datasets,function(x)t(sapply(x,function(y)as.numeric(y$tstat))))
+for(nn in names(mean_effect_matrices)){
+  colnames(mean_effect_matrices[[nn]]) = 
+    paste(rownames(datasets[[nn]][[1]]),datasets[[nn]][[1]]$training,
+          datasets[[nn]][[1]]$time,sep=";")
+  colnames(mean_effect_matrices[[nn]]) = gsub("endurance","E",
+                                              colnames(mean_effect_matrices[[nn]]),ignore.case = T)
+  colnames(mean_effect_matrices[[nn]]) = gsub("resistance","R",
+                                              colnames(mean_effect_matrices[[nn]]),ignore.case = T)
+}
 gene_subgroups = list()
-gene_subgroups_stats = list()
 for(nn in names(analysis2selected_genes_stats)){
   curr_genes = analysis2selected_genes_stats[[nn]]
   curr_groups = curr_genes[,"Group"]
   for(gg in unique(curr_groups)){
     curr_m = as.matrix(curr_genes[gg==curr_genes[,"Group"],])
     if(ncol(curr_m)==1){curr_m=t(curr_m)}
-    currname = paste(nn,gg,sep=",")
-    gene_subgroups[[currname]] = curr_m[,"Entrez"]
-    m = c()
-    analysis1 = all_meta_analysis_res[[nn]]
-    for(gene in curr_m[,"Entrez"]){
-      curr_coeffs = analysis1[[gene]][[1]]$coeffs[,1]
-      m = cbind(m)
+    m = mean_effect_matrices[[nn]][curr_m[,"Entrez"],]
+    m_kmeans = kmeans(m,centers = 2)
+    m_kmeans = m_kmeans$cluster
+    for(kk in unique(m_kmeans)){
+      currname = paste(nn,gg,kk,sep=",")
+      gene_subgroups[[currname]] = rownames(m)[m_kmeans==kk]
     }
   }
 }
+sapply(gene_subgroups,length)
 
 # Enrichment analysis of the new groups
-sapply(gene_subgroups,length)
 bg = unique(c(unlist(sapply(simple_REs,names))))
 gs = gene_subgroups
 go_res = run_topgo_enrichment_fisher(
@@ -563,39 +577,64 @@ table(go_res_fdr$setname)
 gene_subgroup_enrichments = go_res
 gene_subgroup_enrichments_fdr = go_res_fdr
 
+get_most_sig_enrichments_by_groups(gene_subgroup_enrichments_fdr,num=2)
+get_most_sig_enrichments_by_groups(gene_group_enrichments_fdr,num=3)
+
+# Other enrichment analyses
+library(ReactomePA)
+reactome_pathways_groups = run_reactome_enrichment_analysis(
+  lapply(analysis2selected_genes,names),universe=bg)
+ps = reactome_pathways_groups$pvalue
+qs = p.adjust(ps,method="fdr")
+reactome_pathways_groups$qvalue = qs
+reactome_pathways_groups_fdr = reactome_pathways_groups[qs <= 0.1,]
+table(reactome_pathways_groups_fdr[,1])
+
+reactome_pathways_subgroups = run_reactome_enrichment_analysis(gene_subgroups,universe=bg)
+ps = reactome_pathways_groups$pvalue
+qs = p.adjust(ps,method="fdr")
+reactome_pathways_groups$qvalue = qs
+reactome_pathways_groups_fdr = reactome_pathways_groups[qs <= 0.1,]
+table(reactome_pathways_groups_fdr[,1])
+
+library(pathfindR)
+
 save(gene_subgroup_enrichments,gene_subgroup_enrichments_fdr,
      gene_group_enrichments,gene_group_enrichments_fdr,
      file="topGO_res_jan_2019.RData")
 
-#
-# Get effect matrices - mean responses - t statistics
-#
-library(gplots)
-mean_effect_matrices = lapply(datasets,function(x)t(sapply(x,function(y)as.numeric(y$tstat))))
-for(nn in names(mean_effect_matrices)){
-  colnames(mean_effect_matrices[[nn]]) = 
-    paste(rownames(datasets[[nn]][[1]]),datasets[[nn]][[1]]$training,
-          datasets[[nn]][[1]]$time,sep=";")
-  colnames(mean_effect_matrices[[nn]]) = gsub("endurance","E",
-      colnames(mean_effect_matrices[[nn]]),ignore.case = T)
-  colnames(mean_effect_matrices[[nn]]) = gsub("resistance","R",
-      colnames(mean_effect_matrices[[nn]]),ignore.case = T)
-}
+
 # Heatmaps
-gene_set = gene_subgroups$`acute,muscle,time`
+library(gplots)
+gene_set = gene_subgroups$`acute,muscle,time,1`
 ord = order(datasets$`acute,muscle`[[1]]$time,
             datasets$`acute,muscle`[[1]]$training)
 mat = mean_effect_matrices$`acute,muscle`[gene_set,ord]
 rownames(mat) = unlist(entrez2symbol[rownames(mat)])
-mat[mat>5]=5;mat[mat<-5]=-5
+mat[mat>5]=5;mat[mat< -5]=-5
 heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered)
 
-gene_set = gene_subgroups$`longterm,muscle,base_model`
+gene_set = gene_subgroups$`longterm,muscle,base_model,2`
 ord = order(datasets$`longterm,muscle`[[1]]$time,
             datasets$`longterm,muscle`[[1]]$training)
 mat = mean_effect_matrices$`longterm,muscle`[gene_set,ord]
 rownames(mat) = unlist(entrez2symbol[rownames(mat)])
-mat[mat>5]=5;mat[mat<-5]=-5
+mat[mat>5]=5;mat[mat< -5]=-5
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered)
+
+gene_set = gene_subgroups$`acute,blood,time;prop_males,1`
+ord = order(datasets$`acute,blood`[[1]]$prop_males,
+            datasets$`acute,blood`[[1]]$time)
+mat = mean_effect_matrices$`acute,blood`[gene_set,ord]
+rownames(mat) = unlist(entrez2symbol[rownames(mat)])
+mat[mat>5]=5;mat[mat< -5]=-5
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered)
+
+gene_set = gene_subgroups$`acute,blood,time,1`
+ord = order(datasets$`acute,blood`[[1]]$time)
+mat = mean_effect_matrices$`acute,blood`[gene_set,ord]
+rownames(mat) = unlist(entrez2symbol[rownames(mat)])
+mat[mat>5]=5;mat[mat < -5]=-5
 heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered)
 
 

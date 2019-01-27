@@ -373,14 +373,28 @@ extract_top_go_results<-function(res,qval=0.1,maxsize=2000){
   res$go_qvals = new_qvals
   return(res[res$go_qvals<=qval,])
 }
-get_most_sig_enrichments_by_groups <- function(res,num=1){
+get_most_sig_enrichments_by_groups <- function(res,num=1,gcol=1,pcol="classicFisher"){
   gs = unique(as.character(res[,1]))
   m = c()
   for(g in gs){
-    res0 = res[res[,1]==g,]
-    ps = as.numeric(res0$classicFisher)
+    res0 = res[res[,gcol]==g,]
+    ps = as.numeric(res0[,pcol])
     thr = sort(ps,decreasing = F)[min(num,length(ps))]
     m = rbind(m,res0[ps<=thr,])
+  }
+  return(m)
+}
+
+# Reactome enrichment analysis
+library(ReactomePA)
+run_reactome_enrichment_analysis<-function(l,...){
+  m  = c()
+  for(nn in names(l)){
+    gene = l[[nn]]
+    res = enrichPathway(gene,pvalueCutoff = 1,...)
+    res = data.frame(res)
+    res = cbind(rep(nn,nrow(res)),res)
+    m = rbind(m,res)
   }
   return(m)
 }
