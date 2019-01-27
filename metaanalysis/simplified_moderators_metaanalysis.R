@@ -510,26 +510,6 @@ boxplot(yi~prop_males,data=gdata,
 # known_genes = c("PPARGC1A","COX1","NDUFA","PDK4","VEGFA","KDR","THY1","MYL4",
 #                 "MYH1","COL1A1","ACTC1","TNNT2","GADD45G","MMP9","NR4A1")
 
-# Prepare supplementary tables for the results
-system(paste("mkdir","supp_tables"))
-supp_path = paste(getwd(),"supp_tables/",sep="/")
-
-supp_table_genes = c()
-for(nn in names(analysis2selected_genes_stats)){
-  m = analysis2selected_genes_stats[[nn]]
-  m = cbind(rep(nn,nrow(m)),m)
-  colnames(m)[1] = "Discovered in"
-  supp_table_genes = rbind(supp_table_genes,m)
-}
-write.table(supp_table_genes,file=paste(supp_path,"supp_table_genes.txt",sep=""),
-            sep="\t",quote=F,col.names = T,row.names = F)
-
-supp_table_enrichments = go_res_fdr[,c(1:4,9)]
-colnames(supp_table_enrichments)[5] = "q-value"
-colnames(supp_table_enrichments)[1] = "Discovered in"
-write.table(supp_table_enrichments,file=paste(supp_path,"supp_table_enrichments.txt",sep=""),
-            sep="\t",quote=F,col.names = T,row.names = F)
-
 
 ############################################################################
 ############################################################################
@@ -554,12 +534,21 @@ for(nn in names(analysis2selected_genes_stats)){
   for(gg in unique(curr_groups)){
     curr_m = as.matrix(curr_genes[gg==curr_genes[,"Group"],])
     if(ncol(curr_m)==1){curr_m=t(curr_m)}
-    m = mean_effect_matrices[[nn]][curr_m[,"Entrez"],]
-    m_kmeans = kmeans(m,centers = 2)
-    m_kmeans = m_kmeans$cluster
+    m = as.matrix(mean_effect_matrices[[nn]][curr_m[,"Entrez"],])
+    if(ncol(m)==1){m=t(m)}
+    currk = 2
+    # if(nrow(curr_m)>50){currk=4}
+    if(nrow(m)>2){
+      m_kmeans = kmeans(m,centers = currk)
+      m_kmeans = m_kmeans$cluster
+    }
+    else{
+      m_kmeans = rep(1,nrow(m))
+      names(m_kmeans) = curr_m[,"Entrez"]
+    }
     for(kk in unique(m_kmeans)){
       currname = paste(nn,gg,kk,sep=",")
-      gene_subgroups[[currname]] = rownames(m)[m_kmeans==kk]
+      gene_subgroups[[currname]] = names(m_kmeans)[m_kmeans==kk]
     }
   }
 }
@@ -584,28 +573,50 @@ get_most_sig_enrichments_by_groups(gene_group_enrichments_fdr,num=3)
 library(ReactomePA)
 reactome_pathways_groups = run_reactome_enrichment_analysis(
   lapply(analysis2selected_genes,names),universe=bg)
-ps = reactome_pathways_groups$pvalue
+reactome_pathways_groups1 = reactome_pathways_groups[reactome_pathways_groups$Count>2,]
+ps = reactome_pathways_groups1$pvalue
 qs = p.adjust(ps,method="fdr")
-reactome_pathways_groups$qvalue = qs
-reactome_pathways_groups_fdr = reactome_pathways_groups[qs <= 0.1,]
+reactome_pathways_groups1$qvalue = qs
+reactome_pathways_groups_fdr = reactome_pathways_groups1[qs <= 0.1,]
 table(reactome_pathways_groups_fdr[,1])
 
 reactome_pathways_subgroups = run_reactome_enrichment_analysis(gene_subgroups,universe=bg)
-ps = reactome_pathways_groups$pvalue
+reactome_pathways_subgroups1 = reactome_pathways_subgroups[reactome_pathways_subgroups$Count>2,]
+ps = reactome_pathways_subgroups1$pvalue
 qs = p.adjust(ps,method="fdr")
-reactome_pathways_groups$qvalue = qs
-reactome_pathways_groups_fdr = reactome_pathways_groups[qs <= 0.1,]
-table(reactome_pathways_groups_fdr[,1])
+reactome_pathways_subgroups1$qvalue = qs
+reactome_pathways_subgroups_fdr = reactome_pathways_subgroups1[qs <= 0.1,]
+table(reactome_pathways_subgroups_fdr[,1])
+get_most_sig_enrichments_by_groups(reactome_pathways_subgroups_fdr,pcol="pvalue",num = 2)
 
 library(pathfindR)
 
 save(gene_subgroup_enrichments,gene_subgroup_enrichments_fdr,
      gene_group_enrichments,gene_group_enrichments_fdr,
+     reactome_pathways_subgroups,reactome_pathways_subgroups_fdr,
+     reactome_pathways_groups,reactome_pathways_groups_fdr,
      file="topGO_res_jan_2019.RData")
 
 
 # Heatmaps
 library(gplots)
+
+gene_set = gene_subgroups$`acute,muscle,training,2`
+ord = order(datasets$`acute,muscle`[[1]]$training,
+            datasets$`acute,muscle`[[1]]$time)
+mat = mean_effect_matrices$`acute,muscle`[gene_set,ord]
+rownames(mat) = unlist(entrez2symbol[rownames(mat)])
+mat[mat>5]=5;mat[mat< -5]=-5
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.9)
+
+gene_set = gene_subgroups$`acute,muscle,training,1`
+ord = order(datasets$`acute,muscle`[[1]]$training,
+            datasets$`acute,muscle`[[1]]$time)
+mat = mean_effect_matrices$`acute,muscle`[gene_set,ord]
+rownames(mat) = unlist(entrez2symbol[rownames(mat)])
+mat[mat>5]=5;mat[mat< -5]=-5
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.9)
+
 gene_set = gene_subgroups$`acute,muscle,time,1`
 ord = order(datasets$`acute,muscle`[[1]]$time,
             datasets$`acute,muscle`[[1]]$training)
@@ -620,15 +631,23 @@ ord = order(datasets$`longterm,muscle`[[1]]$time,
 mat = mean_effect_matrices$`longterm,muscle`[gene_set,ord]
 rownames(mat) = unlist(entrez2symbol[rownames(mat)])
 mat[mat>5]=5;mat[mat< -5]=-5
-heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered)
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.7)
 
-gene_set = gene_subgroups$`acute,blood,time;prop_males,1`
+gene_set = gene_subgroups$`longterm,muscle,base_model,1`
+ord = order(datasets$`longterm,muscle`[[1]]$time,
+            datasets$`longterm,muscle`[[1]]$training)
+mat = mean_effect_matrices$`longterm,muscle`[gene_set,ord]
+rownames(mat) = unlist(entrez2symbol[rownames(mat)])
+mat[mat>5]=5;mat[mat< -5]=-5
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.7)
+
+gene_set = gene_subgroups$`acute,blood,prop_males,1`
 ord = order(datasets$`acute,blood`[[1]]$prop_males,
             datasets$`acute,blood`[[1]]$time)
 mat = mean_effect_matrices$`acute,blood`[gene_set,ord]
 rownames(mat) = unlist(entrez2symbol[rownames(mat)])
 mat[mat>5]=5;mat[mat< -5]=-5
-heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered)
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.7)
 
 gene_set = gene_subgroups$`acute,blood,time,1`
 ord = order(datasets$`acute,blood`[[1]]$time)
@@ -636,6 +655,92 @@ mat = mean_effect_matrices$`acute,blood`[gene_set,ord]
 rownames(mat) = unlist(entrez2symbol[rownames(mat)])
 mat[mat>5]=5;mat[mat < -5]=-5
 heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered)
+
+# Analysis of the acute blood datasets
+plot_with_err_bars<-function(xnames,avg,sdev,add=F,...){
+  if(add){
+    lines(avg,pch=19,...)
+  }
+  else{
+    plot(avg,xaxt = "n",pch=19, type='l',...)
+    axis(1, at=1:length(xnames), labels=xnames)
+  }
+  # hack: we draw arrows but with very special "arrowheads"
+  arrows(1:length(xnames), avg-sdev, 1:length(xnames), avg+sdev,
+         length=0.05, angle=90, code=3)
+}
+
+par(mfrow=c(1,2))
+gene_set = gene_subgroups$`acute,blood,time,1`
+ord = order(datasets$`acute,blood`[[1]]$time)
+mat = mean_effect_matrices$`acute,blood`[gene_set,ord]
+times = ordered(as.numeric(sapply(colnames(mat),function(x)strsplit(x,split=";")[[1]][3])))
+D = dummy(times,levelsToKeep = levels(times))
+D = t(t(D)/colSums(D))
+mat1 = mat %*% D
+boxplot(mat1,xlab="Time after bout (hours)",ylab="Avg t-statistic",col="blue",
+        main="Down-regulated (196 genes)")
+gene_set = gene_subgroups$`acute,blood,time,2`
+ord = order(datasets$`acute,blood`[[1]]$time)
+mat = mean_effect_matrices$`acute,blood`[gene_set,ord]
+times = ordered(as.numeric(sapply(colnames(mat),function(x)strsplit(x,split=";")[[1]][3])))
+D = dummy(times,levelsToKeep = levels(times))
+D = t(t(D)/colSums(D))
+mat1 = mat %*% D
+boxplot(mat1,xlab="Time after bout (hours)",ylab="Avg t-statistic",col ="red",
+       main= "Up-regulated (99 genes)")
+
+
+# Prepare supplementary tables for the results
+system(paste("mkdir","supp_tables"))
+supp_path = paste(getwd(),"supp_tables/",sep="/")
+
+supp_table_genes = c()
+for(nn in names(analysis2selected_genes_stats)){
+  m = analysis2selected_genes_stats[[nn]]
+  m = cbind(rep(nn,nrow(m)),m)
+  colnames(m)[1] = "Discovered in"
+  currgenes = rownames(m)
+  subgroups = c()
+  for(g in currgenes){
+    curr_subgroups = names(gene_subgroups)[sapply(gene_subgroups,function(x,y)is.element(y,set=x),y=g)]
+    curr_subgroups = paste(curr_subgroups,collapse=" and ")
+    subgroups[g]=curr_subgroups
+  }
+  m = cbind(m,subgroups)
+  supp_table_genes = rbind(supp_table_genes,m)
+}
+write.table(supp_table_genes,file=paste(supp_path,"supp_table_genes.txt",sep=""),
+            sep="\t",quote=F,col.names = T,row.names = F)
+
+# Enrichment tables: go or reactome and group or subgroup
+supp_table_enrichments = gene_group_enrichments_fdr[,c(1:4,9)]
+colnames(supp_table_enrichments)[5] = "q-value"
+colnames(supp_table_enrichments)[1] = "Discovered in"
+write.table(supp_table_enrichments,
+            file=paste(supp_path,"supp_table_enrichments_go_group.txt",sep=""),
+            sep="\t",quote=F,col.names = T,row.names = F)
+
+supp_table_enrichments = gene_subgroup_enrichments_fdr[,c(1:4,9)]
+colnames(supp_table_enrichments)[5] = "q-value"
+colnames(supp_table_enrichments)[1] = "Discovered in"
+write.table(supp_table_enrichments,
+            file=paste(supp_path,"supp_table_enrichments_go_subgroup.txt",sep=""),
+            sep="\t",quote=F,col.names = T,row.names = F)
+
+supp_table_enrichments = reactome_pathways_groups_fdr[,c(1,3,8)]
+colnames(supp_table_enrichments)[3] = "q-value"
+colnames(supp_table_enrichments)[1] = "Discovered in"
+write.table(supp_table_enrichments,
+            file=paste(supp_path,"supp_table_enrichments_reactome_group.txt",sep=""),
+            sep="\t",quote=F,col.names = T,row.names = F)
+
+supp_table_enrichments = reactome_pathways_subgroups_fdr[,c(1,3,8)]
+colnames(supp_table_enrichments)[3] = "q-value"
+colnames(supp_table_enrichments)[1] = "Discovered in"
+write.table(supp_table_enrichments,
+            file=paste(supp_path,"supp_table_enrichments_reactome_subgroup.txt",sep=""),
+            sep="\t",quote=F,col.names = T,row.names = F)
 
 
 
