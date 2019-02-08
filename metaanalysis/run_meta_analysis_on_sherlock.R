@@ -70,45 +70,55 @@ add_prefix_to_names<-function(pref,l,sep=":"){
   return(l)
 }
 
-acute_gdata_metaanalysis<-function(gdata,permtest=F,
-    mod_names = c("training","time","avg_age","prop_males")){
-  res1 = model_selection_meta_analysis(gdata,random=list(~ V1|gse),struct="AR",mod_names=mod_names)
+# acute_gdata_metaanalysis<-function(gdata,permtest=F,
+#     mod_names = c("training","time","avg_age","prop_males")){
+#   res1 = model_selection_meta_analysis(gdata,
+#        random=list(~ V1|gse),struct="CS",mod_names=mod_names)
+#   res0 = model_selection_meta_analysis(gdata,func=rma.uni,mod_names=mod_names)
+#   l = list(
+#     models = c(add_prefix_to_names("simple",res0$models),
+#                add_prefix_to_names("base2",res1$models)),
+#     aics = c(add_prefix_to_names("simple",res0$aics),
+#              add_prefix_to_names("base2",res1$aics))
+#   )
+#   # keep the simple models and the top 2
+#   l = keep_main_results_for_model_list(l)
+#   gc()
+#   return(l)
+# }
+
+gdata_metaanalysis<-function(gdata,permtest=F,
+     mod_names = c("training","time","avg_age","prop_males")){
+  res1 = model_selection_meta_analysis(gdata,
+                                       random=list(~ V1|gse),struct="CS",mod_names=mod_names)
   res0 = model_selection_meta_analysis(gdata,func=rma.uni,mod_names=mod_names)
   l = list(
     models = c(add_prefix_to_names("simple",res0$models),
-               add_prefix_to_names("time_ar",res1$models)),
+               add_prefix_to_names("base2",res1$models)),
     aics = c(add_prefix_to_names("simple",res0$aics),
-             add_prefix_to_names("time_ar",res1$aics))
+             add_prefix_to_names("base2",res1$aics))
   )
-  # sel = select_model_return_p(l)
-  # if(permtest && is.element("rma.uni",set=class(sel$model))){
-  #   sel[["permp"]] = permutest(sel$model)
-  # }
   # keep the simple models and the top 2
   l = keep_main_results_for_model_list(l)
   gc()
   return(l)
 }
 
-longterm_gdata_metaanalysis<-function(gdata,permtest=F,simple_output=T,
-    mod_names = c("training","time","avg_age","prop_males")){
-  res1 = model_selection_meta_analysis(gdata,random=list(~ 1|gse),mod_names=mod_names)
-  res0 = model_selection_meta_analysis(gdata,func=rma.uni,mod_names=mod_names)
-  l = list(
-    models = c(add_prefix_to_names("simple",res0$models),
-               add_prefix_to_names("time_ar",res1$models)),
-    aics = c(add_prefix_to_names("simple",res0$aics),
-             add_prefix_to_names("time_ar",res1$aics))
-  )
-  # sel = select_model_return_p(l)
-  # if(permtest && is.element("rma.uni",set=class(sel$model))){
-  #   sel[["permp"]] = permutest(sel$model)
-  # }
-  # keep the simple models and the top 2
-  l = keep_main_results_for_model_list(l)
-  gc()
-  return(l)
-}
+# longterm_gdata_metaanalysis<-function(gdata,permtest=F,simple_output=T,
+#     mod_names = c("training","time","avg_age","prop_males")){
+#   res1 = model_selection_meta_analysis(gdata,random=list(~ 1|gse),mod_names=mod_names)
+#   res0 = model_selection_meta_analysis(gdata,func=rma.uni,mod_names=mod_names)
+#   l = list(
+#     models = c(add_prefix_to_names("simple",res0$models),
+#                add_prefix_to_names("base2",res1$models)),
+#     aics = c(add_prefix_to_names("simple",res0$aics),
+#              add_prefix_to_names("base2",res1$aics))
+#   )
+#   # keep the simple models and the top 2
+#   l = keep_main_results_for_model_list(l)
+#   gc()
+#   return(l)
+# }
 
 keep_main_results_for_model_list<-function(l,num=2){
   aics = sort(l$aics)
@@ -164,14 +174,8 @@ all_meta_analysis_res <- list()
 for(nn in names(meta_reg_datasets)){
   curr_dataset = meta_reg_datasets[[nn]]
   curr_mods = meta_reg_to_mods[[nn]]
-  if(grepl("acute",nn)){
-    analysis1 = mclapply(curr_dataset,acute_gdata_metaanalysis,
-                         mod_names=curr_mods,mc.cores = num_cores)
-  }
-  else{
-    analysis1 = mclapply(curr_dataset,longterm_gdata_metaanalysis,
-                         mod_names=curr_mods,mc.cores = num_cores)
-  }
+  analysis1 = mclapply(curr_dataset,gdata_metaanalysis,
+                        mod_names=curr_mods,mc.cores = num_cores)
   all_meta_analysis_res[[nn]] = analysis1
 }
 save(all_meta_analysis_res,file="meta_analysis_results.RData")

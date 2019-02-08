@@ -217,38 +217,25 @@ for(nn in names(simple_RE_pvals)){
   plot(x=x1,y=x2,xlab="I2(%)",ylab="beta",pch=20,cex=0.2,main=nn)
 }
 
-# Example for high I2 and low tau
-# TODO: revise and add some stats to the report
-nn  = 2
-table(simple_RE_I2s[[nn]] < 50 & abs(simple_RE_beta[[nn]]) < 0.25)
-selected_is = names(which(simple_RE_I2s[[nn]] > 60 &
-    simple_RE_tau2s[[nn]] < 0.1 & abs(simple_RE_beta[[nn]]) > 0.25))
-selected_is = names(which(simple_RE_I2s[[nn]] > 90 &
-    simple_RE_tau2s[[nn]] < 0.01))
-selected_is = names(which(simple_RE_I2s[[nn]] < 25 &
-    simple_RE_pvals[[nn]] < 0.00001 & abs(simple_RE_beta[[nn]]) > 0.25))
-selected_is = names(which(
-    simple_RE_pvals[[nn]] < 1e-8 & abs(simple_RE_beta[[nn]]) > 0.25))
-selected_i = sample(selected_is)[1]
-forest(simple_REs[[nn]][[selected_i]])
-median(as.numeric(datasets[[nn]][[selected_i]]$p))
-simple_REs[[nn]][[selected_i]]
+# # Example for high I2 and low tau
+# # TODO: revise and add some stats to the report
+# nn  = 2
+# table(simple_RE_I2s[[nn]] < 50 & abs(simple_RE_beta[[nn]]) < 0.25)
+# selected_is = names(which(simple_RE_I2s[[nn]] > 60 &
+#     simple_RE_tau2s[[nn]] < 0.1 & abs(simple_RE_beta[[nn]]) > 0.25))
+# selected_is = names(which(simple_RE_I2s[[nn]] > 90 &
+#     simple_RE_tau2s[[nn]] < 0.01))
+# selected_is = names(which(simple_RE_I2s[[nn]] < 25 &
+#     simple_RE_pvals[[nn]] < 0.00001 & abs(simple_RE_beta[[nn]]) > 0.25))
+# selected_is = names(which(
+#     simple_RE_pvals[[nn]] < 1e-8 & abs(simple_RE_beta[[nn]]) > 0.25))
+# selected_i = sample(selected_is)[1]
+# forest(simple_REs[[nn]][[selected_i]])
+# median(as.numeric(datasets[[nn]][[selected_i]]$p))
+# simple_REs[[nn]][[selected_i]]
 
-# Filters 1 and 2 of the analysis:
+# Filters 1 exclude genes with no sig p at 0.05
 to_rem1 = sapply(rep_datasets,function(x)apply(x<0.05,1,sum,na.rm=T) <= 1)
-to_rem2 = list()
-for(nn in names(simple_RE_beta)){
-  if(grepl("acute",nn)){
-    to_rem2[[nn]] = simple_RE_I2s[[nn]] < 50 & (abs(simple_RE_beta[[nn]]) < 0.25 | simple_RE_pvals[[nn]] > 0.05)
-  }
-  else{
-    to_rem2[[nn]] = simple_RE_I2s[[nn]] < 50 & (abs(simple_RE_beta[[nn]]) < 0.1 | simple_RE_pvals[[nn]] > 0.05)
-  }
-  print(all(names(to_rem1[[nn]])==names(to_rem2[[nn]]),na.rm=T))
-  print(table(to_rem1[[nn]] | to_rem2[[nn]])/length(to_rem2[[nn]]))
-  print(sum(to_rem1[[nn]] | to_rem2[[nn]],na.rm = T))
-}
-
 rm(acute_gene_tables_raw);rm(acute_gene_tables)
 rm(longterm_gene_tables_raw);rm(longterm_gene_tables)
 save.image(file="workspace_before_rep_analysis.RData")
@@ -256,9 +243,7 @@ save.image(file="workspace_before_rep_analysis.RData")
 # Create the input files for meta-regression and replication analysis
 meta_reg_datasets = list()
 for(nn in names(simple_RE_beta)){
-  print(all(names(to_rem1[[nn]])==names(to_rem2[[nn]]),na.rm=T))
-  to_rem = to_rem1[[nn]] | to_rem2[[nn]]
-  curr_genes = names(which(!to_rem))
+  curr_genes = names(which(!to_rem1[[nn]]))
   meta_reg_datasets[[nn]] = datasets[[nn]][curr_genes]
 }
 sapply(meta_reg_datasets,length)
@@ -410,6 +395,9 @@ go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
 table(go_res_fdr$setname)
 gene_group_enrichments = go_res
 gene_group_enrichments_fdr = go_res_fdr
+
+gs = lapply(analysis2selected_genes,names)
+gs = lapply(gs,function(x,y)y[x],y=unlist(entrez2symbol))
 
 # par(mfrow=c(2,2))
 # for(nn in names(all_meta_analysis_res)){
@@ -589,8 +577,6 @@ reactome_pathways_subgroups_fdr = reactome_pathways_subgroups1[qs <= 0.1,]
 table(reactome_pathways_subgroups_fdr[,1])
 get_most_sig_enrichments_by_groups(reactome_pathways_subgroups_fdr,pcol="pvalue",num = 2)
 
-library(pathfindR)
-
 save(gene_subgroup_enrichments,gene_subgroup_enrichments_fdr,
      gene_group_enrichments,gene_group_enrichments_fdr,
      reactome_pathways_subgroups,reactome_pathways_subgroups_fdr,
@@ -714,15 +700,17 @@ write.table(supp_table_genes,file=paste(supp_path,"supp_table_genes.txt",sep="")
             sep="\t",quote=F,col.names = T,row.names = F)
 
 # Enrichment tables: go or reactome and group or subgroup
-supp_table_enrichments = gene_group_enrichments_fdr[,c(1:4,9)]
-colnames(supp_table_enrichments)[5] = "q-value"
+supp_table_enrichments = gene_group_enrichments_fdr[,c(1:4,9:10)]
+colnames(supp_table_enrichments)[6] = "q-value"
+colnames(supp_table_enrichments)[5] = "Genes"
 colnames(supp_table_enrichments)[1] = "Discovered in"
 write.table(supp_table_enrichments,
             file=paste(supp_path,"supp_table_enrichments_go_group.txt",sep=""),
             sep="\t",quote=F,col.names = T,row.names = F)
 
-supp_table_enrichments = gene_subgroup_enrichments_fdr[,c(1:4,9)]
-colnames(supp_table_enrichments)[5] = "q-value"
+supp_table_enrichments = gene_subgroup_enrichments_fdr[,c(1:4,9:10)]
+colnames(supp_table_enrichments)[6] = "q-value"
+colnames(supp_table_enrichments)[5] = "Genes"
 colnames(supp_table_enrichments)[1] = "Discovered in"
 write.table(supp_table_enrichments,
             file=paste(supp_path,"supp_table_enrichments_go_subgroup.txt",sep=""),

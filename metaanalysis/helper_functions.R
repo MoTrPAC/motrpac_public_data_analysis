@@ -331,7 +331,8 @@ get_fold_changes_vs_baseline<-function(x,subjs,timev,baseline=NULL,func = functi
 # GO enrichment
 library(topGO)
 run_topgo_enrichment_fisher<-function(genesOfInterest,geneUniverse,
-                                      go_term_size=10,go_dags=c("BP","MF"),...){
+                                      go_term_size=10,go_dags=c("BP","MF"),
+                                      gene2name=entrez2symbol,...){
   l = list()
   if(class(genesOfInterest)=="character"){
     l[["set1"]] = genesOfInterest
@@ -350,10 +351,33 @@ run_topgo_enrichment_fisher<-function(genesOfInterest,geneUniverse,
       allGOs = usedGO(myGOdata)
       resultFisher <- runTest(myGOdata, algorithm="classic", statistic="fisher")
       allRes <- GenTable(myGOdata, classicFisher = resultFisher, orderBy = 
-                       "resultFisher", ranksOf = "classicFisher", topNodes = length(score(resultFisher)))
+                       "resultFisher", ranksOf = "classicFisher",
+                       topNodes = length(score(resultFisher)))
+      
+      # add selected genes, only for enrichments with p < 0.05
+      gene_rep = c()
+      for(i in 1:nrow(allRes)){
+        if (as.numeric(allRes[i,"classicFisher"]) > 0.05){
+          gene_rep[i]=""
+        }
+        else{
+          curr_go = allRes[i,"GO.ID"]
+          curr_genes = genesInTerm(myGOdata,curr_go)[[1]]
+          curr_genes = intersect(curr_genes,l[[nn]])
+          if(length(curr_genes)!=as.numeric(allRes[i,"Significant"])){
+            print("Error in intersect, debug the topGO wrapper!")
+            return(NULL)
+          }
+          if(!is.null(gene2name)){
+            curr_genes = unlist(gene2name[curr_genes])
+          }
+          gene_rep[i] = paste(curr_genes,collapse=",")
+        }
+      }
+      
       setname = rep(nn,nrow(allRes))
       typev = rep(type,nrow(allRes))
-      allRes = cbind(setname,typev,allRes)
+      allRes = cbind(setname,typev,allRes,gene_rep)
       res = rbind(res,allRes)
     }
   }
