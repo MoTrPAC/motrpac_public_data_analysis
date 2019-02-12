@@ -108,6 +108,7 @@ simple_stouffer_meta_analysis<-function(gdata){
 
 get_coeffs_str<-function(coeffs){
   coeffs_v = NULL
+  if(is.null(dim(coeffs))){coeffs=as.matrix(coeffs,nrow=1)}
   for(i in 1:nrow(coeffs)){
     if(i==1){
       coeffs_v = paste(coeffs_v,paste("b0:",
@@ -134,9 +135,11 @@ get_coeffs_str<-function(coeffs){
 load("PADB_univariate_results_and_preprocessed_data_acute.RData")
 acute_datasets = cohort_data
 acute_metadata = cohort_metadata
+acute_sample2time = sample2time
 load("PADB_univariate_results_and_preprocessed_data_longterm.RData")
 longterm_datasets = cohort_data
 longterm_metadata = cohort_metadata
+longterm_sample2time = sample2time
 load("PADB_dataset_level_meta_analysis_data.RData")
 
 # Get the cleaned, filtered datasets
@@ -260,7 +263,7 @@ save(meta_reg_datasets,meta_reg_to_mods,
 ############################################################################
 ############################################################################
 # Meta-regression and model selection for selected genes
-library(parallel)
+library(parallel);library(metafor)
 
 I2_thr = 50
 AIC_diff_thr = 5
@@ -271,6 +274,7 @@ P_thr = 0.0001
 # Load the results (run on sherlock) instead of running the code above
 load("meta_analysis_results.RData")
 load("workspace_before_rep_analysis.RData")
+load("meta_analysis_input.RData")
 
 # Algorithm for selecting genes from each meta-reg analysis
 analysis2selected_genes = list()
@@ -278,49 +282,66 @@ analysis2selected_genes_stats = list()
 for(nn in names(all_meta_analysis_res)){
   analysis1 = all_meta_analysis_res[[nn]]
   pvals = sapply(analysis1,function(x)x[[1]]$mod_p)
-  i2s = sapply(analysis1,function(x)x[[1]]$I2)
-  aic_diffs = sapply(analysis1,function(x)unname(x[[1]]$aic_c - x$`simple:base_model`$aic_c))
+  i2s = simple_RE_I2s[[nn]][names(pvals)]
+  aic_diffs = unlist(sapply(analysis1,function(x)unname(x[[1]]$aic_c - x$`simple:base_model`$aic_c)))
+  aic_diffs[setdiff(names(i2s),names(aic_diffs))] = 0
+  aic_diffs = aic_diffs[names(i2s)]
   if(grepl("acute",nn)){
     model2beta = sapply(analysis1,function(x)any(abs(x[[1]]$coeffs[,1])>ACUTE_beta_thr))
   }
   else{
     model2beta = sapply(analysis1,function(x)any(abs(x[[1]]$coeffs[,1])>LONGTERM_beta_thr))  
   }
-  i2s_base = simple_RE_I2s[[nn]][names(i2s)]
-  pvals_base = simple_RE_pvals[[nn]][names(i2s)]
-  effects_base = simple_RE_beta[[nn]][names(i2s)]
-  # gene set 1: low I2 before inference, significant base p and high effects
+  
+  # separate into two gene sets: those that passed the aic diff test vs. those that did not
+  genes_with_high_aic_diff = names(aic_diffs)[aic_diffs <= -AIC_diff_thr]
+  selected_aic_diff_genes = names(aic_diffs)[aic_diffs <= -AIC_diff_thr & model2beta & pvals <= P_thr]
+  genes_without_high_aic_diff = names(aic_diffs)[aic_diffs > -AIC_diff_thr]
+  genes_without_high_aic_diff_i2s = i2s[genes_without_high_aic_diff]
+  genes_without_high_aic_diff_pvals = simple_RE_pvals[[nn]][genes_without_high_aic_diff]
+  genes_without_high_aic_diff_betas = abs(simple_RE_beta[[nn]][genes_without_high_aic_diff])
   if(grepl("acute",nn)){
-    gene_set1 = names(which(i2s_base < I2_thr & pvals_base < P_thr & abs(effects_base)>ACUTE_beta_thr))
+    genes_without_high_aic_diff_betas = genes_without_high_aic_diff_betas>ACUTE_beta_thr
   }
   else{
-    gene_set1 = names(which(i2s_base < I2_thr & pvals_base < P_thr & abs(effects_base)>LONGTERM_beta_thr))
+    genes_without_high_aic_diff_betas = genes_without_high_aic_diff_betas>LONGTERM_beta_thr
   }
-  gene_set2 = names(which(aic_diffs <= -AIC_diff_thr & model2beta & pvals < P_thr))
-  gene_set2_names = sapply(analysis1[gene_set2],function(x)names(x)[1])
-  gene_set2_names = sapply(gene_set2_names,function(x)strsplit(x,split=":")[[1]][2])
-  gene_set2_names[gene_set1] = "base_model"
+  selected_base_model_genes = genes_without_high_aic_diff[
+    genes_without_high_aic_diff_i2s < I2_thr &
+      genes_without_high_aic_diff_pvals < P_thr &
+      genes_without_high_aic_diff_betas
+    ]
+  selected_base_model_genes = selected_base_model_genes[!is.na(selected_base_model_genes)]
+  
+  curr_selected_genes = union(selected_aic_diff_genes,selected_base_model_genes)
+  curr_selected_genes_names = sapply(analysis1[selected_aic_diff_genes],function(x)names(x)[1])
+  curr_selected_genes_names = sapply(curr_selected_genes_names,function(x)strsplit(x,split=":")[[1]][2])
+  curr_selected_genes_names[selected_base_model_genes] = "base_model"
   # is.element("10891",set=gene_set2)
-  # gene_set2_names["10891"]
-  # table(gene_set2_names)
-  analysis2selected_genes[[nn]] = gene_set2_names
-  coeffs = lapply(analysis1[names(gene_set2_names)],function(x)x[[1]]$coeffs)
+  # curr_selected_genes_names["10891"]
+  # table(curr_selected_genes_names)
+  analysis2selected_genes[[nn]] = curr_selected_genes_names
+  
+  coeffs = lapply(analysis1[names(curr_selected_genes_names)],function(x)x[[1]]$coeffs)[selected_aic_diff_genes]
+  coeffs[selected_base_model_genes] = lapply(simple_REs[[nn]][selected_base_model_genes],
+                                             function(x){y=cbind(x$beta,x$pval);colnames(y)=c("beta","pval");y})
+  coeffs = coeffs[curr_selected_genes]
   coeffs_v = sapply(coeffs,get_coeffs_str)
   m = cbind(
-    unlist(names(gene_set2_names)), # entrez gene id
-    unlist(entrez2symbol[names(gene_set2_names)]), # gene symbol
-    unlist(gene_set2_names), # gene group
-    pvals[names(gene_set2_names)], # model's p-value
-    aic_diffs[names(gene_set2_names)], # AICc difference
+    unlist(names(curr_selected_genes_names)), # entrez gene id
+    unlist(entrez2symbol[names(curr_selected_genes_names)]), # gene symbol
+    unlist(curr_selected_genes_names), # gene group
+    pvals[names(curr_selected_genes_names)], # model's p-value
+    aic_diffs[names(curr_selected_genes_names)], # AICc difference
     coeffs_v # details about the coefficients
   )
-  # Correct the table above: base model should have base p-values, 
-  # and a comment about the AIC difference
-  base_model_genes = is.element(m[,1],set=gene_set1)
-  if(sum(base_model_genes)>0){
-    m[base_model_genes,4] = pvals_base[m[base_model_genes,1]]
-    m[base_model_genes,5] = paste(m[base_model_genes,5],"*",sep="")
-  }
+  # # Correct the table above: base model should have base p-values, 
+  # # and a comment about the AIC difference
+  # base_model_genes = is.element(m[,1],set=selected_base_model_genes)
+  # if(sum(base_model_genes)>0){
+  #   m[base_model_genes,4] = pvals_base[m[base_model_genes,1]]
+  #   m[base_model_genes,5] = paste(m[base_model_genes,5],"*",sep="")
+  # }
   colnames(m)= c("Entrez","Symbol","Group","Model pvalue","AICc diff","Coefficients")
   analysis2selected_genes_stats[[nn]] = m
 }
@@ -431,6 +452,7 @@ curr_times[gdata$time==24] = "late(>12h)"
 curr_m$slab = paste(gdata$training,curr_times,sep=",")
 analysis1 = all_meta_analysis_res$`acute,muscle`
 aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
+dev.off()
 forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T)
 boxplot(yi~time,data=gdata,
         main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
@@ -474,6 +496,20 @@ forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T)
 boxplot(yi~time+training,data=gdata,
         main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
         xlab="Time",ylab="Fold change",las=1)
+# 7423 VEGFB
+gene ="7423"
+gene_name = entrez2symbol[[gene]]
+curr_m = simple_REs$`acute,blood`[[gene]]
+gdata = meta_reg_datasets$`acute,blood`[[gene]]
+curr_m$slab.null = F
+curr_times = rep("early",nrow(gdata))
+curr_times[gdata$time==24] = "late(>12h)"
+curr_times[gdata$time==4] = "inter(<5h)"
+curr_m$slab = paste(gdata$training,curr_times,sep=",")
+forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T)
+boxplot(yi~time+training,data=gdata,
+        main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
+        xlab="Time",ylab="Fold change",las=1)
 
 # Males-dependent example
 gene = "7188"
@@ -503,6 +539,7 @@ boxplot(yi~prop_males,data=gdata,
 ############################################################################
 ############################################################################
 # Interpretation of the results
+library(topGO)
 
 # Get effect matrices - mean responses - t statistics
 mean_effect_matrices = lapply(datasets,function(x)t(sapply(x,function(y)as.numeric(y$tstat))))
@@ -515,7 +552,9 @@ for(nn in names(mean_effect_matrices)){
   colnames(mean_effect_matrices[[nn]]) = gsub("resistance","R",
                                               colnames(mean_effect_matrices[[nn]]),ignore.case = T)
 }
+
 gene_subgroups = list()
+gene_t_patterns = list()
 for(nn in names(analysis2selected_genes_stats)){
   curr_genes = analysis2selected_genes_stats[[nn]]
   curr_groups = curr_genes[,"Group"]
@@ -524,6 +563,27 @@ for(nn in names(analysis2selected_genes_stats)){
     if(ncol(curr_m)==1){curr_m=t(curr_m)}
     m = as.matrix(mean_effect_matrices[[nn]][curr_m[,"Entrez"],])
     if(ncol(m)==1){m=t(m)}
+    rownames(m) = curr_m[,"Entrez"]
+    
+    # cluster based on the moderator's average not the t-test scores themselves
+    if(gg != "base_model"){
+      curr_mods = strsplit(gg,split=";")[[1]]
+      curr_gdata = datasets[[nn]][[1]]
+      for(j in names(curr_gdata)){
+        if(is.numeric(curr_gdata[[j]])){curr_gdata[[j]] = format(curr_gdata[[j]],digits=2)}
+      }
+      curr_mods = curr_gdata[,curr_mods]
+      if(!is.null(dim(curr_mods))){
+        curr_mods = apply(curr_mods,1,paste,collapse=";")
+      }
+      m = t(apply(m,1,function(x,y)tapply(x,y,mean),y=curr_mods))
+    }
+    else{
+      m = matrix(rowMeans(m),ncol=1)
+      rownames(m) = curr_m[,"Entrez"]
+      colnames(m) = "base_model_mean_t"
+    }
+    
     currk = 2
     # if(nrow(curr_m)>50){currk=4}
     if(nrow(m)>2){
@@ -534,6 +594,11 @@ for(nn in names(analysis2selected_genes_stats)){
       m_kmeans = rep(1,nrow(m))
       names(m_kmeans) = curr_m[,"Entrez"]
     }
+    m = cbind(m,m_kmeans)
+    colnames(m)[ncol(m)] = "kmeans_clusters"
+    for(j in 1:ncol(m)){m[,j]=as.numeric(format(m[,j],digits=3))}
+    gene_t_patterns[[paste(nn,gg,sep=",")]] = m
+    
     for(kk in unique(m_kmeans)){
       currname = paste(nn,gg,kk,sep=",")
       gene_subgroups[[currname]] = names(m_kmeans)[m_kmeans==kk]
@@ -541,6 +606,15 @@ for(nn in names(analysis2selected_genes_stats)){
   }
 }
 sapply(gene_subgroups,length)
+gene_subgroups[["longterm,muscle,prop_males,1"]]
+sapply(gene_t_patterns,colnames)
+base_model_ms = c()
+for(gg in names(gene_t_patterns)[grepl("base_model",names(gene_t_patterns))]){
+  currm = gene_t_patterns[[gg]]
+  currm = cbind(rep(gg,nrow(currm)),currm)
+  base_model_ms = rbind(base_model_ms,currm)
+}
+gene_t_patterns[["base_models"]] = base_model_ms
 
 # Enrichment analysis of the new groups
 bg = unique(c(unlist(sapply(simple_REs,names))))
@@ -586,7 +660,6 @@ save(gene_subgroup_enrichments,gene_subgroup_enrichments_fdr,
 
 # Heatmaps
 library(gplots)
-
 gene_set = gene_subgroups$`acute,muscle,training,2`
 ord = order(datasets$`acute,muscle`[[1]]$training,
             datasets$`acute,muscle`[[1]]$time)
@@ -676,10 +749,75 @@ mat1 = mat %*% D
 boxplot(mat1,xlab="Time after bout (hours)",ylab="Avg t-statistic",col ="red",
        main= "Up-regulated (99 genes)")
 
-
+###############################################
+###############################################
+###############################################
 # Prepare supplementary tables for the results
+###############################################
+###############################################
+###############################################
+
 system(paste("mkdir","supp_tables"))
 supp_path = paste(getwd(),"supp_tables/",sep="/")
+supp_file = paste(supp_path,"SupplementaryTables.xlsx",sep="/")
+library(xlsx)
+
+# 1. Tables presenting the cohorts
+metadata_row_for_supp_table<-function(x,y,samp2time){
+  curr_samps = samp2time[x$gsms]
+  curr_samps = curr_samps[!is.na(curr_samps)]
+  Nsample = length(curr_samps)
+  curr_samps[curr_samps==min(samp2time)]="Pre"
+  if(is.element("gene_fold_changes",set=names(y))){
+    sample_info = strsplit(colnames(y$gene_fold_changes),split="_")
+    sample_info_tps =  sapply(sample_info,function(x)x[length(x)])
+    subjects =  sapply(sample_info,function(x)x[1])
+    Nsubject = sum(sample_info_tps==sample_info_tps[1])
+  }
+  else{
+    Nsubject=Nsample
+  }
+  tps = paste(unique(curr_samps),collapse=",")
+  res = c("GSE"=x$gse,"Tissue"=x$tissue,"Training"=x$training,"Nsample"=Nsample,"Nsubject"=Nsubject,
+          "Time_points"=tps)
+  return(res)
+}
+m1 = c()
+for(nn in names(acute_metadata)){
+  m1 = rbind(m1,
+        c(
+          nn,metadata_row_for_supp_table(acute_metadata[[nn]],
+                                         acute_datasets[[nn]],acute_sample2time)
+        ))
+}
+
+m2 = c()
+for(nn in names(longterm_datasets)){
+    m2 = rbind(m2,
+               c(
+                 nn,metadata_row_for_supp_table(longterm_metadata[[nn]],
+                                                longterm_datasets[[nn]],longterm_sample2time)
+               ))
+}
+supp_table_1_all_cohorts = rbind(m1,m2)
+meta_analysis_group=c()
+for(nn in supp_table_1_all_cohorts[,1]){
+  currg = ""
+  for(nn2 in names(datasets)){
+    if(is.element(nn,set=datasets[[nn2]][[1]][,1])){
+      currg = nn2
+    }
+  }
+  for(nn2 in names(untrained_datasets)){
+    if(is.element(nn,set=untrained_datasets[[nn2]][[1]][,1])){
+      currg = nn2
+    }
+  }
+  meta_analysis_group[nn]=currg
+}
+supp_table_1_all_cohorts = cbind(supp_table_1_all_cohorts,meta_analysis_group)
+colnames(supp_table_1_all_cohorts)[1]="Cohort_ID"
+write.xlsx(supp_table_1_all_cohorts,file=supp_file,sheetName = "STable1",row.names = F)
 
 supp_table_genes = c()
 for(nn in names(analysis2selected_genes_stats)){
@@ -696,40 +834,64 @@ for(nn in names(analysis2selected_genes_stats)){
   m = cbind(m,subgroups)
   supp_table_genes = rbind(supp_table_genes,m)
 }
-write.table(supp_table_genes,file=paste(supp_path,"supp_table_genes.txt",sep=""),
-            sep="\t",quote=F,col.names = T,row.names = F)
+rownames(supp_table_genes)=NULL
+write.xlsx(supp_table_genes,file=supp_file,sheetName = "STable2",row.names = F,append = T)
 
-# Enrichment tables: go or reactome and group or subgroup
-supp_table_enrichments = gene_group_enrichments_fdr[,c(1:4,9:10)]
-colnames(supp_table_enrichments)[6] = "q-value"
-colnames(supp_table_enrichments)[5] = "Genes"
-colnames(supp_table_enrichments)[1] = "Discovered in"
-write.table(supp_table_enrichments,
-            file=paste(supp_path,"supp_table_enrichments_go_group.txt",sep=""),
-            sep="\t",quote=F,col.names = T,row.names = F)
+# Mean t-statistic matrices
+base_model_ms = gene_t_patterns$base_models
+base_model_ms = cbind(rownames(base_model_ms),
+                      unlist(entrez2symbol[rownames(base_model_ms)]),base_model_ms)
+colnames(base_model_ms)[1:3] = c("Entrez","Symbol","Analysis_type")
+rownames(base_model_ms)=NULL
+write.xlsx(base_model_ms,file=supp_file,sheetName = "STable3_base_models_ts",
+           row.names = F,append = T)
+sheet_counter=3
+for(gg in names(gene_t_patterns)[!grepl("base_",names(gene_t_patterns))]){
+  sheet_counter = sheet_counter+1
+  ms = gene_t_patterns[[gg]]
+  ms = cbind(rownames(ms),unlist(entrez2symbol[rownames(ms)]),ms)
+  colnames(ms)[1:2] = c("Entrez","Symbol")
+  gg = gsub(",",replacement = "_",gg)
+  currname=paste("tstats_",gg,sep="")
+  write.xlsx(ms,file=supp_file,
+             sheetName = paste("STable",sheet_counter,"_",currname,sep=""),
+             row.names = F,append = T)
+}
 
+# GO enrichments of subgroups
+sheet_counter = sheet_counter+1
 supp_table_enrichments = gene_subgroup_enrichments_fdr[,c(1:4,9:10)]
 colnames(supp_table_enrichments)[6] = "q-value"
 colnames(supp_table_enrichments)[5] = "Genes"
 colnames(supp_table_enrichments)[1] = "Discovered in"
-write.table(supp_table_enrichments,
-            file=paste(supp_path,"supp_table_enrichments_go_subgroup.txt",sep=""),
-            sep="\t",quote=F,col.names = T,row.names = F)
+write.xlsx(supp_table_enrichments,file=supp_file,
+           sheetName = paste("STable",sheet_counter,"_GO_enrichments",sep=""),
+           row.names = F,append=T)
 
-supp_table_enrichments = reactome_pathways_groups_fdr[,c(1,3,8)]
-colnames(supp_table_enrichments)[3] = "q-value"
-colnames(supp_table_enrichments)[1] = "Discovered in"
-write.table(supp_table_enrichments,
-            file=paste(supp_path,"supp_table_enrichments_reactome_group.txt",sep=""),
-            sep="\t",quote=F,col.names = T,row.names = F)
-
+# Same for Reactome
+sheet_counter = sheet_counter+1
 supp_table_enrichments = reactome_pathways_subgroups_fdr[,c(1,3,8)]
 colnames(supp_table_enrichments)[3] = "q-value"
 colnames(supp_table_enrichments)[1] = "Discovered in"
-write.table(supp_table_enrichments,
-            file=paste(supp_path,"supp_table_enrichments_reactome_subgroup.txt",sep=""),
-            sep="\t",quote=F,col.names = T,row.names = F)
+write.xlsx(supp_table_enrichments,file=supp_file,
+           sheetName = paste("STable",sheet_counter,"_Reactome_enrichments",sep=""),
+           row.names = F,append=T)
 
-
+# # Original groups (without kmeans and partitions by meta-regression type)
+# # Enrichment tables: go or reactome and group or subgroup
+# supp_table_enrichments = gene_group_enrichments_fdr[,c(1:4,9:10)]
+# colnames(supp_table_enrichments)[6] = "q-value"
+# colnames(supp_table_enrichments)[5] = "Genes"
+# colnames(supp_table_enrichments)[1] = "Discovered in"
+# write.table(supp_table_enrichments,
+#             file=paste(supp_path,"supp_table_enrichments_go_group.txt",sep=""),
+#             sep="\t",quote=F,col.names = T,row.names = F)
+# 
+# supp_table_enrichments = reactome_pathways_groups_fdr[,c(1,3,8)]
+# colnames(supp_table_enrichments)[3] = "q-value"
+# colnames(supp_table_enrichments)[1] = "Discovered in"
+# write.table(supp_table_enrichments,
+#             file=paste(supp_path,"supp_table_enrichments_reactome_group.txt",sep=""),
+#             sep="\t",quote=F,col.names = T,row.names = F)
 
 
