@@ -66,20 +66,21 @@ rownames(metadata) = metadata[,1]
 
 # Download and save the expression data
 # Get the data by taking the series matrices
-geo_ids = unique(metadata[,2])
-geo_ids = geo_ids[grepl("^GSE",geo_ids,perl=T) | grepl("^GDS",geo_ids,perl=T)]
+all_gse_ids = unique(metadata[,2])
+all_gse_ids = all_gse_ids[grepl("^GSE",all_gse_ids,perl=T) | grepl("^GDS",all_gse_ids,perl=T)]
 # download the pheno and meta data
 geo_objs = list()
 gse_fails = c()
-for (gse in geo_ids){
+for (gse in all_gse_ids){
   try({
     geo_objs[[gse]] = getGEO(gse,destdir = GEO_destdir,GSEMatrix = T,getGPL = F)
   })
 }
 # failed downloads:
-failed_gses = setdiff(geo_ids,names(geo_objs))
+failed_gses = setdiff(all_gse_ids,names(geo_objs))
 # Test
-sapply(geo_objs,function(x)sapply(x,class)) # all should be ExpressionSet
+length(geo_objs)
+table(unlist(sapply(geo_objs,function(x)unlist(sapply(x,class))))) # all should be ExpressionSet
 
 ####### Go directly to the GSMs
 gsms = metadata[,1]
@@ -187,7 +188,11 @@ for(nn in names(geo_objs)){
     gse_matrices[[paste(nn,nn2,sep=";")]] = exprs(ll[[nn2]])
   }
 }
-length(gse_matrices);sapply(gse_matrices,dim)
+length(gse_matrices)
+sapply(gse_matrices[grepl("GSE47969",names(gse_matrices))],dim)
+sapply(gse_matrices[grepl("GSE58250",names(gse_matrices))],dim)
+sapply(gse_matrices[grepl("GSE19062",names(gse_matrices))],dim)
+sapply(gse_matrices,dim)
 
 # Get platform data
 platforms = unique(metadata[,'platform_id'])
@@ -382,4 +387,31 @@ sapply(gse_matrices[recount_covered_srps],dim)
 gpl_mappings_entrez2probes[["recount"]] = recount_entrez2rows
 save(gpl_mappings_to_entrez,gpl_mappings_entrez2probes,gpl_unique_mappings,file='gpl_mappings_to_entrez.RData')
 save(gse_matrices,gsm_objs,gpl_tables,CEL_frma_profiles,CEL_rma_profiles,file=raw_data_output_obj)
+
+
+# Manually added datasets
+load("gpl_mappings_to_entrez.RData")
+which(sapply(gpl_mappings_entrez2probes,length)==0)
+# "GPL20880"
+pl = getGEO("GPL20880",destdir = GEO_destdir)
+pl = pl@dataTable@table
+entrez2probe = pl[,1]
+names(entrez2probe) = pl[,3]
+entrez2probe = as.list(entrez2probe)
+gpl_mappings_entrez2probes[["GPL20880"]] = entrez2probe
+save(gpl_mappings_to_entrez,gpl_mappings_entrez2probes,gpl_unique_mappings,file='gpl_mappings_to_entrez.RData')
+# GPL14613 - miRNA - skipped
+# GPL16791 - sequencing - skipped
+# GPL16770 - miRNA - skipped
+# GPL10850 - miRNA - skipped
+# GPL7731 - miRNA - skipped
+# GPL11154 - Sequencing
+# GPL8227 - miRNA
+
+
+
+
+
+
+
 

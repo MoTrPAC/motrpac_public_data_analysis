@@ -9,10 +9,10 @@
 ###############################################
 # Paths
 WD = "/Users/David/Desktop/MoTrPAC/project_release_feb_2018/data"
-SCRIPTS = "/Users/David/Desktop/MoTrPAC/project_release_feb_2018/rcode/"
+SCRIPTS = "/Users/David/Desktop/repos/motrpac_public_data_analysis/metaanalysis/"
 metadata_file = 'GEO_sample_metadata.xlsx'
 raw_data_output_obj = 'human_ge_profiles_db.RData'
-raw_data_output_obj = '/Users/David/Desktop/MoTrPAC/PA_database/PA_database_profiles.RData'
+# raw_data_output_obj = '/Users/David/Desktop/MoTrPAC/PA_database/PA_database_profiles.RData'
 
 # Analysis constants
 OMIC_TYPE = "mRNA" # mRNA, methylation
@@ -148,10 +148,13 @@ get_simplified_sample_information<-function(metadata){
   # Dataset id -  a level below study id. It separates samples by:
   # GSE id, tissue, platform, training, study subgroup
   # The dataset ids contain the above information, separated by ';'
-  dataset_ids = paste(metadata$GSE,metadata$Tissue,metadata$platform_id,sample2training_type,metadata$Study.subgroup,sep=';')
+  dataset_ids = paste(metadata$GSE,metadata$Tissue,
+                      metadata$platform_id,sample2training_type,
+                      metadata$Study.subgroup,sep=';')
   names(dataset_ids) = metadata[,1]
   # Time series by sample
-  stand_time_col = colnames(metadata)[grepl("standard",colnames(metadata),ignore.case = T)&grepl("time",colnames(metadata),ignore.case = T)]
+  stand_time_col = colnames(metadata)[grepl("standard",colnames(metadata),
+                ignore.case = T)&grepl("time",colnames(metadata),ignore.case = T)]
   sample2time = as.numeric(as.character(metadata[,stand_time_col]))
   names(sample2time) = metadata[,1]
   table(sample2time)
@@ -167,11 +170,12 @@ get_simplified_sample_information<-function(metadata){
   sample2replicate_info = as.character(metadata[,"Replicate.info"])
   names(sample2replicate_info) = metadata[,1]
   sample_metadata = list(age=sample2age,sex=sample2sex,replicates=sample2replicate_info,
-                         time=sample2time,tissue=sample2tissue,subject=sample2subject,training=sample2training_type,dataset = dataset_ids)
+                         time=sample2time,tissue=sample2tissue,subject=sample2subject,
+                         training=sample2training_type,dataset = dataset_ids)
   return(sample_metadata)
 }
 preprocess_expression_data<-function(metadata,analysis_samples,sample_metadata,
-                                     CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes){
+    CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes){
   dataset_ids = sample_metadata$dataset
   sample2time = sample_metadata$time
   sample2replicate_info = sample_metadata$replicates
@@ -198,17 +202,20 @@ preprocess_expression_data<-function(metadata,analysis_samples,sample_metadata,
     rma_mat = get_data_matrix_from_matrix_lists(CEL_rma_profiles,dataset_samples)
     gse_mat = get_data_matrix_from_matrix_lists(gse_matrices,dataset_samples)
     data_matrix = frma_mat
-    if(is.null(data_matrix)|| is.null(dim(data_matrix)) || length(data_matrix)<=1 || ncol(data_matrix)<length(dataset_samples)){
+    if(is.null(data_matrix)|| is.null(dim(data_matrix)) ||
+       length(data_matrix)<=1 || ncol(data_matrix)<length(dataset_samples)){
       print("Not enough samples in fRMA object, use RMA:")
       print(dataset)
       data_matrix = rma_mat
     }
-    if(is.null(data_matrix)|| is.null(dim(data_matrix)) || length(data_matrix)<=1 || ncol(data_matrix)<length(dataset_samples)){
+    if(is.null(data_matrix)|| is.null(dim(data_matrix)) || 
+       length(data_matrix)<=1 || ncol(data_matrix)<length(dataset_samples)){
       print("Not enough samples in RMA object, use GSEs:")
       print(dataset)
       data_matrix = gse_mat
     }
-    if(is.null(data_matrix)|| is.null(dim(data_matrix)) || length(data_matrix)<=1 || ncol(data_matrix)<length(dataset_samples)){
+    if(is.null(data_matrix) || is.null(dim(data_matrix)) ||
+       length(data_matrix)<=1 || ncol(data_matrix)<length(dataset_samples)){
       print("Not enough samples in GSE object:")
       print(dataset)
       print("Skipping for now, address later")
@@ -217,7 +224,8 @@ preprocess_expression_data<-function(metadata,analysis_samples,sample_metadata,
     na_rows = apply(is.na(data_matrix),1,any) | apply(is.nan(data_matrix),1,any)
     print(table(na_rows))
     data_matrix = data_matrix[!na_rows,]
-    if(is.null(data_matrix)|| is.null(dim(data_matrix)) || length(data_matrix)<=1 || ncol(data_matrix)<length(dataset_samples)){
+    if(is.null(data_matrix)|| is.null(dim(data_matrix)) ||
+       length(data_matrix)<=1 || ncol(data_matrix)<length(dataset_samples)){
       print("Data matrix has too many rows with NA or NaN values:")
       print(dataset)
       print("Skipping for now, address later")
@@ -258,18 +266,20 @@ preprocess_expression_data<-function(metadata,analysis_samples,sample_metadata,
     
     # Get the data matrices for further analysis
     # Transform to genes (entrez or symbols)
-    genes_data_matrix_obj = transform_matrix_into_genes(data_matrix,gpl = platform,gpl_mappings_entrez2probes)
+    genes_data_matrix_obj = transform_matrix_into_genes(
+      data_matrix,gpl = platform,gpl_mappings_entrez2probes)
     genes_data_matrix = genes_data_matrix_obj$entrez_mat
     # exclude genes with NAs
     if(sum(genes_data_matrix_obj$entrez_mat_na_stats[["row NA counts"]]==0)>10000){
-      genes_data_matrix = genes_data_matrix[genes_data_matrix_obj$entrez_mat_na_stats[["row NA counts"]]==0,]
+      genes_data_matrix = genes_data_matrix[
+        genes_data_matrix_obj$entrez_mat_na_stats[["row NA counts"]]==0,]
     }
     # get the fold change matrices
     gene_fold_changes = NULL; probe_fold_changes = NULL
     if(length(dataset_samples_for_fchange)>0){
       curr_subjects = sample2subject[dataset_samples_for_fchange]
       gene_fold_changes = get_fold_changes_vs_baseline(genes_data_matrix[,dataset_samples_for_fchange],
-                                                       curr_subjects,curr_times[dataset_samples_for_fchange])
+                          curr_subjects,curr_times[dataset_samples_for_fchange])
     }
     
     # add the results to the data containers
@@ -396,7 +406,7 @@ get_matrix_p_adjust<-function(x,q=0.1,...){
 # Sheet 1 has the acute samples metadata
 metadata = clean_raw_metadata(read.xlsx2(file=metadata_file,sheetIndex=1))
 sample_metadata = get_simplified_sample_information(metadata)
-
+dim(metadata)
 # Select the relevant samples
 # Get the current metadata
 curr_rows = rep(F,nrow(metadata))
@@ -408,7 +418,19 @@ analysis_samples = rownames(metadata)[curr_rows]
 
 dataset2preprocessed_data = preprocess_expression_data(metadata,analysis_samples,sample_metadata,
     CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes)
-  
+
+# get datasets with missing matrices
+all_gses = as.character(unique(metadata$GSE[is.element(metadata$Type,set=c("RNA","SRA"))]))
+for(gse in all_gses){
+  if(sum(grepl(gse,names(dataset2preprocessed_data)))>0){next}
+  ind = which(grepl(gse,names(gse_matrices)))
+  if(length(ind)>0){
+    curr_obj = gse_matrices[[ind[1]]]
+    if(class(curr_obj)=="matrix" && nrow(curr_obj) < MIN_NROW){next} 
+  }
+  print(gse)
+}
+
 # Encode the dataset ids and create their metadata info
 cohort_ids = paste("GE_A_",1:length(dataset2preprocessed_data),sep='')
 cohort_info = sapply(names(dataset2preprocessed_data),function(x)strsplit(x,split=';')[[1]])
@@ -452,14 +474,13 @@ for(j in 1:length(cohort_data)){
 table(sapply(cohort_data,function(x)is.null(x$gene_fold_changes)))
 save(sample_metadata,cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE_ACUTE)
 
-
 ###############################################
 ###############################################
 ####### longterm data preprocessing ###########
 ###############################################
 ###############################################
 
-# Sheet 1 has the acute samples metadata
+# Sheet 2 has the longterm samples metadata
 metadata = clean_raw_metadata(read.xlsx2(file=metadata_file,sheetIndex=2))
 sample_metadata = get_simplified_sample_information(metadata)
 
@@ -474,6 +495,18 @@ analysis_samples = rownames(metadata)[curr_rows]
 
 dataset2preprocessed_data = preprocess_expression_data(metadata,analysis_samples,sample_metadata,
       CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes)
+
+# get datasets with missing matrices
+all_gses = as.character(unique(metadata$GSE[is.element(metadata$Type,set=c("RNA","SRA"))]))
+for(gse in all_gses){
+  if(sum(grepl(gse,names(dataset2preprocessed_data)))>0){next}
+  ind = which(grepl(gse,names(gse_matrices)))
+  if(length(ind)>0){
+    curr_obj = gse_matrices[[ind[1]]]
+    if(class(curr_obj)=="matrix" && nrow(curr_obj) < MIN_NROW){next} 
+  }
+  print(gse)
+}
 
 # Encode the dataset ids and create their metadata info
 cohort_ids = paste("GE_L_",1:length(dataset2preprocessed_data),sep='')
