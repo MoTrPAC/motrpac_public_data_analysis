@@ -24,8 +24,8 @@ entrez2ensembl = as.list(org.Hs.egENSEMBL)
 entrez2ensembl = lapply(entrez2ensembl,function(x)x[!is.na(x)])
 entrez2ensembl = entrez2ensembl[!sapply(entrez2ensembl,length)==0]
 
-source("https://bioconductor.org/biocLite.R")
-biocLite("Homo.sapiens")
+# source("https://bioconductor.org/biocLite.R")
+# biocLite("Homo.sapiens")
 library(GenomicRanges)
 library(Homo.sapiens)
 library(DESeq2)
@@ -93,6 +93,7 @@ for(id in unique(ids1)){
 }
 colnames(count_matrix) = ids2_to_gsm[colnames(count_matrix)]
 count_matrix = probe2genes_conv(count_matrix,entrez2ensembl,f=sum)
+# check NAs
 fpkm_matrix = entrez_count_mat_to_fpkm(count_matrix)
 rnaseq_matrices[["GSE97084"]] = fpkm_matrix
 save(rnaseq_matrices,file="rnaseq_matrices.RData")
