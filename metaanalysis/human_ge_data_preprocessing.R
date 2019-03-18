@@ -12,7 +12,7 @@ WD = "/Users/David/Desktop/MoTrPAC/project_release_feb_2018/data"
 SCRIPTS = "/Users/David/Desktop/repos/motrpac_public_data_analysis/metaanalysis/"
 metadata_file = 'GEO_sample_metadata.xlsx'
 raw_data_output_obj = 'human_ge_profiles_db.RData'
-# raw_data_output_obj = '/Users/David/Desktop/MoTrPAC/PA_database/PA_database_profiles.RData'
+rnaseq_matrices_obj = "rnaseq_matrices.RData"
 
 # Analysis constants
 OMIC_TYPE = "mRNA" # mRNA, methylation
@@ -24,6 +24,7 @@ setwd(WD)
 library('xlsx');library(corrplot)
 source(paste(SCRIPTS,'ge_download_preprocessing_helper_functions.R',sep=''))
 load(raw_data_output_obj)
+load(rnaseq_matrices_obj)
 load('gpl_mappings_to_entrez.RData')
 
 # Comments about the acute metadata
@@ -174,8 +175,24 @@ get_simplified_sample_information<-function(metadata){
                          training=sample2training_type,dataset = dataset_ids)
   return(sample_metadata)
 }
+# This function analyzes the samples in analysis_samples and prepares their
+# gene expression data. We use their metadata to get the study ids and check
+# the samples time points, mapping to subject ids, and information about replicates if
+# available.
+# Unfortunately, to to the complexity of trascriptomics data we have different sources
+# of information. For microarrays data can be fRMA normalized, RMA normalized, or based
+# on data given in the GSE series matrix. For RNA-seq data we use either data preprocessed
+# by the recount database or we preprocess the read count data given in the raw data
+# of the GSEs. 
+# The preferance of data sources is as followes:
+#   microarrays: fRMA, RMA, series matrix
+#   rnaseq: recount, other information
+# For microarray data we use the GPL information objects to map probes to genes.
+# A gene's expression profile is computed by the mean of its probes.
+# For RNAseq data we assume that the data are already given in entrez genes, so
+# no averaging is required.
 preprocess_expression_data<-function(metadata,analysis_samples,sample_metadata,
-    CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes){
+    CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes,rnaseq_ma){
   dataset_ids = sample_metadata$dataset
   sample2time = sample_metadata$time
   sample2replicate_info = sample_metadata$replicates
@@ -197,30 +214,38 @@ preprocess_expression_data<-function(metadata,analysis_samples,sample_metadata,
     # for convinience we order the samples by the time
     dataset_samples = dataset_samples[order(sample2time[dataset_samples])]
     
-    # Order: fRMA, RMA, GSE object, GSM profiles
+    # Order: see explanation above
     frma_mat = get_data_matrix_from_matrix_lists(CEL_frma_profiles,dataset_samples)
     rma_mat = get_data_matrix_from_matrix_lists(CEL_rma_profiles,dataset_samples)
     gse_mat = get_data_matrix_from_matrix_lists(gse_matrices,dataset_samples)
     data_matrix = frma_mat
+    data_source_description = "fRMA"
     if(is.null(data_matrix)|| is.null(dim(data_matrix)) ||
        length(data_matrix)<=1 || ncol(data_matrix)<length(dataset_samples)){
-      print("Not enough samples in fRMA object, use RMA:")
-      print(dataset)
+      data_source_description = "RMA"
       data_matrix = rma_mat
     }
     if(is.null(data_matrix)|| is.null(dim(data_matrix)) || 
        length(data_matrix)<=1 || ncol(data_matrix)<length(dataset_samples)){
-      print("Not enough samples in RMA object, use GSEs:")
-      print(dataset)
+      data_source_description = "GSE series matrix or Recount"
       data_matrix = gse_mat
+    }
+    if(is.null(data_matrix)|| is.null(dim(data_matrix)) || 
+       length(data_matrix)<=1 || ncol(data_matrix)<length(dataset_samples)){
+      gse = metadata[dataset_samples,"GSE"][1]
+      if(is.element(gse,set=names(rnaseq_matrices))){
+        data_source_description = "RNAseq from raw data"
+        data_matrix = rnaseq_matrices[[gse]][,dataset_samples]
+      }
     }
     if(is.null(data_matrix) || is.null(dim(data_matrix)) ||
        length(data_matrix)<=1 || ncol(data_matrix)<length(dataset_samples)){
-      print("Not enough samples in GSE object:")
-      print(dataset)
-      print("Skipping for now, address later")
-      next
+      data_source_description = "GE data unavailable"
     }
+    print (paste("**** Analyzing the gene expression data of",dataset,"****"))
+    print(paste("data_source_description:",data_source_description))
+    if(data_source_description == "GE data unavailable"){next}
+    
     na_rows = apply(is.na(data_matrix),1,any) | apply(is.nan(data_matrix),1,any)
     print(table(na_rows))
     data_matrix = data_matrix[!na_rows,]
@@ -246,7 +271,7 @@ preprocess_expression_data<-function(metadata,analysis_samples,sample_metadata,
     # 2. get current features
     if(length(warnings())>0){print("Got some warnings, Please debug:")}
     print("Adding a new dataset to the preprocessed data containers:")
-    print(paste("****************",dataset))
+    print(paste("****",dataset,"****"))
     
     # For fold change calculations exclude subjects without a baseline or subjects with baseline only
     curr_times = sample2time[dataset_samples]
@@ -266,27 +291,25 @@ preprocess_expression_data<-function(metadata,analysis_samples,sample_metadata,
     
     # Get the data matrices for further analysis
     # Transform to genes (entrez or symbols)
-    genes_data_matrix_obj = transform_matrix_into_genes(
-      data_matrix,gpl = platform,gpl_mappings_entrez2probes)
-    genes_data_matrix = genes_data_matrix_obj$entrez_mat
+    if(data_source_description == "RNAseq from raw data"){
+      genes_data_matrix = data_matrix
+    }
+    else{
+      genes_data_matrix_obj = transform_matrix_into_genes(
+        data_matrix,gpl = platform,gpl_mappings_entrez2probes)
+      genes_data_matrix = genes_data_matrix_obj$entrez_mat
+    }
     # exclude genes with NAs
-    if(sum(genes_data_matrix_obj$entrez_mat_na_stats[["row NA counts"]]==0)>10000){
+    if( data_source_description != "RNAseq from raw data" &&
+      sum(genes_data_matrix_obj$entrez_mat_na_stats[["row NA counts"]]==0)>10000){
       genes_data_matrix = genes_data_matrix[
         genes_data_matrix_obj$entrez_mat_na_stats[["row NA counts"]]==0,]
-    }
-    # get the fold change matrices
-    gene_fold_changes = NULL; probe_fold_changes = NULL
-    if(length(dataset_samples_for_fchange)>0){
-      curr_subjects = sample2subject[dataset_samples_for_fchange]
-      gene_fold_changes = get_fold_changes_vs_baseline(genes_data_matrix[,dataset_samples_for_fchange],
-                          curr_subjects,curr_times[dataset_samples_for_fchange])
     }
     
     # add the results to the data containers
     dataset2preprocessed_data[[dataset]] = list()
     dataset2preprocessed_data[[dataset]][["probe_data"]] = data_matrix
     dataset2preprocessed_data[[dataset]][["gene_data"]] = genes_data_matrix
-    dataset2preprocessed_data[[dataset]][["gene_fold_changes"]] = gene_fold_changes
     
     # release memory and save
     rm(data_matrix);rm(genes_data_matrix);rm(genes_data_matrix_obj);gc()

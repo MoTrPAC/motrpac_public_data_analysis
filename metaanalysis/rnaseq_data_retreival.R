@@ -94,6 +94,9 @@ for(id in unique(ids1)){
 colnames(count_matrix) = ids2_to_gsm[colnames(count_matrix)]
 count_matrix = probe2genes_conv(count_matrix,entrez2ensembl,f=sum)
 # check NAs
+table(rowSums(is.na(count_matrix))) # we see that NAs are in complete rows
+count_matrix = count_matrix[!apply(is.na(count_matrix),1,any),]
+dim(count_matrix)
 fpkm_matrix = entrez_count_mat_to_fpkm(count_matrix)
 rnaseq_matrices[["GSE97084"]] = fpkm_matrix
 save(rnaseq_matrices,file="rnaseq_matrices.RData")
@@ -220,6 +223,22 @@ dim(count_matrix)
 fpkm_matrix = entrez_count_mat_to_fpkm(count_matrix)
 dim(fpkm_matrix)
 rnaseq_matrices[[gse]] = fpkm_matrix
+save(rnaseq_matrices,file="rnaseq_matrices.RData")
+
+load("rnaseq_matrices.RData")
+par(mfrow=c(2,2))
+library(preprocessCore)
+for(nn in names(rnaseq_matrices)){
+  print(nn)
+  xx = rnaseq_matrices[[nn]]
+  samp = sample(1:ncol(xx))[1:10]
+  newx = normalize.quantiles.robust(xx)
+  boxplot(xx[,samp],main=paste(nn,"before"))
+  boxplot(newx[,samp],main=paste(nn,"after"))
+  rownames(newx) = rownames(xx)
+  colnames(newx) = colnames(xx)
+  rnaseq_matrices[[nn]] = newx
+}
 save(rnaseq_matrices,file="rnaseq_matrices.RData")
 
 
