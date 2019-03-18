@@ -192,7 +192,7 @@ get_simplified_sample_information<-function(metadata){
 # For RNAseq data we assume that the data are already given in entrez genes, so
 # no averaging is required.
 preprocess_expression_data<-function(metadata,analysis_samples,sample_metadata,
-    CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes,rnaseq_ma){
+    CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes,rnaseq_matrices){
   dataset_ids = sample_metadata$dataset
   sample2time = sample_metadata$time
   sample2replicate_info = sample_metadata$replicates
@@ -232,9 +232,10 @@ preprocess_expression_data<-function(metadata,analysis_samples,sample_metadata,
     }
     if(is.null(data_matrix)|| is.null(dim(data_matrix)) || 
        length(data_matrix)<=1 || ncol(data_matrix)<length(dataset_samples)){
-      gse = metadata[dataset_samples,"GSE"][1]
+      gse = as.character(metadata[dataset_samples,"GSE"][1])
       if(is.element(gse,set=names(rnaseq_matrices))){
         data_source_description = "RNAseq from raw data"
+        dataset_samples = intersect(dataset_samples,colnames(rnaseq_matrices[[gse]]))
         data_matrix = rnaseq_matrices[[gse]][,dataset_samples]
       }
     }
@@ -320,7 +321,7 @@ preprocess_expression_data<-function(metadata,analysis_samples,sample_metadata,
 # a single time series data
 get_fold_changes_vs_baseline<-function(x,subjs,timev,baseline=NULL,func = function(a,b){a-b},metadata=NULL){
   if(is.null(baseline)){baseline = sort(unique(timev))[1]}
-  print(baseline)
+  print(paste("baseline time point is:", baseline))
   newx = c()
   for(subj in unique(subjs)){
     inds = subjs==subj
@@ -440,7 +441,11 @@ print(table(curr_rows))
 analysis_samples = rownames(metadata)[curr_rows]
 
 dataset2preprocessed_data = preprocess_expression_data(metadata,analysis_samples,sample_metadata,
-    CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes)
+    CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes,rnaseq_matrices)
+
+# test_samples = analysis_samples[is.element(metadata[analysis_samples,"GSE"],set=c("GSE71972","GSE87749"))]
+# dataset2preprocessed_data = preprocess_expression_data(metadata,test_samples,sample_metadata,
+#     CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes,rnaseq_matrices)
 
 # get datasets with missing matrices
 all_gses = as.character(unique(metadata$GSE[is.element(metadata$Type,set=c("RNA","SRA"))]))
@@ -470,13 +475,14 @@ for(j in 1:length(dataset2preprocessed_data)){
   additional_info = NA
   if(length(c_info)>4){additional_info = c_info[5]}
   tissue = simplify_tissue_info(full_tissue)
-  cohort_metadata[[c_id]] = list(gsms=gsms,tissue=tissue,training=training,gse=gse,gpl=gpl,
-                                 full_tissue=full_tissue,additional_info=additional_info)
   curr_times = sample_metadata$time[gsms]
+  cohort_metadata[[c_id]] = list(gsms=gsms,tissue=tissue,training=training,gse=gse,gpl=gpl,
+                                 full_tissue=full_tissue,additional_info=additional_info,times=curr_times)
   if(length(unique(curr_times))<2){next}
   gene_fchanges = get_fold_changes_vs_baseline(dataset2preprocessed_data[[j]]$gene_data,sample_metadata$subject[gsms],curr_times)
   dataset2preprocessed_data[[j]][["gene_fchanges"]] = gene_fchanges
 }
+sapply(cohort_metadata,function(x)c(x$gse,length(unique(x$times))))
 names(dataset2preprocessed_data) = cohort_ids
 cohort_data = dataset2preprocessed_data
 sample2time=sample_metadata$time;sample2sex=sample_metadata$sex;sample2age=sample_metadata$age
@@ -494,7 +500,8 @@ for(j in 1:length(cohort_data)){
   }
   cohort_data[[j]][["time2ttest_stats"]] = res1
 }
-table(sapply(cohort_data,function(x)is.null(x$gene_fold_changes)))
+table(sapply(cohort_data,function(x)is.null(x$gene_fchanges)))
+cohort_metadata[which(sapply(cohort_data,function(x)is.null(x$gene_fchanges)))]
 save(sample_metadata,cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE_ACUTE)
 
 ###############################################
@@ -547,9 +554,9 @@ for(j in 1:length(dataset2preprocessed_data)){
   additional_info = NA
   if(length(c_info)>4){additional_info = c_info[5]}
   tissue = simplify_tissue_info(full_tissue)
-  cohort_metadata[[c_id]] = list(gsms=gsms,tissue=tissue,training=training,gse=gse,gpl=gpl,
-                                 full_tissue=full_tissue,additional_info=additional_info)
   curr_times = sample_metadata$time[gsms]
+  cohort_metadata[[c_id]] = list(gsms=gsms,tissue=tissue,training=training,gse=gse,gpl=gpl,
+                                 full_tissue=full_tissue,additional_info=additional_info,times=curr_times)
   if(length(unique(curr_times))<2){next}
   gene_fchanges = get_fold_changes_vs_baseline(dataset2preprocessed_data[[j]]$gene_data,sample_metadata$subject[gsms],curr_times)
   dataset2preprocessed_data[[j]][["gene_fchanges"]] = gene_fchanges
