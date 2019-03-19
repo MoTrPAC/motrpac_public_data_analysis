@@ -483,10 +483,13 @@ for(j in 1:length(dataset2preprocessed_data)){
   dataset2preprocessed_data[[j]][["gene_fchanges"]] = gene_fchanges
 }
 sapply(cohort_metadata,function(x)c(x$gse,length(unique(x$times))))
-names(dataset2preprocessed_data) = cohort_ids
 cohort_data = dataset2preprocessed_data
+names(cohort_data) = cohort_ids
 sample2time=sample_metadata$time;sample2sex=sample_metadata$sex;sample2age=sample_metadata$age
 save(sample_metadata,cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE_ACUTE)
+
+sapply(cohort_data,function(x)dim(x$gene_data))
+sum(sapply(cohort_data,function(x)ncol(x$gene_data)))
 
 ### Add fold changes and t-tests #######
 # compute ttest p-values, yi's and vi's
@@ -500,8 +503,6 @@ for(j in 1:length(cohort_data)){
   }
   cohort_data[[j]][["time2ttest_stats"]] = res1
 }
-table(sapply(cohort_data,function(x)is.null(x$gene_fchanges)))
-cohort_metadata[which(sapply(cohort_data,function(x)is.null(x$gene_fchanges)))]
 save(sample_metadata,cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE_ACUTE)
 
 ###############################################
@@ -524,7 +525,11 @@ print(table(curr_rows))
 analysis_samples = rownames(metadata)[curr_rows]
 
 dataset2preprocessed_data = preprocess_expression_data(metadata,analysis_samples,sample_metadata,
-      CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes)
+      CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes,rnaseq_matrices)
+
+# test_samples = analysis_samples[is.element(metadata[analysis_samples,"GSE"],set=c("GSE117525"))]
+# test_dataset2preprocessed_data = preprocess_expression_data(metadata,test_samples,sample_metadata,
+#     CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes,rnaseq_matrices)
 
 # get datasets with missing matrices
 all_gses = as.character(unique(metadata$GSE[is.element(metadata$Type,set=c("RNA","SRA"))]))
@@ -533,7 +538,7 @@ for(gse in all_gses){
   ind = which(grepl(gse,names(gse_matrices)))
   if(length(ind)>0){
     curr_obj = gse_matrices[[ind[1]]]
-    if(class(curr_obj)=="matrix" && nrow(curr_obj) < MIN_NROW){next} 
+    if(class(curr_obj)=="matrix" && nrow(curr_obj) < MIN_NROW){next}
   }
   print(gse)
 }
@@ -561,10 +566,22 @@ for(j in 1:length(dataset2preprocessed_data)){
   gene_fchanges = get_fold_changes_vs_baseline(dataset2preprocessed_data[[j]]$gene_data,sample_metadata$subject[gsms],curr_times)
   dataset2preprocessed_data[[j]][["gene_fchanges"]] = gene_fchanges
 }
-names(dataset2preprocessed_data) = cohort_ids
 cohort_data = dataset2preprocessed_data
+names(cohort_data) = cohort_ids
 sample2time=sample_metadata$time;sample2sex=sample_metadata$sex;sample2age=sample_metadata$age
 save(sample_metadata,cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE_LONGTERM)
+
+# Fix: added on March 2019 - some datasets have sample with all NA/NAN values
+for(j in 1:length(cohort_data)){
+  curr_matrix = cohort_data[[j]]$gene_data
+  curr_matrix = curr_matrix[,colSums(is.na(curr_matrix)|is.nan(curr_matrix)) < (nrow(curr_matrix)/2)]
+  cohort_metadata[[j]]$gsms = colnames(curr_matrix)
+  cohort_metadata[[j]]$times = sample2time[colnames(curr_matrix)]
+  cohort_data[[j]]$gene_data = curr_matrix
+}
+
+sapply(cohort_data,function(x)dim(x$gene_data))
+sum(sapply(cohort_data,function(x)ncol(x$gene_data)))
 
 ### Add fold changes and t-tests #######
 # compute ttest p-values, yi's and vi's
@@ -578,7 +595,6 @@ for(j in 1:length(cohort_data)){
   }
   cohort_data[[j]][["time2ttest_stats"]] = res1
 }
-table(sapply(cohort_data,function(x)is.null(x$gene_fold_changes)))
 save(sample_metadata,cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE_LONGTERM)
 
 

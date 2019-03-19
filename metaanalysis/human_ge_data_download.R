@@ -192,6 +192,7 @@ length(gse_matrices)
 sapply(gse_matrices[grepl("GSE47969",names(gse_matrices))],dim)
 sapply(gse_matrices[grepl("GSE58250",names(gse_matrices))],dim)
 sapply(gse_matrices[grepl("GSE19062",names(gse_matrices))],dim)
+sapply(gse_matrices[grepl("GSE117525",names(gse_matrices))],dim)
 sapply(gse_matrices,dim)
 
 # Get platform data
@@ -388,6 +389,9 @@ gpl_mappings_entrez2probes[["recount"]] = recount_entrez2rows
 save(gpl_mappings_to_entrez,gpl_mappings_entrez2probes,gpl_unique_mappings,file='gpl_mappings_to_entrez.RData')
 save(gse_matrices,gsm_objs,gpl_tables,CEL_frma_profiles,CEL_rma_profiles,file=raw_data_output_obj)
 
+# Manual correction: for dataset GSE117525 exclude the samples from the RMA data
+CEL_rma_profiles = CEL_rma_profiles[!grepl("GSE117525",names(CEL_rma_profiles))]
+save(gse_matrices,gsm_objs,gpl_tables,CEL_frma_profiles,CEL_rma_profiles,file=raw_data_output_obj)
 
 # Manually added datasets
 load("gpl_mappings_to_entrez.RData")
