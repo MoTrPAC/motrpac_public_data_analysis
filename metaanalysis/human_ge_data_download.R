@@ -412,10 +412,35 @@ save(gpl_mappings_to_entrez,gpl_mappings_entrez2probes,gpl_unique_mappings,file=
 # GPL11154 - Sequencing
 # GPL8227 - miRNA
 
+# QA on GPLs - make sure we map to entrez ids
+load('gpl_mappings_to_entrez.RData')
 
+pl = "GPL16686"
+pl_obj = Table(getGEO(pl,destdir = GEO_destdir))
+colSums(pl_obj!="",na.rm=T)
+pl_obj[1:10,]
 
+pl2 = "GPL25381"
+pl_obj2 = Table(getGEO(pl2,destdir = GEO_destdir))
+pl_obj2[1:10,]
+colSums(pl_obj2!="",na.rm=T)
 
+length(intersect(pl_obj$ID,pl_obj2$SPOT_ID))
 
+# Compare all GPLs, pairwise
+inds = sapply(gpl_mappings_entrez2probes,length)>5000
+n = sum(inds)
+ns = names(gpl_mappings_entrez2probes[inds])
+m = matrix(0,n,n,dimnames = list(ns,ns))
+for(i in 1:n){
+  for(j in 1:n){
+    m[i,j] = length(intersect(names(gpl_mappings_entrez2probes[[ns[i]]]),
+                              names(gpl_mappings_entrez2probes[[ns[j]]])))
+  }
+}
+library(corrplot)
+corrplot(m,is.corr = F,tl.cex = 0.8)
+length(gpl_mappings_entrez2probes[["GPL19169"]])
 
 
 

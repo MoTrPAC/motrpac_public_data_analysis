@@ -107,7 +107,7 @@ simplify_training_type<-function(metadata){
   return(sample2training_type)
 }
 simplify_tissue_info<-function(subject_col2tissue){
-  subject_col2tissue_slim = subject_col2tissue
+  subject_col2tissue_slim = as.character(subject_col2tissue)
   subject_col2tissue_slim[
     grepl("muscl",subject_col2tissue,ignore.case = T) |
       grepl("vastus",subject_col2tissue,ignore.case = T) |
@@ -126,9 +126,10 @@ simplify_tissue_info<-function(subject_col2tissue){
   return(subject_col2tissue_slim)
 }
 simplify_sex_info<-function(sexinfo){
+  sexinfo = tolower(as.character(sexinfo))
   newv = as.character(sexinfo)
   names(newv) = names(sexinfo)
-  newv[grepl(": f",newv)] = "female"
+  newv[grepl("f",newv)] = "female"
   newv[newv!="" & newv!="female"] = "male"
   newv[newv==""] = NA
   return(newv)
@@ -571,10 +572,11 @@ names(cohort_data) = cohort_ids
 sample2time=sample_metadata$time;sample2sex=sample_metadata$sex;sample2age=sample_metadata$age
 save(sample_metadata,cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE_LONGTERM)
 
-# Fix: added on March 2019 - some datasets have sample with all NA/NAN values
+# Fix: added on March 2019 - some datasets have samples with all NA/NAN values
 for(j in 1:length(cohort_data)){
   curr_matrix = cohort_data[[j]]$gene_data
   curr_matrix = curr_matrix[,colSums(is.na(curr_matrix)|is.nan(curr_matrix)) < (nrow(curr_matrix)/2)]
+  curr_matrix = curr_matrix[!apply(is.na(curr_matrix) | is.nan(curr_matrix),1,all),]
   cohort_metadata[[j]]$gsms = colnames(curr_matrix)
   cohort_metadata[[j]]$times = sample2time[colnames(curr_matrix)]
   cohort_data[[j]]$gene_data = curr_matrix
@@ -597,7 +599,208 @@ for(j in 1:length(cohort_data)){
 }
 save(sample_metadata,cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE_LONGTERM)
 
+# At this point we have two RData files with all cohorts and all data
+# in our annotated resource.
+# For the meta-analysis we need to take care of three tasks:
+# 1. Exclude platforms with extremely low gene coverage
+# 2. Impute sex
+# 3. Create gene tables
 
+###############################################
+###############################################
+# Analysis of gene coverage: get the worst datasets #
+###############################################
+###############################################
+
+load(OUT_FILE_LONGTERM)
+ge_matrices1 = lapply(cohort_data,function(x)x$gene_data)
+load(OUT_FILE_ACUTE)
+ge_matrices2 = lapply(cohort_data,function(x)x$gene_data)
+for(nn in names(ge_matrices2)){
+  ge_matrices1[[nn]] = ge_matrices2[[nn]]
+}
+
+get_list_intersect<-function(l){
+  x = l[[1]]
+  for(i in 1:length(l)){
+    x = intersect(x,l[[i]])
+  }
+  return(x)
+}
+gene_lists = lapply(ge_matrices1,rownames)
+all_genes = get_list_intersect(gene_lists)
+# remove the worst dataset at a time
+included_datasets = names(ge_matrices1)
+low_coverage_platforms = c()
+while(length(included_datasets)>1){
+  curr_sizes = c()
+  for(j in 1:length(included_datasets)){
+    curr_sizes[j] = length(get_list_intersect(gene_lists[included_datasets[-j]]))
+  }
+  ind = which(curr_sizes==max(curr_sizes))[1]
+  excluded = included_datasets[ind]
+  included_datasets = included_datasets[-ind]
+  all_genes = get_list_intersect(gene_lists[included_datasets])
+  print(paste(length(all_genes),excluded))
+  low_coverage_platforms = c(low_coverage_platforms,excluded)
+  if(length(all_genes)>10000){break}
+}
+
+###############################################
+###############################################
+######## Sex imputation using ML flow #########
+###############################################
+###############################################
+
+load(OUT_FILE_LONGTERM)
+ge_matrices1 = lapply(cohort_data,function(x)x$gene_data)
+gses1 = sapply(cohort_metadata, function(x)x$gse)
+tissue1 = sapply(cohort_metadata, function(x)x$tissue)
+sex1 = sample2sex
+load(OUT_FILE_ACUTE)
+ge_matrices2 = lapply(cohort_data,function(x)x$gene_data)
+gses2 = sapply(cohort_metadata, function(x)x$gse)
+tissue2 = sapply(cohort_metadata, function(x)x$tissue)
+sex2 = sample2sex
+
+for(nn in names(ge_matrices2)){
+  ge_matrices1[[nn]] = ge_matrices2[[nn]]
+}
+gses1[names(gses2)]=gses2
+tissue1[names(tissue2)]=tissue2
+sex1[names(sex2)] = sex2
+
+# Define our y target: sex
+y=sex1
+table(y)
+
+# Merge the gene expression profiles
+x = c(); z = c(); y2=c()
+for(nn in setdiff(names(ge_matrices1),low_coverage_platforms)){
+  currx = ge_matrices1[[nn]][all_genes,]
+  x = cbind(x,currx)
+  currz = rep(gses1[nn],ncol(currx))
+  z[colnames(currx)] = currz
+  y2[colnames(currx)] = rep(tissue1[nn],ncol(currx))
+}
+
+samp_names = intersect(names(y),colnames(x))
+samp_names = samp_names[y2[samp_names]!="fat"]
+y = y[samp_names]
+y2 = y2[samp_names]
+x = x[,samp_names]
+z = z[samp_names]
+table(y,z)
+table(y2)
+dim(x)
+length(z)
+missing_set = is.na(y)
+
+# Some statisitcs
+table(z)
+
+
+library(GenomicRanges)
+library(Homo.sapiens)
+library(DESeq2)
+geneRanges <- function(db=Homo.sapiens, column="ENTREZID"){
+  g <- genes(db, columns=column)
+  col <- mcols(g)[[column]]
+  genes <- granges(g)[rep(seq_along(g), elementNROWS(col))]
+  mcols(genes)[[column]] <- as.character(unlist(col))
+  genes
+}
+entrez_gr = geneRanges(Homo.sapiens, column="ENTREZID")
+entrez_gr = as.data.frame(entrez_gr)
+selected_genes = entrez_gr[entrez_gr$seqnames=="chrY" | entrez_gr$seqnames=="chrX","ENTREZID"]
+
+# normalize x using rank transform
+quntx = normalizeQuantiles(x)
+quntx_sex = quntx[intersect(selected_genes,rownames(x)),]
+boxplot(quntx[,sample(1:ncol(x))[1:20]])
+dim(quntx_sex)
+
+# Try another normalization
+getRankedBasedProfile<-function(x,fs=NULL){
+  if (!is.null(fs)){
+    x = x[fs]
+  }
+  # get the ranks in decreasing order
+  N = length(x)
+  rs = N-rank(x,ties.method = "average")+1
+  w_rs = rs*exp(-rs/N)
+  names(w_rs) = names(rs)
+  return (w_rs)
+}
+newx = apply(x,2,getRankedBasedProfile)
+newx_sex = newx[intersect(selected_genes,rownames(x)),]
+boxplot(newx[,sample(1:ncol(x))[1:20]])
+dim(newx_sex)
+
+inds = !missing_set & y2 != "blood"
+table(inds)
+source("/Users/David/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions_classification.R")
+lso_res_qx_sex = leave_study_out2(as.factor(y[inds]),
+                t(quntx_sex[,inds]),z[inds],
+                func = svm,class.weights=c("female"=10,"male"=1),
+                pred_args=list(probability=T),probability=T,kernel="linear")
+lso_res_newx_sex = leave_study_out2(as.factor(y[inds]),
+                t(newx_sex[,inds]),z[inds],
+                func = svm,class.weights=c("female"=10,"male"=1),
+                pred_args=list(probability=T),probability=T,kernel="linear")
+lso_res_newx = leave_study_out2(as.factor(y[inds]),
+                t(newx[,inds]),z[inds],
+                func = featureSelectionClassifier,
+                classification_function=svm,class.weights=c("female"=10,"male"=1),
+                pred_args=list(probability=T),probability=T,kernel="linear")
+
+preds = c()
+lso_res = lso_res_newx_sex
+for(nn in names(lso_res_qx_sex)){
+  preds = rbind(preds,cbind(
+    as.numeric(lso_res[[nn]]$real == "female"),
+    attr(lso_res[[nn]]$preds,"probabilities")[,"female"]))
+  # preds = rbind(preds,cbind(
+  #   as.numeric(lso_res[[nn]]$real == "female"),lso_res[[nn]]$preds[,"female"]))
+  # preds = rbind(preds,cbind(
+  #   as.numeric(lso_res[[nn]]$real == "muscle"),lso_res[[nn]]$preds[,"muscle"]))
+}
+library(pROC)
+boxplot(preds[,2]~preds[,1])
+calcAupr(preds[,2],preds[,1])
+calcAupr(preds[,2],preds[,1],roc = T,useAbs = T)
+as.numeric(pROC::auc(preds[,1], preds[,2]))
+
+###############################################
+###############################################
+### Reshape the data for the meta-analysis ####
+###############################################
+###############################################
+
+
+load(OUT_FILE_LONGTERM)
+sample2sex = sample_metadata$sex
+sample2age = sample_metadata$age
+for(nn in names(cohort_metadata)){
+  samps = cohort_metadata[[nn]]$gsms
+  curr_avg_age = mean(as.numeric(sample2age[samps]),na.rm=T)
+  is_male = sample2sex[samps] == "M" | sample2sex[samps] == "male" | sample2sex[samps] == "Male" | sample2sex[samps] == "m"
+  print(table(is_male))
+  is_male = is_male[!is.na(is_male)]
+  curr_p = sum(is_male)/length(is_male)
+  cohort_metadata[[nn]]$avg_age = curr_avg_age
+  cohort_metadata[[nn]]$male_prop = curr_p
+  # print(paste(cohort_metadata[[nn]]$avg_age,cohort_metadata[[nn]]$male_prop))
+}
+
+
+datasets = list()
+load(OUT_FILE_LONGTERM)
+
+get_gene_table<-function(x)
+
+# Reshape the data for the meta-analysis
+all_genes = unique(unlist(sapply(cohort_data,function(x)rownames(x$gene_data))))
 
 
 

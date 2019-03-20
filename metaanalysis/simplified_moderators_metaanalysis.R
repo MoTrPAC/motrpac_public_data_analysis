@@ -7,8 +7,10 @@
 # 5. SCORE 1: abs(beta_e-beta_c)
 # 6. SCORE 2: Egger's test of the exercise meta-analysis
 # 7. Return SCORE 1, SCORE 2, and the betas (and their significance) from the exercise meta-analysis
-
+# Before the update in March 2019
 setwd('/Users/David/Desktop/MoTrPAC/PA_database')
+# After the update
+setwd('/Users/David/Desktop/MoTrPAC/project_release_feb_2018/data/')
 library(org.Hs.eg.db);library(metafor)
 source('/Users/David/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions.R')
 entrez2symbol = as.list(org.Hs.egSYMBOL)
