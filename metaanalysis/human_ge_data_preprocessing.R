@@ -19,6 +19,7 @@ OMIC_TYPE = "mRNA" # mRNA, methylation
 MIN_NROW = 5000 # minimal number of rows in a datamatrix of a specific dataset
 OUT_FILE_ACUTE = "human_ge_cohort_preprocessed_db_acute.RData"
 OUT_FILE_LONGTERM = "human_ge_cohort_preprocessed_db_longterm.RData"
+GENE_FILTER_ANALYSIS = "human_ge_gene_coverage_analysis.RData"
 
 setwd(WD)
 library('xlsx');library(corrplot)
@@ -646,23 +647,42 @@ while(length(included_datasets)>1){
   if(length(all_genes)>10000){break}
 }
 
+# Save two objects: 
+# The set of genes covered in most cases
+# The set of cohorts from low coverage plarforms
+save(all_genes,low_coverage_platforms,file=GENE_FILTER_ANALYSIS)
+
 ###############################################
 ###############################################
 ######## Sex imputation using ML flow #########
 ###############################################
 ###############################################
-
+stats_matrix = c()
 load(OUT_FILE_LONGTERM)
 ge_matrices1 = lapply(cohort_data,function(x)x$gene_data)
 gses1 = sapply(cohort_metadata, function(x)x$gse)
 tissue1 = sapply(cohort_metadata, function(x)x$tissue)
 sex1 = sample2sex
+for(nn in names(cohort_metadata)){
+  stats_matrix = rbind(stats_matrix,c(nn,ncol(cohort_data[[nn]]$gene_data),cohort_metadata[[nn]]$tissue))
+}
+longterm_gsms = unique(unlist(sapply(ge_matrices1,colnames)))
 load(OUT_FILE_ACUTE)
 ge_matrices2 = lapply(cohort_data,function(x)x$gene_data)
 gses2 = sapply(cohort_metadata, function(x)x$gse)
 tissue2 = sapply(cohort_metadata, function(x)x$tissue)
 sex2 = sample2sex
+acute_gsms = unique(unlist(sapply(ge_matrices2,colnames)))
+for(nn in names(cohort_metadata)){
+  stats_matrix = rbind(stats_matrix,c(nn,ncol(cohort_data[[nn]]$gene_data),cohort_metadata[[nn]]$tissue))
+}
+stats_matrix = as.data.frame(stats_matrix)
+stats_matrix = cbind(stats_matrix,grepl("GE_L",stats_matrix[,1]))
+stats_matrix$V2 = as.numeric(as.character(stats_matrix $V2))
+aggregate(stats_matrix$V2, by=list(Category=stats_matrix$V3,L=stats_matrix$`grepl("GE_L", stats_matrix[, 1])`), FUN=sum)
+length(unique(c(gses1,gses2)))
 
+# merge the gene expression data before the analysis below
 for(nn in names(ge_matrices2)){
   ge_matrices1[[nn]] = ge_matrices2[[nn]]
 }
@@ -686,19 +706,17 @@ for(nn in setdiff(names(ge_matrices1),low_coverage_platforms)){
 
 samp_names = intersect(names(y),colnames(x))
 samp_names = samp_names[y2[samp_names]!="fat"]
-y = y[samp_names]
-y2 = y2[samp_names]
-x = x[,samp_names]
-z = z[samp_names]
-table(y,z)
-table(y2)
-dim(x)
-length(z)
+y = y[samp_names];y2 = y2[samp_names]
+x = x[,samp_names];z = z[samp_names]
+# some useful stats of the data
+length(unique(union(acute_gsms,longterm_gsms)))
+table(y[acute_gsms])
+table(y2[acute_gsms])
+table(y2[longterm_gsms])
+
+# Define the set of samples with missing sex information
 missing_set = is.na(y)
-
-# Some statisitcs
-table(z)
-
+# table(missing_set)
 
 library(GenomicRanges)
 library(Homo.sapiens)
@@ -737,7 +755,7 @@ newx_sex = newx[intersect(selected_genes,rownames(x)),]
 boxplot(newx[,sample(1:ncol(x))[1:20]])
 dim(newx_sex)
 
-inds = !missing_set & y2 != "blood"
+inds = !missing_set 
 table(inds)
 source("/Users/David/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions_classification.R")
 lso_res_qx_sex = leave_study_out2(as.factor(y[inds]),
@@ -748,22 +766,13 @@ lso_res_newx_sex = leave_study_out2(as.factor(y[inds]),
                 t(newx_sex[,inds]),z[inds],
                 func = svm,class.weights=c("female"=10,"male"=1),
                 pred_args=list(probability=T),probability=T,kernel="linear")
-lso_res_newx = leave_study_out2(as.factor(y[inds]),
-                t(newx[,inds]),z[inds],
-                func = featureSelectionClassifier,
-                classification_function=svm,class.weights=c("female"=10,"male"=1),
-                pred_args=list(probability=T),probability=T,kernel="linear")
 
 preds = c()
 lso_res = lso_res_newx_sex
-for(nn in names(lso_res_qx_sex)){
+for(nn in names(lso_res)){
   preds = rbind(preds,cbind(
     as.numeric(lso_res[[nn]]$real == "female"),
     attr(lso_res[[nn]]$preds,"probabilities")[,"female"]))
-  # preds = rbind(preds,cbind(
-  #   as.numeric(lso_res[[nn]]$real == "female"),lso_res[[nn]]$preds[,"female"]))
-  # preds = rbind(preds,cbind(
-  #   as.numeric(lso_res[[nn]]$real == "muscle"),lso_res[[nn]]$preds[,"muscle"]))
 }
 library(pROC)
 boxplot(preds[,2]~preds[,1])
@@ -771,20 +780,38 @@ calcAupr(preds[,2],preds[,1])
 calcAupr(preds[,2],preds[,1],roc = T,useAbs = T)
 as.numeric(pROC::auc(preds[,1], preds[,2]))
 
+# Impute sex and add it to the files
+tr = newx_sex[,!missing_set]
+svm_model = svm(x=t(tr),y=as.factor(y[!missing_set]),kernel="linear",class.weights=c("female"=10,"male"=1))
+te = newx_sex[,missing_set]
+preds = predict(svm_model,t(te))
+table(preds)
+
+load(OUT_FILE_ACUTE)
+inds = intersect(names(preds),names(sample2sex))
+sample2sex[inds] = as.character(preds[inds])
+table(preds[inds])
+table(sample2sex)
+save(sample_metadata,cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE_ACUTE)
+
+load(OUT_FILE_LONGTERM)
+inds = intersect(names(preds),names(sample2sex))
+sample2sex[inds] = as.character(preds[inds])
+table(preds[inds])
+table(sample2sex)
+save(sample_metadata,cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE_LONGTERM)
+
 ###############################################
 ###############################################
 ### Reshape the data for the meta-analysis ####
 ###############################################
 ###############################################
 
-
 load(OUT_FILE_LONGTERM)
-sample2sex = sample_metadata$sex
-sample2age = sample_metadata$age
 for(nn in names(cohort_metadata)){
   samps = cohort_metadata[[nn]]$gsms
   curr_avg_age = mean(as.numeric(sample2age[samps]),na.rm=T)
-  is_male = sample2sex[samps] == "M" | sample2sex[samps] == "male" | sample2sex[samps] == "Male" | sample2sex[samps] == "m"
+  is_male = sample2sex[samps] == "male"
   print(table(is_male))
   is_male = is_male[!is.na(is_male)]
   curr_p = sum(is_male)/length(is_male)
