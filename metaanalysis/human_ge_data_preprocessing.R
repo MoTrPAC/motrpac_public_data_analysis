@@ -739,11 +739,11 @@ entrez_gr = geneRanges(Homo.sapiens, column="ENTREZID")
 entrez_gr = as.data.frame(entrez_gr)
 selected_genes = entrez_gr[entrez_gr$seqnames=="chrY" | entrez_gr$seqnames=="chrX","ENTREZID"]
 
-# normalize x using rank transform
-quntx = normalizeQuantiles(x)
-quntx_sex = quntx[intersect(selected_genes,rownames(x)),]
-boxplot(quntx[,sample(1:ncol(x))[1:20]])
-dim(quntx_sex)
+# # normalize x using rank transform
+# quntx = normalizeQuantiles(x)
+# quntx_sex = quntx[intersect(selected_genes,rownames(x)),]
+# boxplot(quntx[,sample(1:ncol(x))[1:20]])
+# dim(quntx_sex)
 
 # Try another normalization
 getRankedBasedProfile<-function(x,fs=NULL){
@@ -765,10 +765,10 @@ dim(newx_sex)
 inds = !missing_set 
 table(inds)
 source("/Users/David/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions_classification.R")
-lso_res_qx_sex = leave_study_out2(as.factor(y[inds]),
-                t(quntx_sex[,inds]),z[inds],
-                func = svm,class.weights=c("female"=10,"male"=1),
-                pred_args=list(probability=T),probability=T,kernel="linear")
+# lso_res_qx_sex = leave_study_out2(as.factor(y[inds]),
+#                 t(quntx_sex[,inds]),z[inds],
+#                 func = svm,class.weights=c("female"=10,"male"=1),
+#                 pred_args=list(probability=T),probability=T,kernel="linear")
 lso_res_newx_sex = leave_study_out2(as.factor(y[inds]),
                 t(newx_sex[,inds]),z[inds],
                 func = svm,class.weights=c("female"=10,"male"=1),
@@ -831,6 +831,7 @@ get_dataset_moderators<-function(metadata){
 #' @param dataset_effects. A list with the summary statistics.
 #' @param moderators. The study covariates to add to each data frame.
 #' @return A data frame with the information for the gene.
+#' @description Some datasets, RNAseq likely have zero variance for some genes, this creates NAs and NANs in the summary statistics. Whenever the sdd is zero we put zero in yi and tstat but keep the p-value as NaN
 get_gene_table<-function(gene,dataset_effects,moderators){
   m = c()
   for(nn in names(dataset_effects)){
@@ -840,12 +841,22 @@ get_gene_table<-function(gene,dataset_effects,moderators){
       m = rbind(m,c(nn,colnames(mm)[j],moderators[nn,],mm[,j]))
     }
   }
+  if(is.null(dim(m))){m = as.matrix(m,nrow=1)}
   colnames(m)[2]="time"
   m = data.frame(m,stringsAsFactors=F)
-  m = transform(m,yi=as.numeric(yi),vi=as.numeric(vi),time=as.numeric(time))
+  # Change variables from character to numeric 
+  m = transform(m,yi=as.numeric(yi),vi=as.numeric(vi),time=as.numeric(time),
+                avg_age = as.numeric(avg_age),N=as.numeric(N),p=as.numeric(p),
+                df=as.numeric(df),prop_males=as.numeric(prop_males),age_sd=as.numeric(age_sd),
+                tstat = as.numeric(tstat))
+  # Some datasets, RNAseq likely have zero variance for some genes,
+  # this creates NAs and NANs in the summary statistics. 
+  # Whenever the sdd is zero we put zero in yi and tstat but keep the p-value as NaN
+  nan_inds = m$sdd==0
+  m[nan_inds,c("yi","tstat")] = 0
+  m[nan_inds,"sdd"] = 1e-6 # put some low number instead of zero
   return(m)
 }
-
 
 load(OUT_FILE_LONGTERM)
 metadata = clean_raw_metadata(read.xlsx2(file=metadata_file,sheetIndex=2))
@@ -879,7 +890,7 @@ gene_tables = lapply(all_covered_genes,get_gene_table,
                               dataset_effects=data_datasets_effects,moderators=moderators)
 names(gene_tables) = all_covered_genes
 longterm_gene_tables = gene_tables
-
+rm(gene_tables);gc()
 
 load(OUT_FILE_ACUTE)
 metadata = clean_raw_metadata(read.xlsx2(file=metadata_file,sheetIndex=1))
@@ -915,7 +926,7 @@ gene_tables = lapply(all_covered_genes,get_gene_table,
 names(gene_tables) = all_covered_genes
 acute_gene_tables = gene_tables
 
-
+save(longterm_gene_tables,acute_gene_tables,file=OUT_FILE_GENE_TABLES)
 
 
 
