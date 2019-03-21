@@ -1,6 +1,7 @@
-# This script loads the raw profiles and the metadata
-# creates standardized datasets and metadata and saves
-# it in easy to use objects
+# This script loads the raw profiles and the metadata and
+# creates standardized datasets and metadata. The preprocessed 
+# database is then saved in an easy to use objects. These are kept in
+# RData files, listed below.
 
 ###############################################
 ###############################################
@@ -10,18 +11,37 @@
 # Paths
 WD = "/Users/David/Desktop/MoTrPAC/project_release_feb_2018/data"
 SCRIPTS = "/Users/David/Desktop/repos/motrpac_public_data_analysis/metaanalysis/"
-metadata_file = 'GEO_sample_metadata.xlsx'
+# Assumption: these files is in the working dir (WD)
+# our annotated excel file with acute samples in sheet1
+# and longterm samples in sheet2. The format of these tables is the same and the basic id is the GSM id
+# of a sample.
+metadata_file = 'GEO_sample_metadata.xlsx' 
+# The output expression database from human_ge_data_download.R
 raw_data_output_obj = 'human_ge_profiles_db.RData'
+# The output expression matrices from rnaseq_data_retreival.R
 rnaseq_matrices_obj = "rnaseq_matrices.RData"
 
 # Analysis constants
-OMIC_TYPE = "mRNA" # mRNA, methylation
+# specifies that we will work on transcriptomics
+# in the future the analysis can be adapted to specifying
+# different omics but as of March 2019 there are not enough
+# datasets for a meta-analysis of other omics data.
+OMIC_TYPE = "mRNA" 
 MIN_NROW = 5000 # minimal number of rows in a datamatrix of a specific dataset
+# Where to keep the cohort-based data and metadata
 OUT_FILE_ACUTE = "human_ge_cohort_preprocessed_db_acute.RData"
 OUT_FILE_LONGTERM = "human_ge_cohort_preprocessed_db_longterm.RData"
+# Keep the results of the comparison of the different platforms by
+# their gene coverage
 GENE_FILTER_ANALYSIS = "human_ge_gene_coverage_analysis.RData"
+# For the meta-analysis the basic data unit is a "gene table":
+# the table of summary statistics and moderators for each gene.
+# In these tables we put a row for each summary statistics. That is,
+# if we have several time points then each one will have a row (as a result
+# of comparing it to the base pre time point)
 OUT_FILE_GENE_TABLES = "human_ge_cohort_preprocessed_db_gene_tables.RData"
 
+# Set the working directory and load the gene expression database
 setwd(WD)
 library('xlsx');library(corrplot)
 source(paste(SCRIPTS,'ge_download_preprocessing_helper_functions.R',sep=''))
