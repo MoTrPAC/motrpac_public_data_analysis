@@ -20,6 +20,7 @@ MIN_NROW = 5000 # minimal number of rows in a datamatrix of a specific dataset
 OUT_FILE_ACUTE = "human_ge_cohort_preprocessed_db_acute.RData"
 OUT_FILE_LONGTERM = "human_ge_cohort_preprocessed_db_longterm.RData"
 GENE_FILTER_ANALYSIS = "human_ge_gene_coverage_analysis.RData"
+OUT_FILE_GENE_TABLES = "human_ge_cohort_preprocessed_db_gene_tables.RData"
 
 setwd(WD)
 library('xlsx');library(corrplot)
@@ -352,16 +353,20 @@ get_paired_ttest_yi_vi <-function(x,sample2time,t1,t2){
   d = x2-x1
   n = length(d)
   sdd = sd(d)/sqrt(length(d))
-  return(c(yi=mean(d),vi=sdd^2))
+  meand = mean(d)
+  return(c(yi=meand,vi=sdd^2,tstat = meand/sdd,sdd=sdd,df=length(x1)-1))
 }
 # # test
-# x1 = rnorm(10);x2=rnorm(10);x=c(x1,x2)
+# x1 = rnorm(10);x2=rnorm(10)+1;x=c(x1,x2)
 # s2t = c(rep(0,10),rep(1,10))
-# pp =get_paired_ttest_yi_vi(x,s2t,0,1)
+# pp = get_paired_ttest_yi_vi(x,s2t,0,1)
 # pp
 # tt = t.test(x1,x2,paired = T)
+# abs(tt$statistic) - abs(pp[1]/pp["sdd"])
 # tt$estimate/tt$statistic
 # tt$estimate
+# tt$p.value
+# 2*pt(tt$statistic,df=9)
 
 get_ttest_yi_vi_per_dataset<-function(mat,metadata){
   dataset_times = metadata$time[colnames(mat)]
@@ -412,7 +417,8 @@ get_ttest_pval_per_dataset<-function(mat,metadata){
 get_paired_ttest_pval <-function(x,sample2time,t1,t2){
   x1 = x[sample2time==t1]
   x2 = x[sample2time==t2]
-  return(t.test(x1,x2,paired = T)$p.value)
+  tt = t.test(x1,x2,paired = T)
+  return(tt$p.value)
 }
 ##
 # Gene selection and display items
@@ -501,10 +507,11 @@ for(j in 1:length(cohort_data)){
   res2 = get_ttest_pval_per_dataset(cohort_data[[j]]$gene_data,sample_metadata)
   for(nn in names(res1)){
     res1[[nn]] = cbind(res1[[nn]],res2[,nn])
-    colnames(res1[[nn]]) = c("yi","vi","p")
+    colnames(res1[[nn]])[ncol(res1[[nn]])] = "p"
   }
   cohort_data[[j]][["time2ttest_stats"]] = res1
 }
+sapply(cohort_data,function(x)colnames(x$time2ttest_stats[[1]]))
 save(sample_metadata,cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE_ACUTE)
 
 ###############################################
@@ -594,7 +601,7 @@ for(j in 1:length(cohort_data)){
   res2 = get_ttest_pval_per_dataset(cohort_data[[j]]$gene_data,sample_metadata)
   for(nn in names(res1)){
     res1[[nn]] = cbind(res1[[nn]],res2[,nn])
-    colnames(res1[[nn]]) = c("yi","vi","p")
+    colnames(res1[[nn]])[ncol(res1[[nn]])] = "p"
   }
   cohort_data[[j]][["time2ttest_stats"]] = res1
 }
@@ -807,27 +814,108 @@ save(sample_metadata,cohort_data,cohort_metadata,sample2time,sample2sex,sample2a
 ###############################################
 ###############################################
 
-load(OUT_FILE_LONGTERM)
-for(nn in names(cohort_metadata)){
-  samps = cohort_metadata[[nn]]$gsms
-  curr_avg_age = mean(as.numeric(sample2age[samps]),na.rm=T)
-  is_male = sample2sex[samps] == "male"
-  print(table(is_male))
-  is_male = is_male[!is.na(is_male)]
-  curr_p = sum(is_male)/length(is_male)
-  cohort_metadata[[nn]]$avg_age = curr_avg_age
-  cohort_metadata[[nn]]$male_prop = curr_p
-  # print(paste(cohort_metadata[[nn]]$avg_age,cohort_metadata[[nn]]$male_prop))
+#' Put the moderator information (covariates) of a dataset in a single object
+#' with: sex,age,tissue, training type, gse
+#' Assumption: "other" without a description for a training type == "untrained"
+#' @param metadata A named list. Each item represents the metadata of a cohort.
+#' @return A named vector with the study id, tissue, training type, avg age, and proportion of males.
+get_dataset_moderators<-function(metadata){
+  arrs = t(sapply(metadata,function(x)c(
+    x$gse,x$tissue,x$training,x$avg_age,x$age_sd,x$male_prop,length(x$gsms))))
+  colnames(arrs) = c("gse","tissue","training","avg_age","age_sd","prop_males","N")
+  return(arrs)
+}
+
+#' Put all data of a single gene in a single object
+#' @param gene A character or an index. The gene to analyze.
+#' @param dataset_effects. A list with the summary statistics.
+#' @param moderators. The study covariates to add to each data frame.
+#' @return A data frame with the information for the gene.
+get_gene_table<-function(gene,dataset_effects,moderators){
+  m = c()
+  for(nn in names(dataset_effects)){
+    if(! gene %in% rownames(dataset_effects[[nn]][[1]])){next}
+    mm = sapply(dataset_effects[[nn]],function(u,v)u[v,],v=gene)
+    for(j in 1:ncol(mm)){
+      m = rbind(m,c(nn,colnames(mm)[j],moderators[nn,],mm[,j]))
+    }
+  }
+  colnames(m)[2]="time"
+  m = data.frame(m,stringsAsFactors=F)
+  m = transform(m,yi=as.numeric(yi),vi=as.numeric(vi),time=as.numeric(time))
+  return(m)
 }
 
 
-datasets = list()
 load(OUT_FILE_LONGTERM)
+metadata = clean_raw_metadata(read.xlsx2(file=metadata_file,sheetIndex=2))
+sample_metadata = get_simplified_sample_information(metadata)
+for(nn in names(cohort_metadata)){
+  samps = cohort_metadata[[nn]]$gsms
+  curr_ages = as.numeric(metadata[samps,]$Numeric_Age)
+  curr_raw_ages = as.character(metadata[samps,]$Age)
+  is_male = sample2sex[samps] == "male"
+  # print(table(is_male))
+  is_male = is_male[!is.na(is_male)]
+  curr_p = sum(is_male)/length(is_male)
+  cohort_metadata[[nn]]$avg_age = mean(curr_ages,na.rm=T)
+  if(is.nan(cohort_metadata[[nn]]$avg_age)){break}
+  cohort_metadata[[nn]]$age_sd = sd(curr_ages,na.rm=T)
+  if(any(grepl("(\\±|\\+)+",curr_raw_ages))){
+    currsd = strsplit(as.character(curr_raw_ages[1]),split="(\\±|\\+)+")[[1]]
+    currsd = gsub("\\D+$","",currsd[[length(currsd)]])
+    currsd = gsub("^\\D+","",currsd[[length(currsd)]])
+    cohort_metadata[[nn]]$age_sd = currsd
+  }
+  cohort_metadata[[nn]]$male_prop = curr_p
+  print(paste(cohort_metadata[[nn]]$avg_age,cohort_metadata[[nn]]$age_sd,cohort_metadata[[nn]]$male_prop))
+}
 
-get_gene_table<-function(x)
+all_covered_genes = unique(unlist(sapply(cohort_data,function(x)rownames(x$gene_data))))
+moderators = get_dataset_moderators(cohort_metadata)
+data_datasets_effects = lapply(cohort_data,function(x)x$time2ttest_stats)
+data_datasets_effects = data_datasets_effects[sapply(data_datasets_effects,length)>0]
+gene_tables = lapply(all_covered_genes,get_gene_table,
+                              dataset_effects=data_datasets_effects,moderators=moderators)
+names(gene_tables) = all_covered_genes
+longterm_gene_tables = gene_tables
 
-# Reshape the data for the meta-analysis
-all_genes = unique(unlist(sapply(cohort_data,function(x)rownames(x$gene_data))))
+
+load(OUT_FILE_ACUTE)
+metadata = clean_raw_metadata(read.xlsx2(file=metadata_file,sheetIndex=1))
+sample_metadata = get_simplified_sample_information(metadata)
+for(nn in names(cohort_metadata)){
+  samps = cohort_metadata[[nn]]$gsms
+  curr_ages = as.numeric(metadata[samps,]$Numeric_Age)
+  curr_raw_ages = as.character(metadata[samps,]$Age)
+  is_male = sample2sex[samps] == "male"
+  # print(table(is_male))
+  is_male = is_male[!is.na(is_male)]
+  curr_p = sum(is_male)/length(is_male)
+  cohort_metadata[[nn]]$avg_age = mean(curr_ages,na.rm=T)
+  if(is.nan(cohort_metadata[[nn]]$avg_age)){break}
+  cohort_metadata[[nn]]$age_sd = sd(curr_ages,na.rm=T)
+  if(any(grepl("(\\±|\\+)+",curr_raw_ages))){
+    currsd = strsplit(as.character(curr_raw_ages[1]),split="(\\±|\\+)+")[[1]]
+    currsd = gsub("\\D+$","",currsd[[length(currsd)]])
+    currsd = gsub("^\\D+","",currsd[[length(currsd)]])
+    cohort_metadata[[nn]]$age_sd = currsd
+    print(paste(curr_raw_ages[1],currsd))
+  }
+  cohort_metadata[[nn]]$male_prop = curr_p
+  # print(paste(cohort_metadata[[nn]]$avg_age,cohort_metadata[[nn]]$age_sd,cohort_metadata[[nn]]$male_prop))
+}
+
+all_covered_genes = unique(unlist(sapply(cohort_data,function(x)rownames(x$gene_data))))
+moderators = get_dataset_moderators(cohort_metadata)
+data_datasets_effects = lapply(cohort_data,function(x)x$time2ttest_stats)
+data_datasets_effects = data_datasets_effects[sapply(data_datasets_effects,length)>0]
+gene_tables = lapply(all_covered_genes,get_gene_table,
+                     dataset_effects=data_datasets_effects,moderators=moderators)
+names(gene_tables) = all_covered_genes
+acute_gene_tables = gene_tables
+
+
 
 
 
