@@ -126,4 +126,50 @@ x2 = sample2time
 assertthat::are_equal(length(x1),length(x2))
 all(x1==x2)
 
+############ preprocessed matrices ###########
+load("/Users/David/Desktop/MoTrPAC/project_release_feb_2018/data/human_ge_cohort_preprocessed_db_gene_tables.RData")
+x1 = acute_gene_tables
+y1 = longterm_gene_tables
+load("/Users/David/Desktop/MoTrPAC/PA_database/PADB_dataset_level_meta_analysis_data.RData")
+x2 = acute_gene_tables
+y2 = longterm_gene_tables
 
+
+compare_gene_tables<-function(g1,g2,col="yi"){
+  names1 = apply(g1[,2:5],1,paste,collapse=";")
+  names2 = apply(g2[,2:5],1,paste,collapse=";")
+  unique_names1 = names(which(table(names1)==1))
+  unique_names2 = names(which(table(names1)==1))
+  g1 = g1[is.element(names1,set=unique_names1),]
+  g2 = g2[is.element(names2,set=unique_names1),]
+  names1 = apply(g1[,2:5],1,paste,collapse=";")
+  names2 = apply(g2[,2:5],1,paste,collapse=";")
+  rownames(g1) = names1
+  rownames(g2) = names2
+  ns = intersect(names1,names2)
+  d = g1[ns,col]-g2[ns,col]
+  names(d) = ns
+  cc = cor(g1[ns,col],g2[ns,col])
+  return(c(median=median(d),max=max(d),corr=cc))
+}
+count=0
+for(nn in intersect(names(x1),names(x2))){
+  d = compare_gene_tables(x1[[nn]],x2[[nn]])
+  count=count+1
+  if(d[1]>0){
+    print("Found a gene with a major diffece:")
+    print(c(nn,d))
+    print(count)
+  }
+}
+
+count=0
+for(nn in intersect(names(x1),names(x2))){
+  d = compare_gene_tables(x1[[nn]],x2[[nn]])
+  count=count+1
+  if(d[1]>0){
+    print("Found a gene with a major diffece:")
+    print(c(nn,d))
+    print(count)
+  }
+}

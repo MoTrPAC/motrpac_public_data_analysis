@@ -2,6 +2,13 @@
 # creates standardized datasets and metadata. The preprocessed 
 # database is then saved in an easy to use objects. These are kept in
 # RData files, listed below.
+# The process below takes care of:
+# 1. Getting the gene data matrix per study
+# 2. Partition of studies to cohorts
+# 3. Sex imputation
+# 4. Analysis of platform gene overlap
+# 5. Computing summary statistics per time point
+# 6. Transforming the data to gene tables for the meta-analysis
 
 ###############################################
 ###############################################
@@ -84,11 +91,18 @@ load('gpl_mappings_to_entrez.RData')
 ########## Preprocessing functions ############
 ###############################################
 ###############################################
+#' 
+#' Clean data from a metadata sheet: solve issues with duplications and samples without subject ids or time point information.
+#' @param metadata A data frame. A table of samples (rows) vs. their annotated data (columns)
+#' @description If there are duplications keep the last sample. We observed that in some datasets replicates that were done due to low quality appear LAST.
+#' @return A metadata data frame in the same format as the input.
 clean_raw_metadata<-function(metadata){
+  # remove rows without a GSM id
   metadata = metadata[as.character(metadata[,1])!="",]
   # Solve duplications in the GSMs (happened in one dataset with several GEO ids), only relevant for acute
   gsm_duplications = names(which(table(metadata[,1])>1))
   to_keep = rep(T,nrow(metadata))
+  # If there are duplications keep the last sample:
   for(curr_gsm in gsm_duplications){
     curr_ids = which(metadata[,1]==curr_gsm)
     if(length(curr_ids)<2){next}
@@ -105,8 +119,15 @@ clean_raw_metadata<-function(metadata){
   samples_without_subject = names(which(is.na(sample2subject)|sample2subject==""))
   # get these problematic datasets and remove these samples from the  metadata table
   GSEs_without_subjects = as.character(metadata[samples_without_subject,"GSE"])
-  metadata = metadata[!is.element(rownames(metadata),set=samples_without_subject),]  
+  metadata = metadata[!is.element(rownames(metadata),set=samples_without_subject),]
+  return(metadata)
 }
+
+#' 
+#' Simplify the training type information.
+#' @param metadata A data frame. A table of samples (rows) vs. their annotated data (columns)
+#' @description Parse the training type info into endurance, resistance, both, yoga, or untrained. 
+#' @return A metadata data frame in the same format as the input.
 simplify_training_type<-function(metadata){
   raw_training_data = as.character(metadata$Training.program.during.experiment.type)
   dataset_subgroup = as.character(metadata$Study.subgroup)
@@ -128,6 +149,11 @@ simplify_training_type<-function(metadata){
   names(sample2training_type) = metadata[,1]
   return(sample2training_type)
 }
+#' 
+#' Simplify the tissue information.
+#' @param metadata A data frame. A table of samples (rows) vs. their annotated data (columns)
+#' @description Parse the tissue info into muscle, blood, or fat. 
+#' @return A metadata data frame in the same format as the input.
 simplify_tissue_info<-function(subject_col2tissue){
   subject_col2tissue_slim = as.character(subject_col2tissue)
   subject_col2tissue_slim[
@@ -147,6 +173,11 @@ simplify_tissue_info<-function(subject_col2tissue){
     ] = "blood"
   return(subject_col2tissue_slim)
 }
+#' 
+#' Simplify the sex information.
+#' @param metadata A data frame. A table of samples (rows) vs. their annotated data (columns)
+#' @description Parse the training type info into male or female.
+#' @return A metadata data frame in the same format as the input.
 simplify_sex_info<-function(sexinfo){
   sexinfo = tolower(as.character(sexinfo))
   newv = as.character(sexinfo)
@@ -156,12 +187,16 @@ simplify_sex_info<-function(sexinfo){
   newv[newv==""] = NA
   return(newv)
 }
+#' 
+#' A wrapper of the functions above that simplifies the information of a subject,
+#' @param metadata A data frame. A table of samples (rows) vs. their annotated data (columns)
+#' @return A list. Each element is a feature of the samples. Output includes sex, age, subject ids, replicates, training, and time.
 get_simplified_sample_information<-function(metadata){
   # The short description of the training program
   sample2training_type = simplify_training_type(metadata)
-  # Sanity checks: should be all false
-  table(is.na(sample2training_type)|sample2training_type=="")
-  table(is.na(metadata$GSE)|metadata$GSE=="")
+  # # Sanity checks: should be all false
+  # table(is.na(sample2training_type)|sample2training_type=="")
+  # table(is.na(metadata$GSE)|metadata$GSE=="")
   # Study ids are primarily based on pubmed data
   study_ids = as.character(metadata$pmid)
   study_ids[study_ids==""] = as.character(metadata[study_ids=="","GSE"])
@@ -198,22 +233,22 @@ get_simplified_sample_information<-function(metadata){
                          training=sample2training_type,dataset = dataset_ids)
   return(sample_metadata)
 }
-# This function analyzes the samples in analysis_samples and prepares their
-# gene expression data. We use their metadata to get the study ids and check
-# the samples time points, mapping to subject ids, and information about replicates if
-# available.
-# Unfortunately, to to the complexity of trascriptomics data we have different sources
-# of information. For microarrays data can be fRMA normalized, RMA normalized, or based
-# on data given in the GSE series matrix. For RNA-seq data we use either data preprocessed
-# by the recount database or we preprocess the read count data given in the raw data
-# of the GSEs. 
-# The preferance of data sources is as followes:
-#   microarrays: fRMA, RMA, series matrix
-#   rnaseq: recount, other information
-# For microarray data we use the GPL information objects to map probes to genes.
-# A gene's expression profile is computed by the mean of its probes.
-# For RNAseq data we assume that the data are already given in entrez genes, so
-# no averaging is required.
+#' This function analyzes the samples in analysis_samples and prepares their
+#' gene expression data. We use their metadata to get the study ids and check
+#' the samples time points, mapping to subject ids, and information about replicates if
+#' available.
+#' Unfortunately, to to the complexity of trascriptomics data we have different sources
+#' of information. For microarrays data can be fRMA normalized, RMA normalized, or based
+#' on data given in the GSE series matrix. For RNA-seq data we use either data preprocessed
+#' by the recount database or we preprocess the read count data given in the raw data
+#' of the GSEs. 
+#' The preferance of data sources is as followes:
+#'   microarrays: fRMA, RMA, series matrix
+#'   rnaseq: recount, other information
+#' For microarray data we use the GPL information objects to map probes to genes.
+#' A gene's expression profile is computed by the mean of its probes.
+#' For RNAseq data we assume that the data are already given in entrez genes, so
+#' no averaging is required.
 preprocess_expression_data<-function(metadata,analysis_samples,sample_metadata,
     CEL_frma_profiles,CEL_rma_profiles,gse_matrices,gpl_mappings_entrez2probes,rnaseq_matrices){
   dataset_ids = sample_metadata$dataset
@@ -335,7 +370,7 @@ preprocess_expression_data<-function(metadata,analysis_samples,sample_metadata,
     dataset2preprocessed_data[[dataset]][["probe_data"]] = data_matrix
     dataset2preprocessed_data[[dataset]][["gene_data"]] = genes_data_matrix
     
-    # release memory and save
+    # release memory
     rm(data_matrix);rm(genes_data_matrix);rm(genes_data_matrix_obj);gc()
   }
   return(dataset2preprocessed_data)
@@ -861,6 +896,7 @@ get_gene_table<-function(gene,dataset_effects,moderators){
       m = rbind(m,c(nn,colnames(mm)[j],moderators[nn,],mm[,j]))
     }
   }
+  if(is.null(m)){return(NULL)}
   if(is.null(dim(m))){m = as.matrix(m,nrow=1)}
   colnames(m)[2]="time"
   m = data.frame(m,stringsAsFactors=F)
@@ -937,7 +973,10 @@ for(nn in names(cohort_metadata)){
   # print(paste(cohort_metadata[[nn]]$avg_age,cohort_metadata[[nn]]$age_sd,cohort_metadata[[nn]]$male_prop))
 }
 
-all_covered_genes = unique(unlist(sapply(cohort_data,function(x)rownames(x$gene_data))))
+curr_datasets = !sapply(cohort_data,function(x)is.null(x[["time2ttest_stats"]]))
+all_covered_genes = unique(unlist(sapply(cohort_data[curr_datasets],
+                                         function(x)rownames(x$gene_data))))
+gene_sets = lapply(cohort_data,function(x)rownames(x$gene_data))
 moderators = get_dataset_moderators(cohort_metadata)
 data_datasets_effects = lapply(cohort_data,function(x)x$time2ttest_stats)
 data_datasets_effects = data_datasets_effects[sapply(data_datasets_effects,length)>0]
@@ -945,6 +984,18 @@ gene_tables = lapply(all_covered_genes,get_gene_table,
                      dataset_effects=data_datasets_effects,moderators=moderators)
 names(gene_tables) = all_covered_genes
 acute_gene_tables = gene_tables
+
+# # for QA do a for loop
+# gene_tables = list()
+# for(gene in all_covered_genes){
+#   gene_tables[[gene]] = get_gene_table(gene,dataset_effects=data_datasets_effects,moderators=moderators)
+#   print(gene)
+#   for(nn in names(gene_sets)){
+#     if(is.element(gene,set=gene_sets[[nn]])){
+#       print(nn)
+#     }
+#   }
+# }
 
 save(longterm_gene_tables,acute_gene_tables,file=OUT_FILE_GENE_TABLES)
 
