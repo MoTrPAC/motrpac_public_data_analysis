@@ -1,12 +1,16 @@
-setwd("/home/users/davidama/motrpac_metaanalysis/meta_analysis/")
+
 library(parallel)
 library(metafor,lib.loc="~/R/packages")
+
+print("Usage:<working dir with the input RData><num cores>")
 
 args = commandArgs(trailingOnly=TRUE)
 num_cores = 4
 if(length(args)>0){
-  num_cores = as.numeric(args[1])
+  num_cores = as.numeric(args[2])
 }
+
+setwd(args[1])
 
 ############################################################################
 ############################################################################

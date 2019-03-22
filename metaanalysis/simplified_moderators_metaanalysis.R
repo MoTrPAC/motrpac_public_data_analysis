@@ -355,9 +355,21 @@ for(nn in names(simple_RE_beta)){
   meta_reg_datasets[[nn]] = datasets[[nn]][curr_genes]
 }
 sapply(meta_reg_datasets,length)
+# Before the data update
+# meta_reg_to_mods = list(
+#   "acute,muscle" = c("time","training"),
+#   "acute,blood" = c("time","prop_males"),
+#   "longterm,muscle" = c("training","time","avg_age","prop_males"),
+#   "longterm,blood" = "training"
+# )
+# After the data update of March 2019
+# Not enough non-male acute muscle studies
+# Not enough resistance training datasets for acute, blood
+# For longterm blood we take training only as we assume that it will
+# be the primary cause of differential abudance
 meta_reg_to_mods = list(
-  "acute,muscle" = c("time","training"),
-  "acute,blood" = c("time","prop_males"),
+  "acute,muscle" = c("time","training","avg_age"),
+  "acute,blood" = c("time","prop_males","avg_age"),
   "longterm,muscle" = c("training","time","avg_age","prop_males"),
   "longterm,blood" = "training"
 )
