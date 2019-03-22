@@ -156,19 +156,19 @@ count=0
 for(nn in intersect(names(x1),names(x2))){
   d = compare_gene_tables(x1[[nn]],x2[[nn]])
   count=count+1
-  if(d[1]>0){
-    print("Found a gene with a major diffece:")
+  if(d[1]>0 || d[3]<0.9){
+    print("Found a gene with a major difference:")
     print(c(nn,d))
     print(count)
   }
 }
 
 count=0
-for(nn in intersect(names(x1),names(x2))){
-  d = compare_gene_tables(x1[[nn]],x2[[nn]])
+for(nn in intersect(names(y1),names(y2))){
+  d = compare_gene_tables(y1[[nn]],y2[[nn]])
   count=count+1
-  if(d[1]>0){
-    print("Found a gene with a major diffece:")
+  if(d[1]>0 || d[3]<0.9){
+    print("Found a gene with a major difference:")
     print(c(nn,d))
     print(count)
   }

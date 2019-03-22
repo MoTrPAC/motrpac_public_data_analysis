@@ -7,13 +7,37 @@
 # 5. SCORE 1: abs(beta_e-beta_c)
 # 6. SCORE 2: Egger's test of the exercise meta-analysis
 # 7. Return SCORE 1, SCORE 2, and the betas (and their significance) from the exercise meta-analysis
-# Before the update in March 2019
-setwd('/Users/David/Desktop/MoTrPAC/PA_database')
-# After the update
-setwd('/Users/David/Desktop/MoTrPAC/project_release_feb_2018/data/')
 library(org.Hs.eg.db);library(metafor)
 source('/Users/David/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions.R')
 entrez2symbol = as.list(org.Hs.egSYMBOL)
+
+# # Before the update in March 2019
+# setwd('/Users/David/Desktop/MoTrPAC/PA_database')
+# # Prepare the datasets for the different analyses below
+# # Load the datasets and their metadata
+# load("PADB_univariate_results_and_preprocessed_data_acute.RData")
+# acute_datasets = cohort_data
+# acute_metadata = cohort_metadata
+# acute_sample2time = sample2time
+# load("PADB_univariate_results_and_preprocessed_data_longterm.RData")
+# longterm_datasets = cohort_data
+# longterm_metadata = cohort_metadata
+# longterm_sample2time = sample2time
+# load("PADB_dataset_level_meta_analysis_data.RData")
+
+# After the update
+setwd('/Users/David/Desktop/MoTrPAC/project_release_feb_2018/data/')
+# Prepare the datasets for the different analyses below
+# Load the datasets and their metadata
+load("human_ge_cohort_preprocessed_db_acute.RData")
+acute_datasets = cohort_data
+acute_metadata = cohort_metadata
+acute_sample2time = sample2time
+load("human_ge_cohort_preprocessed_db_longterm.RData")
+longterm_datasets = cohort_data
+longterm_metadata = cohort_metadata
+longterm_sample2time = sample2time
+load("human_ge_cohort_preprocessed_db_gene_tables.RData")
 
 ############################################################################
 ############################################################################
@@ -41,37 +65,80 @@ simplify_training_for_exercise_analysis<-function(gdata){
   return(gdata)
 }
 
-# Clean the datasets: from muscle, remove 1 cohort with time point zero
-# From long term exclude all studies with time > 150 days
-clean_acute_table <-function(gdata,tissue="muscle"){
-  gdata = gdata[gdata$tissue==tissue,]
-  gdata$vi = pmax(gdata$vi,1e-5)
-  if(tissue=="muscle"){
-    gdata = gdata[as.numeric(gdata$time) > 1,]
+# Preprocessing before the data update on March 2019
+# # Clean the datasets: from muscle, remove 1 cohort with time point zero
+# # From long term exclude all studies with time > 150 days
+# clean_acute_table <-function(gdata,tissue="muscle",remove_untrained=T){
+#   if(remove_untrained){
+#     gdata = gdata[!is.element(gdata$training,set=c("yoga","control","untrained")),]
+#   }
+#   gdata = gdata[gdata$tissue==tissue,]
+#   gdata$vi = pmax(gdata$vi,1e-5)
+#   if(tissue=="muscle"){
+#     gdata = gdata[as.numeric(gdata$time) > 1,]
+#   }
+#   gdata = simplify_time_in_gdata(gdata,simplify_time_acute)
+#   gdata = simplify_age_gdata(gdata,thr=40)
+#   gdata = simplify_training_for_exercise_analysis(gdata)
+#   gdata$prop_males = as.numeric(gdata$prop_males)
+#   gdata$p = as.numeric(gdata$p)
+#   gdata$sdd = as.numeric(gdata$sdd)
+#   gdata$df = as.numeric(gdata$df)
+#   gdata$tstat = as.numeric(gdata$tstat)
+#   return(gdata)
+# }
+# clean_longterm_table <-function(gdata,tissue="muscle",remove_untrained=T){
+#   if(remove_untrained){
+#     gdata = gdata[!is.element(gdata$training,set=c("yoga","control","untrained")),]
+#   }
+#   gdata = gdata[gdata$tissue==tissue,]
+#   gdata$vi = pmax(gdata$vi,1e-5)
+#   gdata = gdata[as.numeric(gdata$time) < 150 ,]
+#   gdata = simplify_age_gdata(gdata,thr=40)
+#   gdata = simplify_training_for_exercise_analysis(gdata)
+#   gdata$prop_males = as.numeric(gdata$prop_males)
+#   gdata$p = as.numeric(gdata$p)
+#   gdata$sdd = as.numeric(gdata$sdd)
+#   gdata$df = as.numeric(gdata$df)
+#   gdata$tstat = as.numeric(gdata$tstat)
+#   return(gdata)
+# }
+
+# New preprocessing methods: after the March 2019 update
+# New analyses:
+#   Acute: time is binned to immediate (<=1h), early (1-5h), and late(>=20h)
+#   Age is kept as numeric
+clean_acute_table <-function(gdata,tissue="muscle",remove_untrained=T){
+  if(remove_untrained){
+    gdata = gdata[!is.element(gdata$training,set=c("yoga","control","untrained")),]
   }
-  gdata = simplify_time_in_gdata(gdata,simplify_time_acute)
-  gdata = simplify_age_gdata(gdata,thr=40)
-  gdata = simplify_training_for_exercise_analysis(gdata)
-  gdata$prop_males = as.numeric(gdata$prop_males)
-  gdata$p = as.numeric(gdata$p)
-  gdata$sdd = as.numeric(gdata$sdd)
-  gdata$df = as.numeric(gdata$df)
-  gdata$tstat = as.numeric(gdata$tstat)
-  return(gdata)
-}
-clean_longterm_table <-function(gdata,tissue="muscle"){
   gdata = gdata[gdata$tissue==tissue,]
   gdata$vi = pmax(gdata$vi,1e-5)
-  gdata = gdata[as.numeric(gdata$time) < 150 ,]
-  gdata = simplify_age_gdata(gdata,thr=40)
+  newtime = rep(2,nrow(gdata))
+  newtime[gdata$time<=1] = 1
+  newtime[gdata$time>=20 ] = 3
+  gdata$time = ordered(newtime)
   gdata = simplify_training_for_exercise_analysis(gdata)
-  gdata$prop_males = as.numeric(gdata$prop_males)
-  gdata$p = as.numeric(gdata$p)
   gdata$sdd = as.numeric(gdata$sdd)
-  gdata$df = as.numeric(gdata$df)
-  gdata$tstat = as.numeric(gdata$tstat)
   return(gdata)
 }
+# Long term data preprocessing:
+#   Binarize time based on 150 days
+clean_longterm_table <-function(gdata,tissue="muscle",remove_untrained=T){
+  if(remove_untrained){
+    gdata = gdata[!is.element(gdata$training,set=c("yoga","control","untrained")),]
+  }
+  gdata = gdata[gdata$tissue==tissue,]
+  gdata$vi = pmax(gdata$vi,1e-5)
+  # time analysis
+  newtime = rep(2,nrow(gdata))
+  newtime[gdata$time<150] = 1
+  gdata$time = ordered(newtime)
+  gdata = simplify_training_for_exercise_analysis(gdata)
+  gdata$sdd = as.numeric(gdata$sdd)
+  return(gdata)
+}
+
 get_untrained_table <-function(gdata,tissue="muscle"){
   gdata = gdata[gdata$tissue==tissue,]
   gdata$vi = pmax(gdata$vi,1e-5)
@@ -132,18 +199,6 @@ get_coeffs_str<-function(coeffs){
 ############################################################################
 ############################################################################
 
-# Prepare the datasets for the different analyses below
-# Load the datasets and their metadata
-load("PADB_univariate_results_and_preprocessed_data_acute.RData")
-acute_datasets = cohort_data
-acute_metadata = cohort_metadata
-acute_sample2time = sample2time
-load("PADB_univariate_results_and_preprocessed_data_longterm.RData")
-longterm_datasets = cohort_data
-longterm_metadata = cohort_metadata
-longterm_sample2time = sample2time
-load("PADB_dataset_level_meta_analysis_data.RData")
-
 # Get the cleaned, filtered datasets
 datasets = list()
 datasets[["acute,muscle"]] = lapply(acute_gene_tables,clean_acute_table,tissue="muscle")
@@ -151,22 +206,63 @@ datasets[["acute,blood"]] = lapply(acute_gene_tables,clean_acute_table,tissue="b
 datasets[["longterm,muscle"]] = lapply(longterm_gene_tables,clean_longterm_table,tissue="muscle")
 datasets[["longterm,blood"]] = lapply(longterm_gene_tables,clean_longterm_table,tissue="blood")
 
-# Reshape data for replication analysis
-rep_datasets = lapply(datasets,function(x)t(sapply(x,function(y)as.numeric(y$p))))
-for(nn in names(rep_datasets)){
-  colnames(rep_datasets[[nn]]) = 
-    paste(rownames(datasets[[nn]][[1]]),datasets[[nn]][[1]]$V1,
-          datasets[[nn]][[1]]$time,sep=";")
+# A new filter added after the update on March 2019: exclude
+# genes with extremely low number of studies from each analysis
+par(mfrow=c(2,2))
+for(nn in names(datasets)){
+  num_datasets = sapply(datasets[[nn]],function(x)length(unique(x$gse)))
+  hist(num_datasets,main=nn)
+  to_rem = (num_datasets/max(num_datasets)) < 0.75
+  print(table(to_rem))
+  datasets[[nn]] = datasets[[nn]][!to_rem] 
+}
+sapply(datasets,length)
+
+# # Reshape data for replication analysis: before the update
+# rep_datasets = lapply(datasets,function(x)t(sapply(x,function(y)as.numeric(y$p))))
+# for(nn in names(rep_datasets)){
+#   colnames(rep_datasets[[nn]]) = 
+#     paste(rownames(datasets[[nn]][[1]]),datasets[[nn]][[1]]$V1,
+#           datasets[[nn]][[1]]$time,sep=";")
+# }
+# sapply(rep_datasets,dim)
+# sapply(rep_datasets,rownames)
+# sapply(rep_datasets,colnames)
+
+# Reshape data for replication analysis: after the update
+get_gene_data_for_rep_analysis<-function(gdata,exclude){
+  gdata = gdata[!is.element(gdata$V1,set=exclude),]
+  x = gdata$p
+  names(x)=paste(gdata$V1,gdata$time,sep=";")
+  return(x)
+}
+load("human_ge_gene_coverage_analysis.RData")
+rep_datasets = list()
+for(nn in names(datasets)){
+  m = sapply(datasets[[nn]][all_genes],get_gene_data_for_rep_analysis,
+             exclude=low_coverage_platforms)
+  print(dim(m))
+  rep_datasets[[nn]] = t(m)
+  print(colnames(rep_datasets[[nn]]))
 }
 sapply(rep_datasets,dim)
-sapply(rep_datasets,rownames)
+sapply(rep_datasets,function(x)all(rownames(x)==all_genes))
 sapply(rep_datasets,colnames)
-# Get the untrained controls datasets
+
+# # Get the untrained controls datasets : before the update 
+# untrained_datasets = list()
+# untrained_datasets[["acute,muscle"]] = lapply(acute_gene_tables_raw,get_untrained_table,tissue="muscle")
+# untrained_datasets[["acute,blood"]] = lapply(acute_gene_tables_raw,get_untrained_table,tissue="blood")
+# untrained_datasets[["longterm,muscle"]] = lapply(longterm_gene_tables_raw,get_untrained_table,tissue="muscle")
+# untrained_datasets[["longterm,blood"]] = lapply(longterm_gene_tables_raw,get_untrained_table,tissue="blood")
+# sapply(untrained_datasets,function(x)dim(x[[1]]))
+
+# Get the untrained controls datasets : after the update 
 untrained_datasets = list()
-untrained_datasets[["acute,muscle"]] = lapply(acute_gene_tables_raw,get_untrained_table,tissue="muscle")
-untrained_datasets[["acute,blood"]] = lapply(acute_gene_tables_raw,get_untrained_table,tissue="blood")
-untrained_datasets[["longterm,muscle"]] = lapply(longterm_gene_tables_raw,get_untrained_table,tissue="muscle")
-untrained_datasets[["longterm,blood"]] = lapply(longterm_gene_tables_raw,get_untrained_table,tissue="blood")
+untrained_datasets[["acute,muscle"]] = lapply(acute_gene_tables,get_untrained_table,tissue="muscle")
+untrained_datasets[["acute,blood"]] = lapply(acute_gene_tables,get_untrained_table,tissue="blood")
+untrained_datasets[["longterm,muscle"]] = lapply(longterm_gene_tables,get_untrained_table,tissue="muscle")
+untrained_datasets[["longterm,blood"]] = lapply(longterm_gene_tables,get_untrained_table,tissue="blood")
 sapply(untrained_datasets,function(x)dim(x[[1]]))
 
 ############################################################################
@@ -182,9 +278,9 @@ simple_RE_beta = lapply(simple_REs,function(x)sapply(x,try_get_field,fname="beta
 st_pvals = lapply(datasets,function(x)lapply(x,simple_stouffer_meta_analysis))
 simple_REs_untrained_beta = lapply(simple_REs_untrained,function(x)sapply(x,try_get_field,fname="beta"))
 par(mfrow=c(2,2))
-for(nn in names(simple_RE_pvals)){
-  pvalue_qqplot(simple_RE_pvals[[nn]],main=nn,pch=20,cex=0.5)
-}
+# for(nn in names(simple_RE_pvals)){
+#   pvalue_qqplot(simple_RE_pvals[[nn]],main=nn,pch=20,cex=0.5)
+# }
 for(nn in names(simple_RE_pvals)){
   r = hist(simple_RE_I2s[[nn]],plot=F)
   per = sum(simple_RE_I2s[[nn]]>70,na.rm = T)/length(simple_RE_I2s[[nn]])
@@ -193,34 +289,34 @@ for(nn in names(simple_RE_pvals)){
   cols[r$mids > 70] = "blue"
   hist(simple_RE_I2s[[nn]],main=paste(nn,"(",per,"%)",sep=""),xlab = "I^2(%)",col=cols)
 }
-for(nn in names(simple_RE_pvals)){
-  pvalue_qqplot(unlist(st_pvals[[nn]]),main=nn,pch=20,cex=0.5)
-}
-for(nn in names(simple_RE_pvals)){
-  x1 = simple_RE_I2s[[nn]]
-  x2 = log(simple_RE_pvals[[nn]])
-  inds = !is.na(x1) & !is.na(x2)
-  print(nn)
-  print(cor(x1[inds],x2[inds],method="spearman"))
-}
-par(mfrow=c(2,2))
-for(nn in names(simple_RE_pvals)){
-  x1 = simple_RE_I2s[[nn]]
-  x2 = simple_RE_tau2s[[nn]]
-  inds = !is.na(x1) & !is.na(x2)
-  print(nn)
-  print(cor(x1[inds],x2[inds],method="spearman"))
-  plot(x=x1,y=x2,xlab="I2(%)",ylab="Tau^2",pch=20,cex=0.2,main=nn)
-}
-par(mfrow=c(2,2))
-for(nn in names(simple_RE_pvals)){
-  x1 = simple_RE_I2s[[nn]]
-  x2 = simple_RE_beta[[nn]]
-  inds = !is.na(x1) & !is.na(x2)
-  print(nn)
-  print(cor(x1[inds],x2[inds],method="spearman"))
-  plot(x=x1,y=x2,xlab="I2(%)",ylab="beta",pch=20,cex=0.2,main=nn)
-}
+# for(nn in names(simple_RE_pvals)){
+#   pvalue_qqplot(unlist(st_pvals[[nn]]),main=nn,pch=20,cex=0.5)
+# }
+# for(nn in names(simple_RE_pvals)){
+#   x1 = simple_RE_I2s[[nn]]
+#   x2 = log(simple_RE_pvals[[nn]])
+#   inds = !is.na(x1) & !is.na(x2)
+#   print(nn)
+#   print(cor(x1[inds],x2[inds],method="spearman"))
+# }
+# par(mfrow=c(2,2))
+# for(nn in names(simple_RE_pvals)){
+#   x1 = simple_RE_I2s[[nn]]
+#   x2 = simple_RE_tau2s[[nn]]
+#   inds = !is.na(x1) & !is.na(x2)
+#   print(nn)
+#   print(cor(x1[inds],x2[inds],method="spearman"))
+#   plot(x=x1,y=x2,xlab="I2(%)",ylab="Tau^2",pch=20,cex=0.2,main=nn)
+# }
+# par(mfrow=c(2,2))
+# for(nn in names(simple_RE_pvals)){
+#   x1 = simple_RE_I2s[[nn]]
+#   x2 = simple_RE_beta[[nn]]
+#   inds = !is.na(x1) & !is.na(x2)
+#   print(nn)
+#   print(cor(x1[inds],x2[inds],method="spearman"))
+#   plot(x=x1,y=x2,xlab="I2(%)",ylab="beta",pch=20,cex=0.2,main=nn)
+# }
 
 # # Example for high I2 and low tau
 # # TODO: revise and add some stats to the report
@@ -239,10 +335,17 @@ for(nn in names(simple_RE_pvals)){
 # median(as.numeric(datasets[[nn]][[selected_i]]$p))
 # simple_REs[[nn]][[selected_i]]
 
-# Filters 1 exclude genes with no sig p at 0.05
-to_rem1 = sapply(rep_datasets,function(x)apply(x<0.05,1,sum,na.rm=T) <= 1)
-rm(acute_gene_tables_raw);rm(acute_gene_tables)
-rm(longterm_gene_tables_raw);rm(longterm_gene_tables)
+# Filters 1 exclude genes with no sig p at 0.01
+# before the update on March 2019 the threshold was 0.05
+rep_filter <-function(gdata,num=1,thr=0.01){
+  return(sum(gdata$p<=thr,na.rm = T)>=num)
+}
+to_rem1 = sapply(datasets,function(x)!sapply(x,rep_filter))
+sapply(to_rem1,table)
+rm(acute_gene_tables_raw)
+rm(acute_gene_tables)
+rm(longterm_gene_tables_raw)
+rm(longterm_gene_tables)
 save.image(file="workspace_before_rep_analysis.RData")
 
 # Create the input files for meta-regression and replication analysis
