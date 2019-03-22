@@ -366,7 +366,7 @@ sapply(meta_reg_datasets,length)
 # Not enough non-male acute muscle studies
 # Not enough resistance training datasets for acute, blood
 # For longterm blood we take training only as we assume that it will
-# be the primary cause of differential abudance
+# be the primary cause of differential abundance
 meta_reg_to_mods = list(
   "acute,muscle" = c("time","training","avg_age"),
   "acute,blood" = c("time","prop_males","avg_age"),
