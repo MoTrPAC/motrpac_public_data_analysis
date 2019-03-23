@@ -2,14 +2,17 @@
 library(parallel)
 library(metafor,lib.loc="~/R/packages")
 
-print("Usage:<working dir with the input RData><num cores>")
+print("Usage:<working dir with the input RData>
+      <num cores><indices of datasets in meta_reg_datasets, comma seperated single string>")
 
-args = commandArgs(trailingOnly=TRUE)
-num_cores = 4
-if(length(args)>0){
-  num_cores = as.numeric(args[2])
+if(length(args)!=3){
+  print("Number of command line arguments should be 3, check the command and rerun")
+  q("no")
 }
 
+args = commandArgs(trailingOnly=TRUE)
+num_cores = as.numeric(args[2])
+inds = as.numeric(strsplit(args[3],split=",")[[1]])
 setwd(args[1])
 
 ############################################################################
@@ -176,7 +179,7 @@ load("meta_analysis_input.RData")
 # Run the analysis
 all_meta_analysis_res <- list()
 try(load("meta_analysis_results.RData"))
-for(nn in names(meta_reg_datasets)){
+for(nn in names(meta_reg_datasets)[inds]){
   if(is.element(nn,set=names(all_meta_analysis_res))){next}
   print(paste("Analyzing dataset:",nn))
   curr_dataset = meta_reg_datasets[[nn]]
