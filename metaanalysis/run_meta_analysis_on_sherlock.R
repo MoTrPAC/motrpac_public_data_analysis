@@ -4,7 +4,8 @@ library(metafor,lib.loc="~/R/packages")
 
 print("Usage:<working dir with the input RData>
       <num cores><indices of datasets in meta_reg_datasets, comma seperated single string>")
-
+print("Input args are:")
+print(args)
 if(length(args)!=3){
   print("Number of command line arguments should be 3, check the command and rerun")
   q("no")
