@@ -175,14 +175,20 @@ pvalue_qqplot<-function(ps,...){
 load("meta_analysis_input.RData")
 # Run the analysis
 all_meta_analysis_res <- list()
+try(load("meta_analysis_results.RData"))
 for(nn in names(meta_reg_datasets)){
+  if(is.element(nn,set=names(all_meta_analysis_res))){next}
+  print(paste("Analyzing dataset:",nn))
   curr_dataset = meta_reg_datasets[[nn]]
+  print(paste("number of genes to be analyzed:",length(curr_dataset)))
   curr_mods = meta_reg_to_mods[[nn]]
+  print("Moderators to be tested for each gene:")
+  print(curr_mods)
   analysis1 = mclapply(curr_dataset,gdata_metaanalysis,
                         mod_names=curr_mods,mc.cores = num_cores)
   all_meta_analysis_res[[nn]] = analysis1
+  save(all_meta_analysis_res,file="meta_analysis_results.RData")
 }
-save(all_meta_analysis_res,file="meta_analysis_results.RData")
 
 
 
