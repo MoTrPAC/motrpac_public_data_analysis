@@ -1,20 +1,26 @@
 
 library(parallel)
 library(metafor,lib.loc="~/R/packages")
+library(nloptr,lib.loc="~/R/packages")
 
 print("Usage:<working dir with the input RData>
-      <num cores><indices of datasets in meta_reg_datasets, comma seperated single string>")
+      <num cores><indices of datasets in meta_reg_datasets, comma seperated single string>
+      <gene start index><gene end index>")
+
+args = commandArgs(trailingOnly=TRUE)
 print("Input args are:")
 print(args)
-if(length(args)!=3){
+
+if(length(args)!=5){
   print("Number of command line arguments should be 3, check the command and rerun")
   q("no")
 }
 
-args = commandArgs(trailingOnly=TRUE)
 num_cores = as.numeric(args[2])
 inds = as.numeric(strsplit(args[3],split=",")[[1]])
 setwd(args[1])
+start = as.numeric(args[4])
+end = as.numeric(args[5])
 
 ############################################################################
 ############################################################################
@@ -57,11 +63,17 @@ select_model_return_p<-function(res,aic_thr=2){
 }
 
 meta_analysis_wrapper<-function(gdata,func = rma.mv,...){
+  res=NULL
+  try({
+    res = func(yi,vi,data=gdata,...)
+  },silent=TRUE)
+  if(!is.null(res)){return(res)}
+  
   for(rel.tol in c(1e-8,1e-7,1e-6)){
     cc=list(iter.max=10000,rel.tol=rel.tol)
     res = NULL
     try({
-      res = func(yi,vi,data=gdata,...)
+      res = func(yi,vi,data=gdata,control=cc,...)
     },silent=TRUE)
     if(!is.null(res)){return(res)}
   }
@@ -97,15 +109,23 @@ add_prefix_to_names<-function(pref,l,sep=":"){
 
 gdata_metaanalysis<-function(gdata,permtest=F,
      mod_names = c("training","time","avg_age","prop_males")){
-  res1 = model_selection_meta_analysis(gdata,
-                                       random=list(~ V1|gse),struct="CS",mod_names=mod_names)
+  res1 = model_selection_meta_analysis(gdata,random=list(~ V1|gse),struct="CS",mod_names=mod_names)
   res0 = model_selection_meta_analysis(gdata,func=rma.uni,mod_names=mod_names)
-  l = list(
-    models = c(add_prefix_to_names("simple",res0$models),
-               add_prefix_to_names("base2",res1$models)),
-    aics = c(add_prefix_to_names("simple",res0$aics),
-             add_prefix_to_names("base2",res1$aics))
-  )
+  if(length(res1$models)==0 && length(res0$models)==0){return(NULL)}
+  if(length(res1$models)>0){
+    l = list(
+      models = c(add_prefix_to_names("simple",res0$models),
+                 add_prefix_to_names("base2",res1$models)),
+      aics = c(add_prefix_to_names("simple",res0$aics),
+               add_prefix_to_names("base2",res1$aics))
+    )
+  }
+  else{
+    l = list(
+      models = add_prefix_to_names("simple",res0$models),
+      aics = add_prefix_to_names("simple",res0$aics)
+    )
+  }
   # keep the simple models and the top 2
   l = keep_main_results_for_model_list(l)
   gc()
@@ -135,6 +155,7 @@ keep_main_results_for_model_list<-function(l,num=2){
   model_names = names(l$aics)
   new_l = list()
   for(nn in model_names){
+    if(is.na(nn)){next}
     curr_m = l$models[[nn]]
     coeffs = cbind(curr_m$beta,curr_m$se,curr_m$zval,curr_m$pval,curr_m$ci.lb,curr_m$ci.ub)
     colnames(coeffs) = c("beta","se","zval","pval","lb","ub")
@@ -177,24 +198,29 @@ pvalue_qqplot<-function(ps,...){
 
 # Load the input
 load("meta_analysis_input.RData")
-# Run the analysis
-all_meta_analysis_res <- list()
-try(load("meta_analysis_results.RData"))
+print("Gene tables were loaded, the meta-analyses names are:")
+print(names(meta_reg_datasets))
 meta_reg_datasets = meta_reg_datasets[inds]
+print("restricting the analysis to the specified meta analysis type, dataset is:")
+print(names(meta_reg_datasets)[1])
+nn = names(meta_reg_datasets)[1]
+start = max(0,start)
+end = min(end,length(meta_reg_datasets[[nn]]))
+print(paste("running on genes from",start,"to",end))
+curr_dataset = meta_reg_datasets[[nn]][start:end]
+meta_reg_datasets = NULL
 gc()
-for(nn in names(meta_reg_datasets)){
-  if(is.element(nn,set=names(all_meta_analysis_res))){next}
-  print(paste("Analyzing dataset:",nn))
-  curr_dataset = meta_reg_datasets[[nn]]
-  print(paste("number of genes to be analyzed:",length(curr_dataset)))
-  curr_mods = meta_reg_to_mods[[nn]]
-  print("Moderators to be tested for each gene:")
-  print(curr_mods)
-  analysis1 = mclapply(curr_dataset,gdata_metaanalysis,
-                        mod_names=curr_mods,mc.cores = num_cores)
-  all_meta_analysis_res[[nn]] = analysis1
-  save(all_meta_analysis_res,file="meta_analysis_results.RData")
+print("Moderators to be tested for each gene:")
+curr_mods = meta_reg_to_mods[[nn]]
+print(curr_mods)
+analysis_res = list()
+for(gg in names(curr_dataset)){
+  print(paste("analyzing gene:",gg))
+  analysis_res[[gg]] = gdata_metaanalysis(curr_dataset[[gg]],mod_names=curr_mods)
 }
+out_file = paste("meta_analysis_results",nn,start,end,".RData",sep="_")
+out_file = gsub(",","_",out_file)
+save(analysis_res,file=out_file)
 
 
 

@@ -336,12 +336,21 @@ for(nn in names(simple_RE_pvals)){
 # simple_REs[[nn]][[selected_i]]
 
 # Filters 1 exclude genes with no sig p at 0.01
-# before the update on March 2019 the threshold was 0.05
+# before the update on March 2019 the threshold was 0.05 and 1
+# Returns true if the gene has p<thr in at least num studies
 rep_filter <-function(gdata,num=1,thr=0.01){
   return(sum(gdata$p<=thr,na.rm = T)>=num)
 }
-to_rem1 = sapply(datasets,function(x)!sapply(x,rep_filter))
+to_rem1 = sapply(datasets,function(x)!sapply(x,rep_filter,num=2,thr=0.01))
 sapply(to_rem1,table)
+# # Returns true if the gene has yi>thr in at least num studies
+# # This filter was added on March 2019
+# intensity_filter <-function(gdata,num=1,thr=0.1){
+#   return(sum(gdata$yi>=thr,na.rm = T)>=num)
+# }
+# to_rem2 = sapply(datasets,function(x)!sapply(x,intensity_filter) |
+#                    !sapply(x,rep_filter,num=2,thr=0.01))
+# sapply(to_rem2,table)
 rm(acute_gene_tables_raw)
 rm(acute_gene_tables)
 rm(longterm_gene_tables_raw)
@@ -375,6 +384,13 @@ meta_reg_to_mods = list(
 )
 save(meta_reg_datasets,meta_reg_to_mods,
      untrained_datasets,file="meta_analysis_input.RData")
+
+load("meta_analysis_input.RData")
+# A new filter added on March 2019, where our goal is to 
+# reduce the number of tests
+to_rem2 = sapply(meta_reg_datasets,function(x)!sapply(x,rep_filter))
+to_rem2 = sapply(meta_reg_datasets,function(x)!sapply(x,intensity_filter))
+sapply(to_rem2,table)
 
 ############################################################################
 ############################################################################
