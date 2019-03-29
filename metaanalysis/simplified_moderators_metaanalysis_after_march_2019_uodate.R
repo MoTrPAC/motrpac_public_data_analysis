@@ -551,6 +551,7 @@ go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
 table(go_res_fdr$setname)
 gene_group_enrichments = go_res
 gene_group_enrichments_fdr = go_res_fdr
+extract_top_go_results(go_res1)
 
 gs = lapply(analysis2selected_genes,names)
 gs = lapply(gs,function(x,y)y[x],y=unlist(entrez2symbol))
@@ -679,7 +680,7 @@ boxplot(yi~time,data=gdata,
 library(topGO)
 
 # Get effect matrices - mean responses - t statistics
-mean_effect_matrices = lapply(datasets,function(x)t(sapply(x,function(y)as.numeric(y$tstat))))
+mean_effect_matrices = lapply(datasets,function(x)t(apply(x,function(y)as.numeric(y$tstat))))
 for(nn in names(mean_effect_matrices)){
   colnames(mean_effect_matrices[[nn]]) = 
     paste(rownames(datasets[[nn]][[1]]),datasets[[nn]][[1]]$training,

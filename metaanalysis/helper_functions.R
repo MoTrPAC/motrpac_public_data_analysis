@@ -332,7 +332,7 @@ get_fold_changes_vs_baseline<-function(x,subjs,timev,baseline=NULL,func = functi
 library(topGO)
 run_topgo_enrichment_fisher<-function(genesOfInterest,geneUniverse,
                                       go_term_size=10,go_dags=c("BP","MF"),
-                                      gene2name=entrez2symbol,...){
+                                      gene2name=entrez2symbol,pthr=0.05,...){
   l = list()
   if(class(genesOfInterest)=="character"){
     l[["set1"]] = genesOfInterest
@@ -357,7 +357,8 @@ run_topgo_enrichment_fisher<-function(genesOfInterest,geneUniverse,
       # add selected genes, only for enrichments with p < 0.05
       gene_rep = c()
       for(i in 1:nrow(allRes)){
-        if (as.numeric(allRes[i,"classicFisher"]) > 0.05){
+        currp = as.numeric(allRes[i,"classicFisher"])
+        if ( is.na(currp) || currp > pthr){
           gene_rep[i]=""
         }
         else{

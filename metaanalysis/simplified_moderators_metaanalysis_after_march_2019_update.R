@@ -535,9 +535,8 @@ for(nn in names(analysis2selected_genes)[1:3]){
     untrained = abs(x[s]),exercise=y,"other genes" = abs(x[s_c])
   )
   cols = c("blue","white","red")
-  boxplot(l,las=2,col=cols,horizontal=F,
-          ylab="Fold change",main = paste(nn," p=",p,sep=""),
-          pch=20)
+  boxplot(l,las=2,col=cols,horizontal=F,cex.axis=0.9,
+          ylab="Fold change",main = paste(nn," p=",p,sep=""),pch=20)
 }
 
 # 3. GO enrichments
@@ -546,11 +545,13 @@ gs = lapply(analysis2selected_genes,names)
 go_res = run_topgo_enrichment_fisher(
   gs,bg,go_dags = "BP",go_term_size = 20,go_max_size = 200)
 go_res1 = go_res[go_res$Annotated < 1500,]
+go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
 go_res1$go_qvals = p.adjust(as.numeric(go_res1$classicFisher),method='fdr')
 go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
 table(go_res_fdr$setname)
 gene_group_enrichments = go_res
 gene_group_enrichments_fdr = go_res_fdr
+extract_top_go_results(go_res1)
 
 gs = lapply(analysis2selected_genes,names)
 gs = lapply(gs,function(x,y)y[x],y=unlist(entrez2symbol))
@@ -582,8 +583,9 @@ gene_name = entrez2symbol[[gene]]
 curr_m = simple_REs$`acute,muscle`[[gene]]
 gdata = meta_reg_datasets$`acute,muscle`[[gene]]
 curr_m$slab.null = F
-curr_times = rep("early",nrow(gdata))
-curr_times[gdata$time==24] = "late(>12h)"
+curr_times = rep("<1h",nrow(gdata))
+curr_times[gdata$time==2] = "1-4h"
+curr_times[gdata$time==3] = ">20h"
 curr_m$slab = paste(gdata$training,curr_times,sep=",")
 analysis1 = all_meta_analysis_res$`acute,muscle`
 aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
@@ -591,86 +593,29 @@ dev.off()
 forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T)
 boxplot(yi~time,data=gdata,
         main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
-        xlab="Time",names=c("early","late"),ylab="Fold change")
+        xlab="Time",names=c("<1h","1-4h",">20h"),ylab="Fold change")
 
-# # Selected examples, before the March 2019 update
-# # GJA1
-# gene = "2697"
-# gene_name = entrez2symbol[[gene]]
-# curr_m = simple_REs$`acute,muscle`[[gene]]
-# curr_m$I2
-# gdata = meta_reg_datasets$`acute,muscle`[[gene]]
-# curr_m$slab.null = F
-# curr_times = rep("early",nrow(gdata))
-# curr_times[gdata$time==24] = "late(>12h)"
-# curr_m$slab = paste(gdata$training,curr_times,sep=",")
-# analysis1 = all_meta_analysis_res$`acute,muscle`
-# forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T)
-# # MYLK2
+# Selected examples, before the March 2019 update
+gene = "51308"
+gene_name = entrez2symbol[[gene]]
+curr_m = simple_REs$`acute,muscle`[[gene]]
+all_meta_analysis_res$`acute,muscle`[[gene]]
+curr_m$I2
+gdata = meta_reg_datasets$`acute,muscle`[[gene]]
+curr_m$slab.null = F
+curr_times = rep("early",nrow(gdata))
+curr_times[gdata$time==24] = "late(>12h)"
+curr_m$slab = paste(gdata$training,curr_times,sep=",")
+analysis1 = all_meta_analysis_res$`acute,muscle`
+forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T)
+# MYLK2
 # gene = "85366"
-# gene_name = entrez2symbol[[gene]]
-# curr_m = simple_REs$`acute,muscle`[[gene]]
-# curr_m$I2
-# gdata = meta_reg_datasets$`acute,muscle`[[gene]]
-# curr_m$slab.null = F
-# curr_times = rep("early",nrow(gdata))
-# curr_times[gdata$time==24] = "late(>12h)"
-# curr_m$slab = paste(gdata$training,curr_times,sep=",")
-# analysis1 = all_meta_analysis_res$`acute,muscle`
-# forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T)
 # # Time and training type - CNRIP1
 # gene ="25927"
-# gene_name = entrez2symbol[[gene]]
-# curr_m = simple_REs$`acute,muscle`[[gene]]
-# curr_m$I2
-# gdata = meta_reg_datasets$`acute,muscle`[[gene]]
-# curr_m$slab.null = F
-# curr_times = rep("early",nrow(gdata))
-# curr_times[gdata$time==24] = "late(>12h)"
-# curr_m$slab = paste(gdata$training,curr_times,sep=",")
-# analysis1 = all_meta_analysis_res$`acute,muscle`
-# forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T)
-# boxplot(yi~time+training,data=gdata,
-#         main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
-#         xlab="Time",ylab="Fold change",las=1)
 # # 7423 VEGFB
 # gene ="7423"
-# gene_name = entrez2symbol[[gene]]
-# curr_m = simple_REs$`acute,blood`[[gene]]
-# gdata = meta_reg_datasets$`acute,blood`[[gene]]
-# curr_m$slab.null = F
-# curr_times = rep("early",nrow(gdata))
-# curr_times[gdata$time==24] = "late(>12h)"
-# curr_times[gdata$time==4] = "inter(<5h)"
-# curr_m$slab = paste(gdata$training,curr_times,sep=",")
-# forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T)
-# boxplot(yi~time+training,data=gdata,
-#         main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
-#         xlab="Time",ylab="Fold change",las=1)
-# 
-# # Males-dependent example
+# Males-dependent example
 # gene = "7188"
-# gene_name = entrez2symbol[[gene]]
-# curr_m = simple_REs$`acute,blood`[[gene]]
-# gdata = meta_reg_datasets$`acute,blood`[[gene]]
-# curr_m$slab.null = F
-# curr_times = rep("early",nrow(gdata))
-# curr_times[gdata$time==24] = "late(>12h)"
-# curr_m$slab = paste(gdata$training,curr_times,sep=",")
-# analysis1 = all_meta_analysis_res$`acute,blood`
-# aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
-# forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T)
-# boxplot(yi~time,data=gdata,
-#         main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
-#         xlab="Time",ylab="Fold change")
-# table(gdata$time,gdata$prop_males)
-# boxplot(yi~prop_males,data=gdata,
-#         main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
-#         xlab="Time",ylab="Fold change")
-
-# known_genes = c("PPARGC1A","COX1","NDUFA","PDK4","VEGFA","KDR","THY1","MYL4",
-#                 "MYH1","COL1A1","ACTC1","TNNT2","GADD45G","MMP9","NR4A1")
-
 
 ############################################################################
 ############################################################################
@@ -678,20 +623,53 @@ boxplot(yi~time,data=gdata,
 # Interpretation of the results
 library(topGO)
 
+# some helper functions for reformatting the data
+get_ts<-function(gdata){
+  v = as.numeric(gdata$tstat)
+  ns = paste(gdata$V1,gdata$training,gdata$time,
+             format(gdata$avg_age,digits=1),format(gdata$prop_males,digits=1),sep=";")
+  v = tapply(v,ns,mean)
+  return(v)
+}
+get_t_matrix_from_list<-function(tstats){
+  all_ns = unique(unlist(sapply(tstats,names)))
+  all_genes = names(tstats)
+  m = matrix(0,nrow=length(all_genes),ncol=length(all_ns),
+             dimnames = list(all_genes,all_ns))
+  for(i in 1:length(all_genes)){
+    m[i,names(tstats[[i]])] = tstats[[i]]
+  }
+  return(m)
+}
+
 # Get effect matrices - mean responses - t statistics
-mean_effect_matrices = lapply(datasets,function(x)t(sapply(x,function(y)as.numeric(y$tstat))))
+dataset_tstats = lapply(datasets,function(x)sapply(x,get_ts))
+mean_effect_matrices = lapply(dataset_tstats,get_t_matrix_from_list)
+sapply(mean_effect_matrices,dim)
 for(nn in names(mean_effect_matrices)){
-  colnames(mean_effect_matrices[[nn]]) = 
-    paste(rownames(datasets[[nn]][[1]]),datasets[[nn]][[1]]$training,
-          datasets[[nn]][[1]]$time,sep=";")
   colnames(mean_effect_matrices[[nn]]) = gsub("endurance","E",
                                               colnames(mean_effect_matrices[[nn]]),ignore.case = T)
   colnames(mean_effect_matrices[[nn]]) = gsub("resistance","R",
                                               colnames(mean_effect_matrices[[nn]]),ignore.case = T)
 }
 
+# helper function for getting the clusters
+get_num_clusters_wss_kmeans<-function(data,k.max=25,wss_imp_thr=0.9){
+  k.max = min(k.max,nrow(data)/2)
+  wss <- sapply(1:k.max, 
+                function(k){kmeans(data, k, nstart=50,iter.max = 15 )$tot.withinss})
+  plot(1:k.max, wss,
+       type="b", pch = 19, frame = FALSE, 
+       xlab="Number of clusters K",
+       ylab="Total within-clusters sum of squares")
+  wss_imp_factors = wss[-1]/wss[-length(wss)]
+  if(all(wss_imp_factors>wss_imp_thr)){return(1)}
+  return(c(k=max(which(wss_imp_factors < wss_imp_thr))+1))
+}
+
 gene_subgroups = list()
 gene_t_patterns = list()
+par(mfrow=c(4,4))
 for(nn in names(analysis2selected_genes_stats)){
   curr_genes = analysis2selected_genes_stats[[nn]]
   curr_groups = curr_genes[,"Group"]
@@ -702,27 +680,25 @@ for(nn in names(analysis2selected_genes_stats)){
     if(ncol(m)==1){m=t(m)}
     rownames(m) = curr_m[,"Entrez"]
     
-    # cluster based on the moderator's average not the t-test scores themselves
+    # Merge based on the moderator's average not the t-test scores themselves
     if(gg != "base_model"){
       curr_mods = strsplit(gg,split=";")[[1]]
-      curr_gdata = datasets[[nn]][[1]]
-      for(j in names(curr_gdata)){
-        if(is.numeric(curr_gdata[[j]])){curr_gdata[[j]] = format(curr_gdata[[j]],digits=2)}
+      curr_m_meta = sapply(colnames(m),function(x)strsplit(x,split=";")[[1]])
+      rownames(curr_m_meta) = c("cohort","training","time","avg_age","prop_males")
+      curr_m_meta = curr_m_meta[curr_mods,]
+      if(!is.null(dim(curr_m_meta))){
+        curr_m_meta = apply(curr_m_meta,2,paste,collapse=";")
       }
-      curr_mods = curr_gdata[,curr_mods]
-      if(!is.null(dim(curr_mods))){
-        curr_mods = apply(curr_mods,1,paste,collapse=";")
-      }
-      m = t(apply(m,1,function(x,y)tapply(x,y,mean),y=curr_mods))
+      m = t(apply(m,1,function(x,y)tapply(x,y,mean),y=curr_m_meta))
+      if(nrow(m)>5){currk = get_num_clusters_wss_kmeans(m,10,0.7)}
+      else{currk=2}
     }
     else{
-      m = matrix(rowMeans(m),ncol=1)
-      rownames(m) = curr_m[,"Entrez"]
-      colnames(m) = "base_model_mean_t"
+      m = as.matrix(rowMeans(m),ncol=1)
+      colnames(m)[1] = "base,meant"
+      currk=2
     }
-    
-    currk = 2
-    # if(nrow(curr_m)>50){currk=4}
+
     if(nrow(m)>2){
       m_kmeans = kmeans(m,centers = currk)
       m_kmeans = m_kmeans$cluster
@@ -733,7 +709,6 @@ for(nn in names(analysis2selected_genes_stats)){
     }
     m = cbind(m,m_kmeans)
     colnames(m)[ncol(m)] = "kmeans_clusters"
-    for(j in 1:ncol(m)){m[,j]=as.numeric(format(m[,j],digits=3))}
     gene_t_patterns[[paste(nn,gg,sep=",")]] = m
     
     for(kk in unique(m_kmeans)){
@@ -742,7 +717,7 @@ for(nn in names(analysis2selected_genes_stats)){
     }
   }
 }
-sapply(gene_subgroups,length)
+sort(sapply(gene_subgroups,length))
 gene_subgroups[["longterm,muscle,prop_males,1"]]
 sapply(gene_t_patterns,colnames)
 base_model_ms = c()
@@ -756,17 +731,20 @@ gene_t_patterns[["base_models"]] = base_model_ms
 # Enrichment analysis of the new groups
 bg = unique(c(unlist(sapply(simple_REs,names))))
 gs = gene_subgroups
+gs = gs[sapply(gs,length)>10]
+sapply(gs,length)
 go_res = run_topgo_enrichment_fisher(
   gs,bg,go_dags = "BP",go_term_size = 20,go_max_size = 200)
 go_res1 = go_res[go_res$Annotated < 1500,]
+go_res1$classicFisher[is.na(as.numeric(go_res1$classicFisher))] = 1e-30
 go_res1$go_qvals = p.adjust(as.numeric(go_res1$classicFisher),method='fdr')
 go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
 table(go_res_fdr$setname)
 gene_subgroup_enrichments = go_res
 gene_subgroup_enrichments_fdr = go_res_fdr
 
-get_most_sig_enrichments_by_groups(gene_subgroup_enrichments_fdr,num=2)
-get_most_sig_enrichments_by_groups(gene_group_enrichments_fdr,num=3)
+get_most_sig_enrichments_by_groups(gene_subgroup_enrichments_fdr,num=2)[,c(1:4,8)]
+get_most_sig_enrichments_by_groups(gene_group_enrichments_fdr,num=3)[,1:4]
 
 # Other enrichment analyses
 library(ReactomePA)
@@ -797,29 +775,32 @@ save(gene_subgroup_enrichments,gene_subgroup_enrichments_fdr,
 
 # Heatmaps
 library(gplots)
-gene_set = gene_subgroups$`acute,muscle,training,2`
-ord = order(datasets$`acute,muscle`[[1]]$training,
-            datasets$`acute,muscle`[[1]]$time)
-mat = mean_effect_matrices$`acute,muscle`[gene_set,ord]
+par(mar=c(10,5,5,5))
+mat = gene_t_patterns$`acute,muscle,time`
+mat = mat[,-ncol(mat)]
 rownames(mat) = unlist(entrez2symbol[rownames(mat)])
 mat[mat>5]=5;mat[mat< -5]=-5
-heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.9)
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.9,mar=c(8,4))
 
-gene_set = gene_subgroups$`acute,muscle,training,1`
-ord = order(datasets$`acute,muscle`[[1]]$training,
-            datasets$`acute,muscle`[[1]]$time)
-mat = mean_effect_matrices$`acute,muscle`[gene_set,ord]
+mat = gene_t_patterns$`acute,muscle,training`
+mat = mat[,-ncol(mat)]
 rownames(mat) = unlist(entrez2symbol[rownames(mat)])
 mat[mat>5]=5;mat[mat< -5]=-5
-heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.9)
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.9,mar=c(8,4))
 
 gene_set = gene_subgroups$`acute,muscle,time,1`
-ord = order(datasets$`acute,muscle`[[1]]$time,
-            datasets$`acute,muscle`[[1]]$training)
-mat = mean_effect_matrices$`acute,muscle`[gene_set,ord]
+mat =gene_t_patterns$`acute,muscle,time`[gene_set,]
 rownames(mat) = unlist(entrez2symbol[rownames(mat)])
+mat = mat[,-ncol(mat)]
 mat[mat>5]=5;mat[mat< -5]=-5
-heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered)
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.9)
+
+gene_set = gene_subgroups$`acute,muscle,time,2`
+mat =gene_t_patterns$`acute,muscle,time`[gene_set,]
+rownames(mat) = unlist(entrez2symbol[rownames(mat)])
+mat = mat[,-ncol(mat)]
+mat[mat>5]=5;mat[mat< -5]=-5
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.9)
 
 gene_set = gene_subgroups$`longterm,muscle,base_model,2`
 ord = order(datasets$`longterm,muscle`[[1]]$time,
@@ -827,7 +808,7 @@ ord = order(datasets$`longterm,muscle`[[1]]$time,
 mat = mean_effect_matrices$`longterm,muscle`[gene_set,ord]
 rownames(mat) = unlist(entrez2symbol[rownames(mat)])
 mat[mat>5]=5;mat[mat< -5]=-5
-heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.7)
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.7,mar=c(8,5))
 
 gene_set = gene_subgroups$`longterm,muscle,base_model,1`
 ord = order(datasets$`longterm,muscle`[[1]]$time,
@@ -835,7 +816,7 @@ ord = order(datasets$`longterm,muscle`[[1]]$time,
 mat = mean_effect_matrices$`longterm,muscle`[gene_set,ord]
 rownames(mat) = unlist(entrez2symbol[rownames(mat)])
 mat[mat>5]=5;mat[mat< -5]=-5
-heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.7)
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.7,mar=c(8,5))
 
 gene_set = gene_subgroups$`acute,blood,prop_males,1`
 ord = order(datasets$`acute,blood`[[1]]$prop_males,
@@ -868,23 +849,21 @@ plot_with_err_bars<-function(xnames,avg,sdev,add=F,...){
 
 par(mfrow=c(1,2))
 gene_set = gene_subgroups$`acute,blood,time,1`
-ord = order(datasets$`acute,blood`[[1]]$time)
-mat = mean_effect_matrices$`acute,blood`[gene_set,ord]
+mat = mean_effect_matrices$`acute,blood`[gene_set,]
 times = ordered(as.numeric(sapply(colnames(mat),function(x)strsplit(x,split=";")[[1]][3])))
 D = dummy(times,levelsToKeep = levels(times))
 D = t(t(D)/colSums(D))
 mat1 = mat %*% D
 boxplot(mat1,xlab="Time after bout (hours)",ylab="Avg t-statistic",col="blue",
-        main="Down-regulated (196 genes)")
+        main="Up-regulated (196 genes)")
 gene_set = gene_subgroups$`acute,blood,time,2`
-ord = order(datasets$`acute,blood`[[1]]$time)
-mat = mean_effect_matrices$`acute,blood`[gene_set,ord]
+mat = mean_effect_matrices$`acute,blood`[gene_set,]
 times = ordered(as.numeric(sapply(colnames(mat),function(x)strsplit(x,split=";")[[1]][3])))
 D = dummy(times,levelsToKeep = levels(times))
 D = t(t(D)/colSums(D))
 mat1 = mat %*% D
 boxplot(mat1,xlab="Time after bout (hours)",ylab="Avg t-statistic",col ="red",
-       main= "Up-regulated (99 genes)")
+       main= "Down-regulated (68 genes)")
 
 ###############################################
 ###############################################
