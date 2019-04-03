@@ -414,6 +414,12 @@ get_most_sig_enrichments_by_groups <- function(res,num=1,gcol=1,pcol="classicFis
   return(m)
 }
 
+get_most_sig_enrichments_for_cluster <- function(res,cluster,...){
+  res = res[res[,1]==cluster,]
+  return(get_most_sig_enrichments_by_groups(res,...))
+}
+
+
 # Reactome enrichment analysis
 library(ReactomePA)
 run_reactome_enrichment_analysis<-function(l,...){
