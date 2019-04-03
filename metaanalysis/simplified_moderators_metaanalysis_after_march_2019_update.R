@@ -341,7 +341,7 @@ for(nn in names(simple_RE_pvals)){
 rep_filter <-function(gdata,num=1,thr=0.01){
   return(sum(gdata$p<=thr,na.rm = T)>=num)
 }
-to_rem1 = sapply(datasets,function(x)!sapply(x,rep_filter,num=2,thr=0.01))
+to_rem1 = sapply(datasets,function(x)!sapply(x,rep_filter,num=2,thr=0.05))
 sapply(to_rem1,table)
 # # Returns true if the gene has yi>thr in at least num studies
 # # This filter was added on March 2019
@@ -389,7 +389,7 @@ load("meta_analysis_input.RData")
 # A new filter added on March 2019, where our goal is to 
 # reduce the number of tests
 to_rem2 = sapply(meta_reg_datasets,function(x)!sapply(x,rep_filter))
-to_rem2 = sapply(meta_reg_datasets,function(x)!sapply(x,intensity_filter))
+to_rem2 = sapply(datasets,function(x)!sapply(x,intensity_filter))
 sapply(to_rem2,table)
 
 ############################################################################
@@ -398,16 +398,16 @@ sapply(to_rem2,table)
 # Meta-regression and model selection for selected genes
 library(parallel);library(metafor)
 
-I2_thr = 50
-AIC_diff_thr = 5
-ACUTE_beta_thr = 0.25
-LONGTERM_beta_thr = 0.1
-P_thr = 0.0001
-
 # Load the results (run on sherlock) instead of running the code above
 load("meta_analysis_results.RData")
 load("workspace_before_rep_analysis.RData")
 load("meta_analysis_input.RData")
+
+I2_thr = 50
+AIC_diff_thr = 5
+ACUTE_beta_thr = 0.25
+LONGTERM_beta_thr = 0.1
+P_thr = 1e-05
 
 # Algorithm for selecting genes from each meta-reg analysis
 analysis2selected_genes = list()
@@ -545,13 +545,15 @@ gs = lapply(analysis2selected_genes,names)
 go_res = run_topgo_enrichment_fisher(
   gs,bg,go_dags = "BP",go_term_size = 20,go_max_size = 200)
 go_res1 = go_res[go_res$Annotated < 1500,]
+go_res1 = go_res[go_res1$Significant > 3,]
+go_res1$classicFisher[is.na(as.numeric(go_res1$classicFisher))] = 1e-30
 go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
 go_res1$go_qvals = p.adjust(as.numeric(go_res1$classicFisher),method='fdr')
 go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
 table(go_res_fdr$setname)
 gene_group_enrichments = go_res
 gene_group_enrichments_fdr = go_res_fdr
-extract_top_go_results(go_res1)
+get_most_sig_enrichments_by_groups(gene_group_enrichments_fdr,num=3)[,1:4]
 
 gs = lapply(analysis2selected_genes,names)
 gs = lapply(gs,function(x,y)y[x],y=unlist(entrez2symbol))
@@ -579,6 +581,7 @@ curr_genes = analysis2selected_genes$`acute,muscle`
 curr_genes[curr_genes=="base_model"]
 #PGC1a
 gene = "10891"
+curr_genes[gene]
 gene_name = entrez2symbol[[gene]]
 curr_m = simple_REs$`acute,muscle`[[gene]]
 gdata = meta_reg_datasets$`acute,muscle`[[gene]]
@@ -588,6 +591,7 @@ curr_times[gdata$time==2] = "1-4h"
 curr_times[gdata$time==3] = ">20h"
 curr_m$slab = paste(gdata$training,curr_times,sep=",")
 analysis1 = all_meta_analysis_res$`acute,muscle`
+analysis1[[gene]][[1]]$mod_p
 aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
 dev.off()
 forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T)
@@ -654,17 +658,25 @@ for(nn in names(mean_effect_matrices)){
 }
 
 # helper function for getting the clusters
-get_num_clusters_wss_kmeans<-function(data,k.max=25,wss_imp_thr=0.9){
+get_num_clusters_wss_kmeans<-function(data,k.max=10,wss_imp_thr=0.7){
+  if(ncol(m)>2){
+    data = t(scale(t(data))) 
+  }
   k.max = min(k.max,nrow(data)/2)
   wss <- sapply(1:k.max, 
-                function(k){kmeans(data, k, nstart=50,iter.max = 15 )$tot.withinss})
+                function(k){kmeans(data, k, nstart=100,iter.max = 50 )$tot.withinss})
   plot(1:k.max, wss,
        type="b", pch = 19, frame = FALSE, 
        xlab="Number of clusters K",
        ylab="Total within-clusters sum of squares")
   wss_imp_factors = wss[-1]/wss[-length(wss)]
   if(all(wss_imp_factors>wss_imp_thr)){return(1)}
-  return(c(k=max(which(wss_imp_factors < wss_imp_thr))+1))
+  k = 2
+  for(j in 2:length(wss_imp_factors)){
+    if(wss_imp_factors[j] > wss_imp_thr){break}
+    k = k+1
+  }
+  return(c(k=k))
 }
 
 gene_subgroups = list()
@@ -690,7 +702,7 @@ for(nn in names(analysis2selected_genes_stats)){
         curr_m_meta = apply(curr_m_meta,2,paste,collapse=";")
       }
       m = t(apply(m,1,function(x,y)tapply(x,y,mean),y=curr_m_meta))
-      if(nrow(m)>5){currk = get_num_clusters_wss_kmeans(m,10,0.7)}
+      if(nrow(m)>5){currk = get_num_clusters_wss_kmeans(m,10)}
       else{currk=2}
     }
     else{
@@ -699,6 +711,7 @@ for(nn in names(analysis2selected_genes_stats)){
       currk=2
     }
 
+    print(paste(nn,gg,currk))
     if(nrow(m)>2){
       m_kmeans = kmeans(m,centers = currk)
       m_kmeans = m_kmeans$cluster
@@ -718,7 +731,6 @@ for(nn in names(analysis2selected_genes_stats)){
   }
 }
 sort(sapply(gene_subgroups,length))
-gene_subgroups[["longterm,muscle,prop_males,1"]]
 sapply(gene_t_patterns,colnames)
 base_model_ms = c()
 for(gg in names(gene_t_patterns)[grepl("base_model",names(gene_t_patterns))]){
@@ -743,7 +755,9 @@ table(go_res_fdr$setname)
 gene_subgroup_enrichments = go_res
 gene_subgroup_enrichments_fdr = go_res_fdr
 
-get_most_sig_enrichments_by_groups(gene_subgroup_enrichments_fdr,num=2)[,c(1:4,8)]
+get_most_sig_enrichments_by_groups(gene_subgroup_enrichments_fdr,num=4)[,c(1,4,8)]
+table(gene_subgroup_enrichments_fdr$setname)
+gene_subgroup_enrichments_fdr[grepl("ossi",gene_subgroup_enrichments_fdr$Term),]
 get_most_sig_enrichments_by_groups(gene_group_enrichments_fdr,num=3)[,1:4]
 
 # Other enrichment analyses
@@ -770,17 +784,11 @@ save(gene_subgroup_enrichments,gene_subgroup_enrichments_fdr,
      gene_group_enrichments,gene_group_enrichments_fdr,
      reactome_pathways_subgroups,reactome_pathways_subgroups_fdr,
      reactome_pathways_groups,reactome_pathways_groups_fdr,
-     file="topGO_res_jan_2019.RData")
-
+     file="topGO_res_march_2019.RData")
 
 # Heatmaps
 library(gplots)
 par(mar=c(10,5,5,5))
-mat = gene_t_patterns$`acute,muscle,time`
-mat = mat[,-ncol(mat)]
-rownames(mat) = unlist(entrez2symbol[rownames(mat)])
-mat[mat>5]=5;mat[mat< -5]=-5
-heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.9,mar=c(8,4))
 
 mat = gene_t_patterns$`acute,muscle,training`
 mat = mat[,-ncol(mat)]
@@ -793,9 +801,16 @@ mat =gene_t_patterns$`acute,muscle,time`[gene_set,]
 rownames(mat) = unlist(entrez2symbol[rownames(mat)])
 mat = mat[,-ncol(mat)]
 mat[mat>5]=5;mat[mat< -5]=-5
-heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.9)
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.8)
 
 gene_set = gene_subgroups$`acute,muscle,time,2`
+mat =gene_t_patterns$`acute,muscle,time`[gene_set,]
+rownames(mat) = unlist(entrez2symbol[rownames(mat)])
+mat = mat[,-ncol(mat)]
+mat[mat>5]=5;mat[mat< -5]=-5
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.9)
+
+gene_set = gene_subgroups$`acute,muscle,time,3`
 mat =gene_t_patterns$`acute,muscle,time`[gene_set,]
 rownames(mat) = unlist(entrez2symbol[rownames(mat)])
 mat = mat[,-ncol(mat)]

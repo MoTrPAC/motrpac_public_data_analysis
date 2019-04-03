@@ -358,6 +358,10 @@ run_topgo_enrichment_fisher<-function(genesOfInterest,geneUniverse,
       gene_rep = c()
       for(i in 1:nrow(allRes)){
         currp = as.numeric(allRes[i,"classicFisher"])
+        if (is.na(currp)){
+          allRes[i,"classicFisher"] = 1e-30
+          currp = allRes[i,"classicFisher"] 
+        }
         if ( is.na(currp) || currp > pthr){
           gene_rep[i]=""
         }
