@@ -641,7 +641,7 @@ qs = p.adjust(ps,method="fdr")
 reactome_pathways_groups1$qvalue = qs
 reactome_pathways_groups_fdr = reactome_pathways_groups1[qs <= 0.1,]
 table(reactome_pathways_groups_fdr[,1])
-
+# subgroups
 reactome_pathways_subgroups = run_reactome_enrichment_analysis(gene_subgroups,universe=bg)
 reactome_pathways_subgroups1 = reactome_pathways_subgroups[reactome_pathways_subgroups$Count>2,]
 ps = reactome_pathways_subgroups1$pvalue
@@ -650,7 +650,6 @@ reactome_pathways_subgroups1$qvalue = qs
 reactome_pathways_subgroups_fdr = reactome_pathways_subgroups1[qs <= 0.1,]
 table(reactome_pathways_subgroups_fdr[,1])
 get_most_sig_enrichments_by_groups(reactome_pathways_subgroups_fdr,pcol="pvalue",num = 4)[,c(1,3)]
-
 reactome_pathways_subgroups_fdr[,1] = as.character(reactome_pathways_subgroups_fdr[,1])
 
 save(gene_subgroups,analysis2selected_genes,
@@ -703,6 +702,14 @@ table_name2 = "acute,muscle,training"
 set_name = "acute,muscle,time;training,2"
 table_name = "acute,muscle"
 table_name2 = "acute,muscle,time;training"
+# Longterm muscle - base models
+set_name = "longterm,muscle,base_model,1"
+table_name = "longterm,muscle"
+table_name2 = "longterm,muscle,base_model"
+# OR
+set_name = "longterm,muscle,base_model,2"
+table_name = "longterm,muscle"
+table_name2 = "longterm,muscle,base_model"
 
 # plot the t-stat over all cohorts
 set_genes = gene_subgroups[[set_name]]
@@ -721,51 +728,28 @@ heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.8)
 gene_subgroup_enrichments_fdr[gene_subgroup_enrichments_fdr[,1]==set_name,]
 reactome_pathways_subgroups_fdr[reactome_pathways_subgroups_fdr[,1]==set_name,]
 
-# Sex-specific responses in longterm training
-set_name = "longterm,muscle,prop_males,1"
-gene_set = gene_subgroups[[set_name]]
-mat = gene_t_patterns$`longterm,muscle,prop_males`[gene_set,]
+# Specifically for longterm muscle:
+makeRects <- function(m,lwd=2){
+  coords = expand.grid(nrow(m):1, 1:ncol(m))[m,]
+  xl=coords[,2]-0.49
+  yb=coords[,1]-0.49
+  xr=coords[,2]+0.49
+  yt=coords[,1]+0.49
+  rect(xl,yb,xr,yt,border="black",lwd=lwd)
+}
+set_genes = gene_subgroups[[set_name]]
+mat = mean_effect_matrices[[table_name]][set_genes,]
 rownames(mat) = unlist(entrez2symbol[rownames(mat)])
-mat = mat[,-ncol(mat)]
-# mat[mat>2]=2;mat[mat< -2]=-2
-mat = mat[,colnames(mat)!="NaN"]
-heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.5)
-
-set_name = "acute,blood,time;avg_age,1"
-gene_set = gene_subgroups[[set_name]]
-mat = gene_t_patterns$`acute,blood,time;avg_age`[gene_set,]
-rownames(mat) = unlist(entrez2symbol[rownames(mat)])
-mat = mat[,-ncol(mat)]
-mat[mat>4]=4;mat[mat< -4]=-4
-mat = mat[,colnames(mat)!="NaN"]
-ages = sapply(colnames(mat),function(x)as.numeric(strsplit(x,split=";")[[1]][2]))
-heatmap.2(mat[,order(ages)],trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.5)
-
-set_name = "acute,blood,avg_age,1"
-gene_set = gene_subgroups[[set_name]]
-mat = gene_t_patterns$`acute,blood,avg_age`[gene_set,]
-rownames(mat) = unlist(entrez2symbol[rownames(mat)])
-mat = mat[,-ncol(mat)]
-mat[mat>4]=4;mat[mat< -4]=-4
-mat = mat[,colnames(mat)!="NaN"]
-ages = sapply(colnames(mat),function(x)as.numeric(strsplit(x,split=";")[[1]][2]))
-heatmap.2(mat[,order(ages)],trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.8)
-
-# par(mfrow=c(1,2))
-# gene_set = gene_subgroups$`acute,blood,time,1`
-# mat = mean_effect_matrices$`acute,blood`[gene_set,]
-# times = ordered(as.numeric(sapply(colnames(mat),function(x)strsplit(x,split=";")[[1]][3])))
-# D = dummy(times,levelsToKeep = levels(times))
-# D = t(t(D)/colSums(D))
-# mat1 = mat %*% D
-# boxplot(mat1,xlab="Time after bout (hours)",ylab="Avg t-statistic",col="blue")
-# gene_set = gene_subgroups$`acute,blood,time,2`
-# mat = mean_effect_matrices$`acute,blood`[gene_set,]
-# times = ordered(as.numeric(sapply(colnames(mat),function(x)strsplit(x,split=";")[[1]][3])))
-# D = dummy(times,levelsToKeep = levels(times))
-# D = t(t(D)/colSums(D))
-# mat1 = mat %*% D
-# boxplot(mat1,xlab="Time after bout (hours)",ylab="Avg t-statistic",col ="red")
+mat = mat[,apply(mat,2,sd)>0]
+mat = mat[,apply(mat==0,2,sum)/nrow(mat) < 0.5]
+mat = mat[apply(mat==0,1,sum)/ncol(mat) < 0.5,]
+mat[mat>3]=3;mat[mat< -3]=-3
+colnames(mat) = NULL;rownames(mat)=rep("",nrow(mat))
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.5,
+          add.expr={makeRects(mat==0)},Rowv = F)
+# get the top enrichments of the set
+curr_gos = gene_subgroup_enrichments_fdr[gene_subgroup_enrichments_fdr[,1]==set_name,]
+curr_pathways = reactome_pathways_subgroups_fdr[reactome_pathways_subgroups_fdr[,1]==set_name,]
 
 # Try another plot: select cluster names and plot all of their patterns
 # along with selected enrichments
@@ -817,46 +801,56 @@ m = gene_t_patterns$`acute,muscle,time`[,1:3]
 rownames(m) = entrez2symbol[rownames(m)]
 write.table(m,file="drem/acute_muscle_time.txt",
             sep="\t",col.names = T,row.names = T,quote=F)
-
-pref = "acute,blood,time,\\d"
-clusters = names(gene_subgroups)[grepl(pref,names(gene_subgroups))]
-par(mfrow=c(1,2))
-for(set_name in sort(clusters)){
-  gene_set = gene_subgroups[[set_name]]
-  top_enrichments1 = reactome_pathways_subgroups_fdr[
-    reactome_pathways_subgroups_fdr[,1]==set_name,"Description"]
-  top_enrichments2 = gene_subgroup_enrichments_fdr[
-    gene_subgroup_enrichments_fdr[,1]==set_name,"Term"]
-
-  # remove embryo enrichments
-  top_enrichments1 = top_enrichments1[!grepl("embryo",top_enrichments1)]
-  top_enrichments2 = top_enrichments2[!grepl("embryo",top_enrichments2)]
-
-  enrichment1 = top_enrichments1[1]
-  if(any(grepl("muscle",top_enrichments1))){
-    enrichment1 = top_enrichments1[grepl("muscle",top_enrichments1)][1]
-  }
-  enrichment2 = top_enrichments2[1]
-  if(any(grepl("muscle",top_enrichments2))){
-    enrichment2 = top_enrichments2[grepl("muscle",top_enrichments2)][1]
-  }
-  if(is.na(enrichment1)){enrichment1 = NULL}
-  if(is.na(enrichment2)){enrichment2 = NULL}
-  enrichment1 = shorten_by_words(tolower(enrichment1))
-  enrichment2 = shorten_by_words(tolower(enrichment2))
-
-  set_name = paste(set_name,"(",nrow(mat)," genes)",sep="")
-  curr_main = paste(set_name,enrichment1,enrichment2,sep="\n")
-  curr_main = gsub("\n\n","\n",curr_main)
-  print(curr_main)
-  mat = gene_t_patterns$`acute,blood,time`[gene_set,]
-  rownames(mat) = unlist(entrez2symbol[rownames(mat)])
-  mat = mat[,-ncol(mat)]
-  mat[mat>6]=6;mat[mat< -6]=-6
-  plot_with_err_bars(c("0-1h","2-5h",">20h"),
-                     colMeans(mat),apply(mat,2,sd),col="blue",lwd=2,
-                     main=curr_main,ylab = "avg t")
+# Write input for cytoscape
+m = gene_subgroups
+m = m[grepl("acute,muscle,time,",names(m))]
+mm = c()
+for(cluster_name in names(m)){
+  mm = rbind(mm,
+             cbind(m[[cluster_name]],rep(cluster_name,length(m[[cluster_name]]))))
 }
+write.table(mm,file="supp_tables/acute_muscle_time_subgroups.txt",
+            sep="\t",col.names = F,row.names = F,quote=F)
+
+# pref = "acute,blood,time,\\d"
+# clusters = names(gene_subgroups)[grepl(pref,names(gene_subgroups))]
+# par(mfrow=c(1,2))
+# for(set_name in sort(clusters)){
+#   gene_set = gene_subgroups[[set_name]]
+#   top_enrichments1 = reactome_pathways_subgroups_fdr[
+#     reactome_pathways_subgroups_fdr[,1]==set_name,"Description"]
+#   top_enrichments2 = gene_subgroup_enrichments_fdr[
+#     gene_subgroup_enrichments_fdr[,1]==set_name,"Term"]
+# 
+#   # remove embryo enrichments
+#   top_enrichments1 = top_enrichments1[!grepl("embryo",top_enrichments1)]
+#   top_enrichments2 = top_enrichments2[!grepl("embryo",top_enrichments2)]
+# 
+#   enrichment1 = top_enrichments1[1]
+#   if(any(grepl("muscle",top_enrichments1))){
+#     enrichment1 = top_enrichments1[grepl("muscle",top_enrichments1)][1]
+#   }
+#   enrichment2 = top_enrichments2[1]
+#   if(any(grepl("muscle",top_enrichments2))){
+#     enrichment2 = top_enrichments2[grepl("muscle",top_enrichments2)][1]
+#   }
+#   if(is.na(enrichment1)){enrichment1 = NULL}
+#   if(is.na(enrichment2)){enrichment2 = NULL}
+#   enrichment1 = shorten_by_words(tolower(enrichment1))
+#   enrichment2 = shorten_by_words(tolower(enrichment2))
+# 
+#   set_name = paste(set_name,"(",nrow(mat)," genes)",sep="")
+#   curr_main = paste(set_name,enrichment1,enrichment2,sep="\n")
+#   curr_main = gsub("\n\n","\n",curr_main)
+#   print(curr_main)
+#   mat = gene_t_patterns$`acute,blood,time`[gene_set,]
+#   rownames(mat) = unlist(entrez2symbol[rownames(mat)])
+#   mat = mat[,-ncol(mat)]
+#   mat[mat>6]=6;mat[mat< -6]=-6
+#   plot_with_err_bars(c("0-1h","2-5h",">20h"),
+#                      colMeans(mat),apply(mat,2,sd),col="blue",lwd=2,
+#                      main=curr_main,ylab = "avg t")
+# }
 
 # pref = "longterm,muscle,time;avg_age,\\d"
 # clusters = names(gene_subgroups)[grepl(pref,names(gene_subgroups))]
