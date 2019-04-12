@@ -1,12 +1,3 @@
-# Our algorithm for analysis of a single gene
-# Input: datasets for time point t and gene g
-# 1. Run meta-analysis for endurence and resistance (and both)
-# 2. Run meta-analysis for controls
-# 3. Get controls intercept estimation beta_c
-# 4. Get current gene's overall diff expression: beta_e = max(beta_0,beta_0 + beta_endurence)
-# 5. SCORE 1: abs(beta_e-beta_c)
-# 6. SCORE 2: Egger's test of the exercise meta-analysis
-# 7. Return SCORE 1, SCORE 2, and the betas (and their significance) from the exercise meta-analysis
 library(org.Hs.eg.db);library(metafor)
 source('/Users/David/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions.R')
 entrez2symbol = as.list(org.Hs.egSYMBOL)
@@ -302,8 +293,17 @@ for(nn in names(all_meta_analysis_res)){
   else{
     model2beta = sapply(analysis1,function(x)any(abs(x[[1]]$coeffs[,1])>LONGTERM_beta_thr))  
   }
-  # 3. Is the top model simple base
-  is_base_model = sapply(analysis1,function(x)names(x)[1] =="simple:base_model")
+  # 3. Is the top model simple base or is the AICc diff not large enough
+  is_base_model = sapply(analysis1,function(x)names(x)[1] =="simple:base_model") | aic_diff > -AIC_diff_thr
+  # 3.1 For base models make sure we get the correct beta value
+  if(grepl("acute",nn)){
+    model2beta[is_base_model] = sapply(analysis1[is_base_model],
+         function(x)x[["simple:base_model"]]$coeffs[,1]>ACUTE_beta_thr)
+  }
+  else{
+    model2beta[is_base_model] = sapply(analysis1[is_base_model],
+                        function(x)x[["simple:base_model"]]$coeffs[,1]>LONGTERM_beta_thr)  
+  }
   # 4. Pval filter
   pval_filter = pvals <= P_thr
   # 5. I2 filter
@@ -339,7 +339,140 @@ sapply(analysis2selected_genes,length)
 # Sanity checks and tests: our p-value threshold is lower than BY correction
 max(all_pvals[p.adjust(all_pvals,method = "BY")<0.05])>1e-4
 
+############################################################################
+############################################################################
+############################################################################
+# Representation of the selected gene sets as bipartite graphs
+
+bipartite_graphs = list()
+for(nn in names(analysis2selected_genes_stats)){
+  curr_edges = c()
+  curr_m = analysis2selected_genes_stats[[nn]]
+  for(i in 1:nrow(curr_m)){
+    curr_gene = curr_m[i,"Symbol"]
+    curr_entrez = curr_m[i,"Entrez"]
+    curr_group = curr_m[i,"Group"]
+    curr_coeffs = all_meta_analysis_res[[nn]][[curr_entrez]][[1]]$coeffs[,c("beta","pval")]
+    if(is.null(dim(curr_coeffs))){curr_coeffs=matrix(curr_coeffs,nrow=1)}
+    curr_coeffs[,2] = -log(curr_coeffs[,2],base=10)
+    if(grepl("base_m",curr_group)){
+      curr_edges = rbind(curr_edges,c(curr_gene,curr_entrez,"base_model",curr_coeffs))
+      next
+    }
+    curr_gene_edges = c()
+    for(j in 1:nrow(curr_coeffs)){
+      curr_gene_edges = rbind(curr_gene_edges,
+                              c(curr_gene,curr_entrez,
+                                rownames(curr_coeffs)[j],curr_coeffs[j,c("beta","pval")]))
+    }
+    curr_edges = rbind(curr_edges,curr_gene_edges)
+  }
+  bipartite_graphs[[nn]] = curr_edges
+}
+sapply(bipartite_graphs,dim)
+
+# Fix the feature name issue
+for(nn in names(bipartite_graphs)){
+  m = bipartite_graphs[[nn]]
+  m[,3] = gsub(m[,3],pattern="time.L",replacement = "Time-linear")
+  m[,3] = gsub(m[,3],pattern="time.Q",replacement = "Time-Q")
+  m[,3] = gsub(m[,3],pattern="avg_age",replacement = "Age")
+  m[,3] = gsub(m[,3],pattern="prop_males",replacement = "Sex")
+  m[,3] = gsub(m[,3],pattern="trainingresistance",replacement = "Training-RE")
+  m[,3] = gsub(m[,3],pattern="intrcpt",replacement = "b0")
+  colnames(m) = c("Entrez","Symbol","Group","Effect","-log_P")
+  bipartite_graphs[[nn]] = m
+}
+
+# Create interaction networks for each analysis, summarizing the number 
+# of detected genes.
+get_gene_set_by_feature_name<-function(m,fname,up=T){
+  cnames = colnames(m)
+  m = m[sapply(m[,3],grepl,name1),]
+  if(is.null(dim(m))){
+    m = matrix(m,nrow=1)
+    colnames(m) = cnames
+  }
+  effects = as.numeric(m[,"Effect"])
+  if(up){
+    return(m[effects>0,2])
+  }
+  return(m[effects<0,2])
+}
+gene_overlaps = list()
+gene_sets_per_cov = list()
+for(nn in names(bipartite_graphs)){
+  m = bipartite_graphs[[nn]]
+  m = m[m[,3]!="b0",]
+  # m = m[m[,3]!="base_model",]
+  if(nrow(m)==0){next}
+  covered_genes1 = unique(m[,1])
+  # m = m[abs(as.numeric(m[,4]))>0.05,]
+  covered_genes2 = unique(m[,1])
+  setdiff(covered_genes1,covered_genes2)
+  curr_features = unique(m[,3])
+  if(length(curr_features)==1){next}
+  curr_names = sort(c(paste(curr_features,",Up",sep=""),
+                    paste(curr_features,",Down",sep="")))
+  overlap_m = matrix(0,nrow=length(curr_names),ncol=length(curr_names),
+                     dimnames = list(curr_names,curr_names))
+  for(name1 in curr_names){
+    gene_sets_per_cov[[paste(nn,name1,sep=",")]] = 
+      get_gene_set_by_feature_name(m,name1,grepl(",Up",name1))
+  }
+  for(name1 in curr_names){
+    set1 = gene_sets_per_cov[[paste(nn,name1,sep=",")]]
+    for(name2 in curr_names){
+      set2 = gene_sets_per_cov[[paste(nn,name2,sep=",")]]
+      overlap_m[name1,name2] = length(intersect(set1,set2))
+      overlap_m[name2,name1] = overlap_m[name1,name2]
+    }
+  }
+  gene_overlaps[[nn]] = overlap_m
+}
+intersect(gene_sets_per_cov$`acute,muscle,Time-linear,Down`,
+          gene_sets_per_cov$`acute,muscle,Time-Q,Up`)
+
+
+corrplot(gene_overlaps[[1]],is.corr = F,method="number",type = "upper",cl.length = 5,
+         cl.cex = 1.2,cl.ratio = 0.3,bg = "gray",mar=c(0, 0, 0.5, 0))
+corrplot(gene_overlaps[[2]],is.corr = F,method="number",type = "upper",cl.length = 5,
+         cl.cex = 1.2,cl.ratio = 0.3,bg = "gray",mar=c(0, 0, 0.5, 0))
+corrplot(gene_overlaps[[3]],is.corr = F,method="number",type = "upper",cl.length = 5,
+         cl.cex = 1.2,cl.ratio = 0.3,bg = "gray",mar=c(0, 0, 0.5, 0))
+
+sort(sapply(gene_sets_per_cov,length))
+
+bg = unique(c(unlist(sapply(simple_REs,names))))
+gs = gene_sets_per_cov
+go_res = run_topgo_enrichment_fisher(
+  gs,bg,go_dags = "BP",go_term_size = 20,go_max_size = 200)
+go_res1 = go_res[go_res$Annotated < 1500,]
+go_res1$classicFisher[is.na(as.numeric(go_res1$classicFisher))] = 1e-30
+go_res1 = go_res[go_res1$Significant > 3,]
+go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
+go_res1$go_qvals = p.adjust(as.numeric(go_res1$classicFisher),method='fdr')
+go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
+table(as.character(go_res_fdr$setname))
+get_most_sig_enrichments_by_groups(go_res_fdr,num=2)[,1:4]
+go_enrichments_by_cov_fdr = go_res_fdr
+
+reactome_pathways_by_cov = run_reactome_enrichment_analysis(gs,universe=bg)
+reactome_pathways_by_cov1 = reactome_pathways_by_cov[reactome_pathways_by_cov$Count>2,]
+ps = reactome_pathways_by_cov1$pvalue
+qs = p.adjust(ps,method="fdr")
+reactome_pathways_by_cov1$qvalue = qs
+reactome_pathways_by_cov_fdr = reactome_pathways_by_cov1[qs <= 0.1,]
+table(reactome_pathways_by_cov_fdr[,1])
+get_most_sig_enrichments_by_groups(reactome_pathways_by_cov_fdr,pcol="pvalue",num = 2)[,c(1,3)]
+reactome_pathways_by_cov_fdr[,1] = as.character(reactome_pathways_by_cov_fdr[,1])
+
+
+############################################################################
+############################################################################
+############################################################################
 # Validation analyses of the selected gene sets
+
 # 1. Replication analysis
 # Load SCREEN's results
 scr_path = "/Users/David/Desktop/MoTrPAC/PA_database/screen_res/"
@@ -435,6 +568,11 @@ get_most_sig_enrichments_by_groups(gene_group_enrichments_fdr,num=5)[,1:4]
 gs = lapply(analysis2selected_genes,names)
 gs = lapply(gs,function(x,y)y[x],y=unlist(entrez2symbol))
 
+############################################################################
+############################################################################
+############################################################################
+# Some figures
+
 par(mfrow=c(2,2))
 for(nn in names(all_meta_analysis_res)){
   analysis1 = all_meta_analysis_res[[nn]]
@@ -470,6 +608,26 @@ boxplot(yi~time,data=gdata,
         main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
         xlab="Time",names=c("0-1h","2-5h",">20h"),ylab="Fold change")
 
+#RXRA
+gene = "81848"
+curr_genes[gene]
+gene_name = entrez2symbol[[gene]]
+curr_m = simple_REs$`acute,muscle`[[gene]]
+gdata = meta_reg_datasets$`acute,muscle`[[gene]]
+curr_m$slab.null = F
+curr_times = rep("0-1h",nrow(gdata))
+curr_times[gdata$time==2] = "2-5h"
+curr_times[gdata$time==3] = ">20h"
+curr_m$slab = paste(gdata$training,curr_times,sep=",")
+analysis1 = all_meta_analysis_res$`acute,muscle`
+analysis1[[gene]][[1]]$mod_p
+aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
+dev.off()
+forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T)
+boxplot(yi~time,data=gdata,
+        main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
+        xlab="Time",names=c("0-1h","2-5h",">20h"),ylab="Fold change")
+
 # Selected examples, before the March 2019 update
 gene = "1282"
 gene_name = entrez2symbol[[gene]]
@@ -487,10 +645,9 @@ forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T)
 ############################################################################
 ############################################################################
 ############################################################################
-# Interpretation of the results
-library(topGO)
+# Interpretation of the results: defining subgroups by clustering mean patterns
 
-# some helper functions for reformatting the data
+# Some helper functions for reformatting the data
 get_ts<-function(gdata){
   v = as.numeric(gdata$tstat)
   ns = paste(gdata$V1,gdata$training,gdata$time,
@@ -903,6 +1060,7 @@ system(paste("mkdir","supp_tables"))
 supp_path = paste(getwd(),"supp_tables/",sep="/")
 supp_file = paste(supp_path,"SupplementaryTables.xlsx",sep="/")
 library(xlsx)
+options(java.parameters = "-Xmx2g" )
 
 # 1. Tables presenting the cohorts
 metadata_row_for_supp_table<-function(x,y,samp2time){
@@ -981,25 +1139,45 @@ for(nn in names(analysis2selected_genes_stats)){
 rownames(supp_table_genes)=NULL
 write.xlsx(supp_table_genes,file=supp_file,sheetName = "STable2",row.names = F,append = T)
 
-# Mean t-statistic matrices
-base_model_ms = gene_t_patterns$base_models
-base_model_ms = cbind(rownames(base_model_ms),
-                      unlist(entrez2symbol[rownames(base_model_ms)]),base_model_ms)
-colnames(base_model_ms)[1:3] = c("Entrez","Symbol","Analysis_type")
-rownames(base_model_ms)=NULL
-write.xlsx(base_model_ms,file=supp_file,sheetName = "STable3_base_models_ts",
-           row.names = F,append = T)
+# # Mean t-statistic matrices
+# base_model_ms = gene_t_patterns$base_models
+# base_model_ms = cbind(rownames(base_model_ms),
+#                       unlist(entrez2symbol[rownames(base_model_ms)]),base_model_ms)
+# colnames(base_model_ms)[1:3] = c("Entrez","Symbol","Analysis_type")
+# rownames(base_model_ms)=NULL
+# write.xlsx(base_model_ms,file=supp_file,sheetName = "STable3_base_models_ts",
+#            row.names = F,append = T)
+# sheet_counter=3
+# for(gg in names(gene_t_patterns)[!grepl("base_",names(gene_t_patterns))]){
+#   sheet_counter = sheet_counter+1
+#   ms = gene_t_patterns[[gg]]
+#   ms = cbind(rownames(ms),unlist(entrez2symbol[rownames(ms)]),ms)
+#   colnames(ms)[1:2] = c("Entrez","Symbol")
+#   gg = gsub(",",replacement = "_",gg)
+#   currname=paste("tstats_",gg,sep="")
+#   write.xlsx(ms,file=supp_file,
+#              sheetName = paste("STable",sheet_counter,"_",currname,sep=""),
+#              row.names = F,append = T)
+# }
+
 sheet_counter=3
-for(gg in names(gene_t_patterns)[!grepl("base_",names(gene_t_patterns))]){
+sapply(bipartite_graphs,function(x)unique(x[,3]))
+for(nn in names(bipartite_graphs)){
+  m = bipartite_graphs[[nn]]
+  m[,3] = gsub(m[,3],pattern="time.L",replacement = "Time-linear")
+  m[,3] = gsub(m[,3],pattern="time.Q",replacement = "Time-Q")
+  m[,3] = gsub(m[,3],pattern="avg_age",replacement = "Age")
+  m[,3] = gsub(m[,3],pattern="prop_males",replacement = "Sex")
+  m[,3] = gsub(m[,3],pattern="trainingresistance",replacement = "Training-RE")
+  m[,3] = gsub(m[,3],pattern="intrcpt",replacement = "b0")
+  colnames(m) = c("Entrez","Symbol","Group","Effect","-log_P")
+  # write.xlsx(m,file=supp_file,
+  #              sheetName = paste("STable",sheet_counter,"_",nn,sep=""),
+  #              row.names = F,append = T,col.names = T)
+  write.table(m,sep="\t",
+             file = paste("supp_tables/STable",sheet_counter,"_",nn,".txt",sep=""),
+             row.names = F,col.names = T,quote=F)
   sheet_counter = sheet_counter+1
-  ms = gene_t_patterns[[gg]]
-  ms = cbind(rownames(ms),unlist(entrez2symbol[rownames(ms)]),ms)
-  colnames(ms)[1:2] = c("Entrez","Symbol")
-  gg = gsub(",",replacement = "_",gg)
-  currname=paste("tstats_",gg,sep="")
-  write.xlsx(ms,file=supp_file,
-             sheetName = paste("STable",sheet_counter,"_",currname,sep=""),
-             row.names = F,append = T)
 }
 
 # GO enrichments of subgroups
