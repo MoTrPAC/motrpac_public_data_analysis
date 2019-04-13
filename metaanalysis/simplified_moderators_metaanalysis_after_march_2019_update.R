@@ -245,6 +245,22 @@ save(meta_reg_datasets,meta_reg_to_mods,
 ############################################################################
 ############################################################################
 ############################################################################
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+############################################################################
+
 # Meta-regression and model selection for selected genes
 library(parallel);library(metafor)
 
@@ -268,6 +284,22 @@ get_aicc_diff<-function(x){
     if(is.null(val) && is.na(val) || is.nan(val)){return(0)}
     if(is.infinite(val)){return(-1000)}
     return(unname(val))
+  }
+  if(is.element("base2:base_model",set=names(x)) &&
+     is.element("aic_c",set=names(x[["base2:base_model"]]))){
+    val = x[[1]]$aic_c - x$`base2:base_model`$aic_c
+    if(is.null(val) && is.na(val) || is.nan(val)){return(0)}
+    if(is.infinite(val)){return(-1000)}
+    return(unname(val))
+  }
+  return(0)
+}
+get_simple_model_beta<-function(x){
+  if(is.element("simple:base_model",set=names(x))){
+    return(x[["simple:base_model"]]$coeffs[1,1])
+  }
+  if(is.element("base2:base_model",set=names(x))){
+    return(x[["base2:base_model"]]$coeffs[1,1])
   }
   return(0)
 }
@@ -294,15 +326,16 @@ for(nn in names(all_meta_analysis_res)){
     model2beta = sapply(analysis1,function(x)any(abs(x[[1]]$coeffs[,1])>LONGTERM_beta_thr))  
   }
   # 3. Is the top model simple base or is the AICc diff not large enough
-  is_base_model = sapply(analysis1,function(x)names(x)[1] =="simple:base_model") | aic_diff > -AIC_diff_thr
+  is_base_model = sapply(analysis1,function(x)names(x)[1] =="simple:base_model") | 
+    !genes_with_high_aic_diff
   # 3.1 For base models make sure we get the correct beta value
   if(grepl("acute",nn)){
     model2beta[is_base_model] = sapply(analysis1[is_base_model],
-         function(x)x[["simple:base_model"]]$coeffs[,1]>ACUTE_beta_thr)
+         function(x)get_simple_model_beta(x)>ACUTE_beta_thr)
   }
   else{
     model2beta[is_base_model] = sapply(analysis1[is_base_model],
-                        function(x)x[["simple:base_model"]]$coeffs[,1]>LONGTERM_beta_thr)  
+         function(x)get_simple_model_beta(x)>LONGTERM_beta_thr)  
   }
   # 4. Pval filter
   pval_filter = pvals <= P_thr
@@ -433,7 +466,7 @@ for(nn in names(bipartite_graphs)){
 intersect(gene_sets_per_cov$`acute,muscle,Time-linear,Down`,
           gene_sets_per_cov$`acute,muscle,Time-Q,Up`)
 
-
+library(corrplot)
 corrplot(gene_overlaps[[1]],is.corr = F,method="number",type = "upper",cl.length = 5,
          cl.cex = 1.2,cl.ratio = 0.3,bg = "gray",mar=c(0, 0, 0.5, 0))
 corrplot(gene_overlaps[[2]],is.corr = F,method="number",type = "upper",cl.length = 5,
@@ -443,13 +476,15 @@ corrplot(gene_overlaps[[3]],is.corr = F,method="number",type = "upper",cl.length
 
 sort(sapply(gene_sets_per_cov,length))
 
-bg = unique(c(unlist(sapply(simple_REs,names))))
+bg = unique(c(unlist(sapply(all_meta_analysis_res,names))))
 gs = gene_sets_per_cov
+gs = gs[sapply(gs,length)>10]
+
 go_res = run_topgo_enrichment_fisher(
   gs,bg,go_dags = "BP",go_term_size = 20,go_max_size = 200)
 go_res1 = go_res[go_res$Annotated < 1500,]
 go_res1$classicFisher[is.na(as.numeric(go_res1$classicFisher))] = 1e-30
-go_res1 = go_res[go_res1$Significant > 3,]
+go_res1 = go_res[go_res1$Significant > 2,]
 go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
 go_res1$go_qvals = p.adjust(as.numeric(go_res1$classicFisher),method='fdr')
 go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
@@ -466,7 +501,6 @@ reactome_pathways_by_cov_fdr = reactome_pathways_by_cov1[qs <= 0.1,]
 table(reactome_pathways_by_cov_fdr[,1])
 get_most_sig_enrichments_by_groups(reactome_pathways_by_cov_fdr,pcol="pvalue",num = 2)[,c(1,3)]
 reactome_pathways_by_cov_fdr[,1] = as.character(reactome_pathways_by_cov_fdr[,1])
-
 
 ############################################################################
 ############################################################################
@@ -549,24 +583,21 @@ for(nn in names(analysis2selected_genes)[1:3]){
 }
 boxplot(l,las=2,col=cols,horizontal=F,cex.axis=1.05,pch=20,ylim=c(0,1.6),ylab="Fold change")
 
-# 3. GO enrichments
-bg = unique(c(unlist(sapply(simple_REs,names))))
-gs = lapply(analysis2selected_genes,names)
-go_res = run_topgo_enrichment_fisher(
-  gs,bg,go_dags = "BP",go_term_size = 20,go_max_size = 200)
-go_res1 = go_res[go_res$Annotated < 1500,]
-go_res1$classicFisher[is.na(as.numeric(go_res1$classicFisher))] = 1e-30
-go_res1 = go_res[go_res1$Significant > 3,]
-go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
-go_res1$go_qvals = p.adjust(as.numeric(go_res1$classicFisher),method='fdr')
-go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
-table(go_res_fdr$setname)
-gene_group_enrichments = go_res
-gene_group_enrichments_fdr = go_res_fdr
-get_most_sig_enrichments_by_groups(gene_group_enrichments_fdr,num=5)[,1:4]
-
-gs = lapply(analysis2selected_genes,names)
-gs = lapply(gs,function(x,y)y[x],y=unlist(entrez2symbol))
+# # 3. GO enrichments: not a must
+# bg = unique(c(unlist(sapply(simple_REs,names))))
+# gs = lapply(analysis2selected_genes,names)
+# go_res = run_topgo_enrichment_fisher(
+#   gs,bg,go_dags = "BP",go_term_size = 20,go_max_size = 200)
+# go_res1 = go_res[go_res$Annotated < 1500,]
+# go_res1$classicFisher[is.na(as.numeric(go_res1$classicFisher))] = 1e-30
+# go_res1 = go_res[go_res1$Significant > 3,]
+# go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
+# go_res1$go_qvals = p.adjust(as.numeric(go_res1$classicFisher),method='fdr')
+# go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
+# table(go_res_fdr$setname)
+# gene_group_enrichments = go_res
+# gene_group_enrichments_fdr = go_res_fdr
+# get_most_sig_enrichments_by_groups(gene_group_enrichments_fdr,num=5)[,1:4]
 
 ############################################################################
 ############################################################################
@@ -687,13 +718,29 @@ for(nn in names(mean_effect_matrices)){
 sapply(mean_effect_matrices,colnames)
 
 # helper function for getting the clusters
-get_num_clusters_wss_kmeans<-function(data,k.max=10,wss_imp_thr=0.6){
-  if(ncol(m)>2){
-  data = t(scale(t(data)))
-  }
+library(cluster)
+get_method_silu<-function(x,k,func,...){
+  ccc = func(x,k,...)
+  summ = summary(cluster::silhouette(ccc))
+  print(summ)
+  return(mean(summ$clus.avg.widths))
+}
+
+process_t_matrix<-function(data){
+  data[data > -1 & data < 1] = 0
+  data[data > 5] = 5
+  data[data < -5] = -5
+  data = data[!apply(data==0,1,all),]
+  return(data)
+}
+get_num_clusters_wss_kmeans<-function(data,k.max=10,wss_imp_thr=0.7){
+  # data = cor(t(data))
   k.max = min(k.max,nrow(data)/2)
-  wss <- sapply(1:k.max, 
-                function(k){kmeans(data, k, nstart=100,iter.max = 500 )$tot.withinss})
+  k.max = min(k.max,length(unique(apply(data,1,paste,collapse="")))-1)
+  wss <- sapply(1:k.max,
+                function(k){kmeans(data, k, nstart=200,iter.max = 1000)$tot.withinss})
+  # wss <- sapply(1:k.max, 
+  #               function(k){get_method_silu(data,k,kmeans)})
   plot(1:k.max, wss,
        type="b", pch = 19, frame = FALSE, 
        xlab="Number of clusters K",
@@ -708,9 +755,42 @@ get_num_clusters_wss_kmeans<-function(data,k.max=10,wss_imp_thr=0.6){
   return(c(k=k))
 }
 
+# recursive_partition_analysis<-function(data,max_clust=10,wss_ratio=0.7){
+#   clusters = rep(1,nrow(data))
+#   names(clusters) = rownames(data)
+#   while(length(unique(clusters))<max_clust){
+#     new_clusters = clusters
+#     for(cl in sort(unique(clusters))){
+#       curr_data = data[clusters==cl,]
+#       if(nrow(curr_data)<10 || nrow(unique(curr_data))<2){next}
+#       curr_clust = kmeans(curr_data,2)
+#       if(curr_clust$tot.withinss/curr_clust$totss < wss_ratio){
+#         curr_subclust = curr_clust$cluster
+#         curr_k = max(new_clusters)+1
+#         new_clusters[names(which(curr_subclust==1))] = curr_k
+#         new_clusters[names(which(curr_subclust==2))] = curr_k+1
+#       }
+#     }
+#     print(table(new_clusters))
+#     if(all(new_clusters==clusters)){break}
+#     clusters = new_clusters
+#   }
+#   return(clusters)
+# }
+# recursive_partition_analysis(mmm)
+
+# library("factoextra")
+# xx = fviz_nbclust(mmm, fanny, method = "silhouette",metric="manhattan")
+# library("clValid")
+# intern <- clValid(mmm, nClust = 2:6, 
+#                   clMethods = c("hierarchical","kmeans","pam"),
+#                   validation = "internal")
+# summary(intern)
+
 gene_subgroups = list()
 gene_t_patterns = list()
-par(mfrow=c(4,4))
+par(mfrow=c(2,2))
+set.seed(123)
 for(nn in names(analysis2selected_genes_stats)){
   curr_genes = analysis2selected_genes_stats[[nn]]
   curr_groups = curr_genes[,"Group"]
@@ -731,17 +811,19 @@ for(nn in names(analysis2selected_genes_stats)){
         curr_m_meta = apply(curr_m_meta,2,paste,collapse=";")
       }
       m = t(apply(m,1,function(x,y)tapply(x,y,mean),y=curr_m_meta))
-      if(nrow(m)>5){currk = get_num_clusters_wss_kmeans(m,10)}
-      else{currk=2}
+      if(nrow(m)>5){
+        m = process_t_matrix(m)
+        currk = get_num_clusters_wss_kmeans(m,10)
+      }
+      else{currk=1}
     }
     else{
       m = as.matrix(rowMeans(m),ncol=1)
-      colnames(m)[1] = "base,meant"
+      colnames(m)[1] = "base,mean_t"
       currk=2
     }
 
-    print(paste(nn,gg,currk))
-    if(nrow(m)>2){
+    if(nrow(m)>5){
       m_kmeans = kmeans(m,centers = currk)
       m_kmeans = m_kmeans$cluster
     }
@@ -752,6 +834,8 @@ for(nn in names(analysis2selected_genes_stats)){
     m = cbind(m,m_kmeans)
     colnames(m)[ncol(m)] = "kmeans_clusters"
     gene_t_patterns[[paste(nn,gg,sep=",")]] = m
+    currk = length(unique(m_kmeans))
+    print(paste(nn,gg,currk))
     
     for(kk in unique(m_kmeans)){
       currname = paste(nn,gg,kk,sep=",")
@@ -806,16 +890,8 @@ qs = p.adjust(ps,method="fdr")
 reactome_pathways_subgroups1$qvalue = qs
 reactome_pathways_subgroups_fdr = reactome_pathways_subgroups1[qs <= 0.1,]
 table(reactome_pathways_subgroups_fdr[,1])
-get_most_sig_enrichments_by_groups(reactome_pathways_subgroups_fdr,pcol="pvalue",num = 4)[,c(1,3)]
+get_most_sig_enrichments_by_groups(reactome_pathways_subgroups_fdr,pcol="pvalue",num = 2)[,c(1,3)]
 reactome_pathways_subgroups_fdr[,1] = as.character(reactome_pathways_subgroups_fdr[,1])
-
-save(gene_subgroups,analysis2selected_genes,
-     gene_t_patterns,
-  gene_subgroup_enrichments,gene_subgroup_enrichments_fdr,
-     gene_group_enrichments,gene_group_enrichments_fdr,
-     reactome_pathways_subgroups,reactome_pathways_subgroups_fdr,
-     reactome_pathways_groups,reactome_pathways_groups_fdr,
-     file="mm_results_march_2019_p1e5.RData")
 
 # We want to examine which clusters to analyze, sort by number of enrichments
 enriched_clusters_go = sort(table(as.character(gene_subgroup_enrichments_fdr$setname)))
@@ -911,11 +987,38 @@ curr_pathways = reactome_pathways_subgroups_fdr[reactome_pathways_subgroups_fdr[
 # Try another plot: select cluster names and plot all of their patterns
 # along with selected enrichments
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # The different patterns of acute muscle, time-dependent response
 pref = "acute,muscle,time,\\d"
 clusters = names(gene_subgroups)[grepl(pref,names(gene_subgroups))]
 par(mfrow=c(2,3))
-cols = c("blue","cyan","red","green","black")
+cols = c("blue","cyan","red","green","black","pink")
 names(cols) = clusters
 for(set_name in sort(clusters)){
   gene_set = gene_subgroups[[set_name]]
@@ -945,6 +1048,7 @@ for(set_name in sort(clusters)){
   curr_main = gsub("\n\n","\n",curr_main)
   print(curr_main)
   mat = gene_t_patterns$`acute,muscle,time`[gene_set,]
+  print(paste(set_name,is.element("10891",set=rownames(mat))))
   rownames(mat) = unlist(entrez2symbol[rownames(mat)])
   mat = mat[,-ncol(mat)]
   plot_with_err_bars(c("0-1h","2-5h",">20h"),
