@@ -9,11 +9,47 @@ load("human_ge_cohort_preprocessed_db_acute.RData")
 acute_datasets = cohort_data
 acute_metadata = cohort_metadata
 acute_sample2time = sample2time
+acute_sample_meta = sample_metadata
 load("human_ge_cohort_preprocessed_db_longterm.RData")
 longterm_datasets = cohort_data
 longterm_metadata = cohort_metadata
 longterm_sample2time = sample2time
+acute_sample2time = sample2time
+longterm_sample_meta = sample_metadata
 load("human_ge_cohort_preprocessed_db_gene_tables.RData")
+
+# Get some stats
+# Total number of samples
+tot_samples = length(union(
+  unique(unlist(sapply(acute_metadata, function(x)x$gsms))),
+  unique(unlist(sapply(longterm_metadata, function(x)x$gsms)))
+))
+# subjects, tissues, sex
+complete_sample_table = c()
+for(ac in names(acute_metadata)){
+  curr_gsms = acute_metadata[[ac]]$gsms
+  curr_subjects = acute_sample_meta$subject[curr_gsms]
+  curr_subjects = paste(acute_metadata[[ac]]$gse,curr_subjects,sep=";")
+  curr_sex = acute_sample_meta$sex[curr_gsms]
+  curr_tissue = rep(acute_metadata[[ac]]$tissue,length(curr_gsms))
+  curr_training = rep(acute_metadata[[ac]]$training,length(curr_gsms))
+  curr_type = rep("acute",length(curr_gsms))
+  m = cbind(curr_gsms,curr_subjects,curr_sex,curr_tissue,curr_training,curr_type)
+  complete_sample_table = rbind(complete_sample_table,m)
+}
+for(lo in names(longterm_metadata)){
+  curr_gsms = longterm_metadata[[lo]]$gsms
+  curr_subjects = longterm_sample_meta$subject[curr_gsms]
+  curr_subjects = paste(longterm_metadata[[lo]]$gse,curr_subjects,sep=";")
+  curr_sex = longterm_sample_meta$sex[curr_gsms]
+  curr_tissue = rep(longterm_metadata[[lo]]$tissue,length(curr_gsms))
+  curr_training = rep(longterm_metadata[[lo]]$training,length(curr_gsms))
+  curr_type = rep("longterm",length(curr_gsms))
+  m = cbind(curr_gsms,curr_subjects,curr_sex,curr_tissue,curr_training,curr_type)
+  complete_sample_table = rbind(complete_sample_table,m)
+}
+length(tot_subjects)
+# tissues
 
 ############################################################################
 ############################################################################
@@ -903,7 +939,7 @@ shorten_by_words<-function(x,num=5){
 library(gplots)
 hclust_func<-function(x){return(hclust(x,method = "ward.D2"))}
 # Plot all clusters with enrichments
-pdf("supp_tables/all_heatmaps.pdf")
+# pdf("supp_tables/all_heatmaps.pdf")
 for(set_name in all_enriched_clusters){
   if(grepl("acute,muscle,time,",set_name)){next}
   arr = strsplit(set_name,split=",")[[1]]
@@ -944,19 +980,20 @@ for(set_name in all_enriched_clusters){
     curr_main = paste(curr_main,curr_e,"\n",sep="")
   }
   curr_main = gsub("\\.\\.\\.","",curr_main)
-  par(cex.main=0.7)
   cex_genes = 0.4
   if(nrow(mat)<40){cex_genes = 0.7}
   if(nrow(mat)<20){cex_genes = 1}
   if(nrow(mat)<10){cex_genes = 1}
-  # jpeg(paste("supp_tables/",gsub(",|;","_",set_name),".jpeg",sep=""))
+  pdf(paste("supp_tables/",gsub(",|;","_",set_name),".pdf",sep=""))
+  par(cex.main=0.75)
   heatmap.2(mat,trace = "none",scale = "none",Colv = T,col=bluered,
             cexRow = cex_genes,main=curr_main,
             Rowv=T,srtCol=45,hclustfun = hclust_func,density.info="none",
             key.title = NA,keysize = 0.95,key.xlab = "t-statistic",
-            key.par = list("cex.axis"=1.1),margins = c(8,8))
+            key.par = list("cex.axis"=1.1),margins = c(10,10))
+  dev.off()
 }
-dev.off()
+# dev.off()
 
 # Training-specific responses (indep of time)
 
