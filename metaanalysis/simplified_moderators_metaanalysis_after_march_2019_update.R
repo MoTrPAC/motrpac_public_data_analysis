@@ -48,8 +48,7 @@ for(lo in names(longterm_metadata)){
   m = cbind(curr_gsms,curr_subjects,curr_sex,curr_tissue,curr_training,curr_type)
   complete_sample_table = rbind(complete_sample_table,m)
 }
-length(tot_subjects)
-# tissues
+apply(complete_sample_table,2,table)
 
 ############################################################################
 ############################################################################
@@ -1213,43 +1212,56 @@ library(xlsx)
 options(java.parameters = "-Xmx2g" )
 
 # 1. Tables presenting the cohorts
-metadata_row_for_supp_table<-function(x,y,samp2time){
-  curr_samps = samp2time[x$gsms]
+longterm_meta_tmp = c()
+for(gd in longterm_gene_tables){
+  longterm_meta_tmp = rbind(longterm_meta_tmp,gd[,1:9])
+  longterm_meta_tmp = unique(longterm_meta_tmp)
+  if(length(setdiff(names(longterm_metadata),longterm_meta_tmp[,1]))==0){break}
+  print(setdiff(names(longterm_metadata),longterm_meta_tmp[,1]))
+}
+rownames(longterm_meta_tmp) = longterm_meta_tmp[,1]
+acute_meta_tmp = c()
+for(gd in acute_gene_tables){
+  acute_meta_tmp = rbind(acute_meta_tmp,gd[,1:9])
+  acute_meta_tmp = unique(acute_meta_tmp)
+  if(length(setdiff(names(acute_metadata),acute_meta_tmp[,1]))==0){break}
+  print(setdiff(names(acute_metadata),acute_meta_tmp[,1]))
+}
+acute_meta_tmp = unique(acute_meta_tmp[,-2])
+rownames(acute_meta_tmp) = acute_meta_tmp[,1]
+cohorts_without_time_points = union(setdiff(names(longterm_metadata),longterm_meta_tmp[,1]),
+                                    setdiff(names(acute_metadata),acute_meta_tmp[,1]))
+
+metadata_row_for_supp_table<-function(cohort_name,cohort_metadata,
+                                      cohort_info,sample2subject){
+  samp2time = cohort_metadata[[nn]]$times
+  curr_samps = samp2time[cohort_metadata[[cohort_name]]$gsms]
   curr_samps = curr_samps[!is.na(curr_samps)]
   Nsample = length(curr_samps)
   curr_samps[curr_samps==min(samp2time)]="Pre"
-  if(is.element("gene_fold_changes",set=names(y))){
-    sample_info = strsplit(colnames(y$gene_fold_changes),split="_")
-    sample_info_tps =  sapply(sample_info,function(x)x[length(x)])
-    subjects =  sapply(sample_info,function(x)x[1])
-    Nsubject = sum(sample_info_tps==sample_info_tps[1])
-  }
-  else{
-    Nsubject=Nsample
-  }
+  Nsubject=length(unique(sample2subject[cohort_metadata[[cohort_name]]$gsms]))
   tps = paste(unique(curr_samps),collapse=",")
-  res = c("GSE"=x$gse,"Tissue"=x$tissue,"Training"=x$training,"Nsample"=Nsample,"Nsubject"=Nsubject,
-          "Time_points"=tps,"Avg_age"=x$avg_age,"Prop_males"=x$prop_males)
+  res = c(cohort_name,"GSE"=cohort_metadata[[cohort_name]]$gse,
+          "Tissue"=cohort_metadata[[cohort_name]]$tissue,
+          "Training"=cohort_metadata[[cohort_name]]$training,
+          "Nsample"=Nsample,"Nsubject"=Nsubject,
+          "Time_points"=tps,"Avg_age"=cohort_info[cohort_name,"avg_age"],
+          "Prop_males"=cohort_info[cohort_name,"prop_males"],
+          "Additional Info"=cohort_metadata[[cohort_name]]$additional_info)
   return(res)
 }
 m1 = c()
 for(nn in names(acute_metadata)){
-  m1 = rbind(m1,
-        c(
-          nn,metadata_row_for_supp_table(acute_metadata[[nn]],
-                                         acute_datasets[[nn]],acute_sample2time)
-        ))
+  curr_info = metadata_row_for_supp_table(
+    nn,acute_metadata,acute_meta_tmp,acute_sample_meta$subject)
+  m1 = rbind(m1,curr_info)
 }
-
-m2 = c()
 for(nn in names(longterm_datasets)){
-    m2 = rbind(m2,
-               c(
-                 nn,metadata_row_for_supp_table(longterm_metadata[[nn]],
-                                                longterm_datasets[[nn]],longterm_sample2time)
-               ))
+  curr_info = metadata_row_for_supp_table(
+    nn,longterm_metadata,longterm_meta_tmp,longterm_sample_meta$subject)
+  m1 = rbind(m1,curr_info)
 }
-supp_table_1_all_cohorts = rbind(m1,m2)
+supp_table_1_all_cohorts = m1
 meta_analysis_group=c()
 for(nn in supp_table_1_all_cohorts[,1]){
   currg = ""
