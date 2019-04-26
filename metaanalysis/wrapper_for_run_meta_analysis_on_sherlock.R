@@ -75,7 +75,7 @@ wait_for_job<-function(jobs_before=NULL,waittime=30,max_wait=6000){
 
 # Load the input
 load("meta_analysis_input.RData")
-num_genes_per_job = 100
+num_genes_per_job = 200
 for (i in 1:length(meta_reg_datasets)){
   curr_length = length(meta_reg_datasets[[i]])
   print(paste("############ analyzing dataset number:",i))

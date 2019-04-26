@@ -220,7 +220,7 @@ get_simplified_sample_information<-function(metadata){
   # Other important data
   sample2tissue = simplify_tissue_info(tolower(as.character(metadata$Tissue)))
   names(sample2tissue) = metadata[,1]
-  sample2age = tolower(as.character(metadata$Age))
+  sample2age = tolower(as.character(metadata$Numeric_Age))
   sample2age = gsub(sample2age,pattern = "age: ",replace="")
   names(sample2age) = metadata[,1]
   names(sample2tissue) = metadata[,1]
@@ -549,7 +549,8 @@ sapply(cohort_metadata,function(x)c(x$gse,length(unique(x$times))))
 cohort_data = dataset2preprocessed_data
 names(cohort_data) = cohort_ids
 sample2time=sample_metadata$time;sample2sex=sample_metadata$sex;sample2age=sample_metadata$age
-save(sample_metadata,cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE_ACUTE)
+save(sample_metadata,cohort_data,cohort_metadata,
+     sample2time,sample2sex,sample2age,file = OUT_FILE_ACUTE)
 
 sapply(cohort_data,function(x)dim(x$gene_data))
 sum(sapply(cohort_data,function(x)ncol(x$gene_data)))
@@ -567,7 +568,8 @@ for(j in 1:length(cohort_data)){
   cohort_data[[j]][["time2ttest_stats"]] = res1
 }
 sapply(cohort_data,function(x)colnames(x$time2ttest_stats[[1]]))
-save(sample_metadata,cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE_ACUTE)
+save(sample_metadata,cohort_data,cohort_metadata,
+     sample2time,sample2sex,sample2age,file = OUT_FILE_ACUTE)
 
 ###############################################
 ###############################################
@@ -633,7 +635,8 @@ for(j in 1:length(dataset2preprocessed_data)){
 cohort_data = dataset2preprocessed_data
 names(cohort_data) = cohort_ids
 sample2time=sample_metadata$time;sample2sex=sample_metadata$sex;sample2age=sample_metadata$age
-save(sample_metadata,cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE_LONGTERM)
+save(sample_metadata,cohort_data,cohort_metadata,sample2time,
+     sample2sex,sample2age,file = OUT_FILE_LONGTERM)
 
 # Fix: added on March 2019 - some datasets have samples with all NA/NAN values
 for(j in 1:length(cohort_data)){
@@ -660,7 +663,8 @@ for(j in 1:length(cohort_data)){
   }
   cohort_data[[j]][["time2ttest_stats"]] = res1
 }
-save(sample_metadata,cohort_data,cohort_metadata,sample2time,sample2sex,sample2age,file = OUT_FILE_LONGTERM)
+save(sample_metadata,cohort_data,cohort_metadata,sample2time,
+     sample2sex,sample2age,file = OUT_FILE_LONGTERM)
 
 # At this point we have two RData files with all cohorts and all data
 # in our annotated resource.
@@ -719,6 +723,7 @@ save(all_genes,low_coverage_platforms,file=GENE_FILTER_ANALYSIS)
 ######## Sex imputation using ML flow #########
 ###############################################
 ###############################################
+load(GENE_FILTER_ANALYSIS)
 stats_matrix = c()
 load(OUT_FILE_LONGTERM)
 ge_matrices1 = lapply(cohort_data,function(x)x$gene_data)
@@ -919,7 +924,7 @@ metadata = clean_raw_metadata(read.xlsx2(file=metadata_file,sheetIndex=2))
 sample_metadata = get_simplified_sample_information(metadata)
 for(nn in names(cohort_metadata)){
   samps = cohort_metadata[[nn]]$gsms
-  curr_ages = as.numeric(metadata[samps,]$Numeric_Age)
+  curr_ages = as.numeric(as.character(metadata[samps,]$Numeric_Age))
   curr_raw_ages = as.character(metadata[samps,]$Age)
   is_male = sample2sex[samps] == "male"
   # print(table(is_male))
@@ -935,7 +940,7 @@ for(nn in names(cohort_metadata)){
     cohort_metadata[[nn]]$age_sd = currsd
   }
   cohort_metadata[[nn]]$male_prop = curr_p
-  print(paste(cohort_metadata[[nn]]$avg_age,cohort_metadata[[nn]]$age_sd,cohort_metadata[[nn]]$male_prop))
+  print(paste(nn,cohort_metadata[[nn]]$avg_age,cohort_metadata[[nn]]$male_prop))
 }
 
 all_covered_genes = unique(unlist(sapply(cohort_data,function(x)rownames(x$gene_data))))
@@ -953,7 +958,7 @@ metadata = clean_raw_metadata(read.xlsx2(file=metadata_file,sheetIndex=1))
 sample_metadata = get_simplified_sample_information(metadata)
 for(nn in names(cohort_metadata)){
   samps = cohort_metadata[[nn]]$gsms
-  curr_ages = as.numeric(metadata[samps,]$Numeric_Age)
+  curr_ages = as.numeric(as.character(metadata[samps,]$Numeric_Age))
   curr_raw_ages = as.character(metadata[samps,]$Age)
   is_male = sample2sex[samps] == "male"
   # print(table(is_male))
@@ -998,6 +1003,7 @@ acute_gene_tables = gene_tables
 # }
 
 save(longterm_gene_tables,acute_gene_tables,file=OUT_FILE_GENE_TABLES)
+
 
 
 
