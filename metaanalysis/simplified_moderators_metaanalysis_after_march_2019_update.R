@@ -189,6 +189,7 @@ for(nn in names(datasets)){
   datasets[[nn]] = datasets[[nn]][!to_rem] 
 }
 sapply(datasets,length)
+sapply()
 
 # Reshape data for replication analysis
 get_gene_data_for_rep_analysis<-function(gdata,exclude){
@@ -405,6 +406,13 @@ sapply(analysis2selected_genes,length)
 
 # Sanity checks and tests: our p-value threshold is lower than BY correction
 max(all_pvals[p.adjust(all_pvals,method = "BY")<0.05])>1e-4
+
+# Overlaps
+names(analysis2selected_genes_stats)
+intersect(analysis2selected_genes_stats[[1]][,2],analysis2selected_genes_stats[[2]][,2])
+intersect(analysis2selected_genes_stats[[1]][,2],analysis2selected_genes_stats[[3]][,2])
+intersect(analysis2selected_genes_stats[[3]][,2],analysis2selected_genes_stats[[2]][,2])
+intersect(analysis2selected_genes_stats[[3]][,2],analysis2selected_genes_stats[[4]][,2])
 
 ############################################################################
 ############################################################################
@@ -711,6 +719,25 @@ analysis1 = all_meta_analysis_res$`acute,blood`
 analysis1[[gene]][[1]]
 aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
 forest(curr_m,main=paste(gene_name),annotate = T)
+
+
+# Other blood genes
+genes = c("3482","9172","57105","1178","5004","5005")
+par(mfrow=c(2,2))
+for(gene in genes[5:6]){
+  gene_name = entrez2symbol[[gene]]
+  curr_m = simple_REs$`acute,blood`[[gene]]
+  gdata = meta_reg_datasets$`acute,blood`[[gene]]
+  curr_m$slab.null = F
+  curr_times = rep("0-1h",nrow(gdata))
+  curr_times[gdata$time==2] = "2-5h"
+  curr_times[gdata$time==3] = ">20h"
+  curr_m$slab = paste(gdata$training,curr_times,sep=",")
+  analysis1 = all_meta_analysis_res$`acute,blood`
+  analysis1[[gene]][[1]]
+  aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
+  forest(curr_m,main=paste(gene_name),annotate = T)
+}
 
 
 #RXRA
@@ -1235,6 +1262,79 @@ write.table(mm,file="supp_tables/acute_blood_time_subgroups.txt",
 ###############################################
 ###############################################
 ###############################################
+# Look at the covariate corrleations
+###############################################
+###############################################
+###############################################
+library(corrplot);library(lme4);library(lmerTest)
+
+get_assoc_matrix<-function(gdata,ys = c("avg_age","prop_males","N")){
+  n = length(ys)
+  newgdata = c()
+  alltimes = sort(unique(gdata$time))
+  for(cohort in unique(gdata$V1)){
+    currinds = which(gdata$V1==cohort)
+    v = gdata[currinds[1],-c(1:2)]
+    for(tt in alltimes){
+      if(is.element(tt,gdata[currinds,"time"])){
+        v = c(v,1)
+      }
+      else{
+        v = c(v,0)
+      }
+      names(v)[length(v)] = paste("time_window",tt,sep="")
+    }
+    newgdata = rbind(newgdata,v)
+  }
+  rownames(newgdata) = NULL
+  mode(newgdata) = "numeric"
+  gdata = data.frame(newgdata)
+  p = matrix(0,nrow=n,ncol = ncol(gdata),dimnames = list(ys,colnames(gdata)))
+  betas = matrix(1,nrow=n,ncol = ncol(gdata),dimnames = list(ys,colnames(gdata)))
+  rhos = matrix(1,nrow=n,ncol = ncol(gdata),dimnames = list(ys,colnames(gdata)))
+  rhosp = matrix(0,nrow=n,ncol = ncol(gdata),dimnames = list(ys,colnames(gdata)))
+  r2s = matrix(1,nrow=n,ncol = ncol(gdata),dimnames = list(ys,colnames(gdata)))
+  for(y in ys){
+    for(x in colnames(p)){
+      if(x==y){next}
+      form = as.formula(paste(y,"~",x))
+      model = summary(lm(form,data=gdata))
+      currp = model$coefficients[2,4]
+      currbeta = model$coefficients[2,1]
+      rhoTest = cor.test(gdata[,y],gdata[,x],method="spearman")
+      p[y,x] = currp
+      betas[y,x] = currbeta
+      rhos[y,x] = rhoTest$estimate
+      rhosp[y,x] = rhoTest$p.value
+      r2s[y,x] = model$r.squared
+    }
+  }
+  return(list(rhos=rhos,rhosp=rhosp,lmmp=p,lmmb=betas,r2s=r2s))
+}
+
+par(mfrow=c(3,2))
+for(nn in names(meta_reg_datasets)[1:3]){
+  dataset = meta_reg_datasets[[nn]]
+  dataset_sizes = sapply(dataset,nrow)
+  selected_dataset = which(dataset_sizes == max(dataset_sizes))[1]
+  gdata = dataset[[selected_dataset]]
+  gdata = gdata[,c("V1","time","training","avg_age","prop_males","N")]
+  gdata$training = as.numeric(grepl("resis",gdata$training))
+  gdata = gdata[,!apply(gdata,2,function(x)length(unique(x))==1)]
+  gdata = gdata[!apply(is.na(gdata), 1,any),]
+  cov_eval = get_assoc_matrix(gdata)
+  corrplot(cov_eval$rhos[1:3,1:3],p.mat = cov_eval$rhosp[1:3,1:3],
+           main=paste(nn," - rho (Spearman)"),mar=c(0,2,4,0),cex.main=1.5,tl.cex = 1.4)
+  corrplot(cov_eval$r2s,p.mat = cov_eval$lmmp,main=paste(nn," - lm test"),
+           mar=c(0,2,4,0),cl.lim = c(0,1),cex.main=1.5,tl.cex = 1.4)
+}
+
+cor(gdataM[,"N"],gdataM[,"prop_males"])
+cor.test(gdataM[,"N"],gdataM[,"prop_males"])
+
+###############################################
+###############################################
+###############################################
 # Prepare supplementary tables for the results
 ###############################################
 ###############################################
@@ -1242,7 +1342,7 @@ write.table(mm,file="supp_tables/acute_blood_time_subgroups.txt",
 
 system(paste("mkdir","supp_tables"))
 supp_path = paste(getwd(),"supp_tables/",sep="/")
-supp_file = paste(supp_path,"SupplementaryTables.xlsx",sep="/")
+supp_file = paste(supp_path,"SupplementaryTables_v2.xlsx",sep="/")
 library(xlsx)
 options(java.parameters = "-Xmx2g" )
 
@@ -1300,14 +1400,16 @@ supp_table_1_all_cohorts = m1
 meta_analysis_group=c()
 for(nn in supp_table_1_all_cohorts[,1]){
   currg = ""
-  for(nn2 in names(datasets)){
-    if(is.element(nn,set=datasets[[nn2]][[1]][,1])){
-      currg = nn2
-    }
+  if(is.element(nn,longterm_meta_tmp$V1)){
+    ind = which(nn==longterm_meta_tmp$V1)[1]
+    currg = paste("longterm",longterm_meta_tmp$tissue[ind],sep=",")
   }
-  for(nn2 in names(untrained_datasets)){
-    if(is.element(nn,set=untrained_datasets[[nn2]][[1]][,1])){
-      currg = nn2
+  if(is.element(nn,acute_meta_tmp$V1)){
+    ind = which(nn==acute_meta_tmp$V1)[1]
+    currg = paste("acute",acute_meta_tmp$tissue[ind],sep=",")
+    if(!grepl("endur",acute_meta_tmp$training[ind]) &&
+       !grepl("resis",acute_meta_tmp$training[ind])){
+      currg = paste("untrained,",currg,sep="")
     }
   }
   meta_analysis_group[nn]=currg
@@ -1357,7 +1459,7 @@ for(nn in names(bipartite_graphs)){
 }
 
 # GO enrichments of subgroups
-supp_table_enrichments = gene_subgroup_enrichments_fdr[,c(1:4,9:10)]
+supp_table_enrichments = gene_subgroup_enrichments_fdr[,c(1:4,9:10,8)]
 colnames(supp_table_enrichments)[6] = "q-value"
 colnames(supp_table_enrichments)[5] = "Genes"
 colnames(supp_table_enrichments)[1] = "Discovered in"
@@ -1367,7 +1469,7 @@ write.xlsx(supp_table_enrichments,file=supp_file,
 
 # Same for Reactome
 sheet_counter = sheet_counter+1
-supp_table_enrichments = reactome_pathways_subgroups_fdr[,c(1,3,8,9)]
+supp_table_enrichments = reactome_pathways_subgroups_fdr[,c(1,3,8,9,6)]
 colnames(supp_table_enrichments)[3] = "q-value"
 colnames(supp_table_enrichments)[1] = "Discovered in"
 write.xlsx(supp_table_enrichments,file=supp_file,
@@ -1377,24 +1479,5 @@ write.xlsx(supp_table_enrichments,file=supp_file,
 # save the workspace
 save.image(file="meta_analysis_interpretation_results.RData")
 
-# # Other QCs
-# # Look at the time-associated genes and their L/Q p-values
-# set_name="acute,muscle,time"
-# gene_set = rownames(gene_t_patterns[[set_name]])
-# coeffes = lapply(all_meta_analysis_res$`acute,muscle`[gene_set],
-#                  function(x)x[[1]]$coeffs)
-# pvals = sapply(coeffes,function(x)x[,"pval"])
-# hist(pvals[1,],breaks=100)
-# hist(pvals[2,],breaks=100)
-# hist(pvals[3,],breaks=100)
-# 
-# set_name="acute,blood,time"
-# gene_set = rownames(gene_t_patterns[[set_name]])
-# length(gene_set)
-# coeffes = lapply(all_meta_analysis_res$`acute,blood`[gene_set],
-#                  function(x)x[[1]]$coeffs)
-# pvals = sapply(coeffes,function(x)x[,"pval"])
-# hist(pvals[1,],breaks=100)
-# hist(pvals[2,],breaks=100)
-# hist(pvals[3,],breaks=100)
+
 

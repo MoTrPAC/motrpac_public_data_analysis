@@ -571,6 +571,9 @@ sapply(cohort_data,function(x)colnames(x$time2ttest_stats[[1]]))
 save(sample_metadata,cohort_data,cohort_metadata,
      sample2time,sample2sex,sample2age,file = OUT_FILE_ACUTE)
 
+# save(sample_metadata,cohort_data,cohort_metadata,
+#      sample2time,sample2sex,sample2age,file = "acute_tmp1.RData")
+
 ###############################################
 ###############################################
 ####### longterm data preprocessing ###########
@@ -666,6 +669,9 @@ for(j in 1:length(cohort_data)){
 save(sample_metadata,cohort_data,cohort_metadata,sample2time,
      sample2sex,sample2age,file = OUT_FILE_LONGTERM)
 
+# save(sample_metadata,cohort_data,cohort_metadata,
+#      sample2time,sample2sex,sample2age,file = "longterm_tmp1.RData")
+
 # At this point we have two RData files with all cohorts and all data
 # in our annotated resource.
 # For the meta-analysis we need to take care of three tasks:
@@ -726,6 +732,7 @@ save(all_genes,low_coverage_platforms,file=GENE_FILTER_ANALYSIS)
 load(GENE_FILTER_ANALYSIS)
 stats_matrix = c()
 load(OUT_FILE_LONGTERM)
+# load("longterm_tmp1.RData")
 ge_matrices1 = lapply(cohort_data,function(x)x$gene_data)
 gses1 = sapply(cohort_metadata, function(x)x$gse)
 tissue1 = sapply(cohort_metadata, function(x)x$tissue)
@@ -735,6 +742,7 @@ for(nn in names(cohort_metadata)){
 }
 longterm_gsms = unique(unlist(sapply(ge_matrices1,colnames)))
 load(OUT_FILE_ACUTE)
+# load("acute_tmp1.RData")
 ge_matrices2 = lapply(cohort_data,function(x)x$gene_data)
 gses2 = sapply(cohort_metadata, function(x)x$gse)
 tissue2 = sapply(cohort_metadata, function(x)x$tissue)
@@ -746,7 +754,8 @@ for(nn in names(cohort_metadata)){
 stats_matrix = as.data.frame(stats_matrix)
 stats_matrix = cbind(stats_matrix,grepl("GE_L",stats_matrix[,1]))
 stats_matrix$V2 = as.numeric(as.character(stats_matrix $V2))
-aggregate(stats_matrix$V2, by=list(Category=stats_matrix$V3,L=stats_matrix$`grepl("GE_L", stats_matrix[, 1])`), FUN=sum)
+aggregate(stats_matrix$V2, by=list(Category=stats_matrix$V3,
+                                   L=stats_matrix$`grepl("GE_L", stats_matrix[, 1])`), FUN=sum)
 length(unique(c(gses1,gses2)))
 
 # merge the gene expression data before the analysis below
@@ -783,7 +792,7 @@ table(y2[longterm_gsms])
 
 # Define the set of samples with missing sex information
 missing_set = is.na(y)
-# table(missing_set)
+table(missing_set)
 
 library(GenomicRanges)
 library(Homo.sapiens)
@@ -820,6 +829,7 @@ getRankedBasedProfile<-function(x,fs=NULL){
 newx = apply(x,2,getRankedBasedProfile)
 newx_sex = newx[intersect(selected_genes,rownames(x)),]
 boxplot(newx[,sample(1:ncol(x))[1:20]])
+boxplot(newx_sex[,sample(1:ncol(x))[1:20]])
 dim(newx_sex)
 
 inds = !missing_set 
@@ -853,6 +863,8 @@ svm_model = svm(x=t(tr),y=as.factor(y[!missing_set]),kernel="linear",class.weigh
 te = newx_sex[,missing_set]
 preds = predict(svm_model,t(te))
 table(preds)
+
+# save(tr,svm_model,te,lso_res_newx_sex,newx_sex,missing_set,y,inds,file="sex_imputation_experiment.RData")
 
 load(OUT_FILE_ACUTE)
 inds = intersect(names(preds),names(sample2sex))
@@ -931,7 +943,7 @@ for(nn in names(cohort_metadata)){
   is_male = is_male[!is.na(is_male)]
   curr_p = sum(is_male)/length(is_male)
   cohort_metadata[[nn]]$avg_age = mean(curr_ages,na.rm=T)
-  if(is.nan(cohort_metadata[[nn]]$avg_age)){break}
+  if(is.nan(cohort_metadata[[nn]]$avg_age)){print("Age is NaN");break}
   cohort_metadata[[nn]]$age_sd = sd(curr_ages,na.rm=T)
   if(any(grepl("(\\±|\\+)+",curr_raw_ages))){
     currsd = strsplit(as.character(curr_raw_ages[1]),split="(\\±|\\+)+")[[1]]
@@ -1004,6 +1016,11 @@ acute_gene_tables = gene_tables
 
 save(longterm_gene_tables,acute_gene_tables,file=OUT_FILE_GENE_TABLES)
 
-
+table(sapply(acute_gene_tables,function(x)"GE_A_12" %in% x$V1))
+table(sapply(acute_gene_tables,function(x)"GE_A_14" %in% x$V1))
+table(sapply(acute_gene_tables,function(x)"GE_A_15" %in% x$V1))
+table(sapply(acute_gene_tables,function(x)"GE_A_25" %in% x$V1))
+which(!sapply(acute_gene_tables,function(x)"GE_A_26" %in% x$V1))[1]
+acute_gene_tables[["26682"]]
 
 
