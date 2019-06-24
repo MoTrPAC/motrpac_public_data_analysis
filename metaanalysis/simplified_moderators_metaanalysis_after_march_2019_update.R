@@ -18,7 +18,11 @@ acute_sample2time = sample2time
 longterm_sample_meta = sample_metadata
 load("human_ge_cohort_preprocessed_db_gene_tables.RData")
 
-# Get some stats
+############################################################################
+############################################################################
+############################################################################
+
+# Get some stats for the main paper
 # Total number of samples
 tot_samples = length(union(
   unique(unlist(sapply(acute_metadata, function(x)x$gsms))),
@@ -26,6 +30,7 @@ tot_samples = length(union(
 ))
 # subjects, tissues, sex
 complete_sample_table = c()
+complete_sample_table_excluded_from_meta_analysis = c()
 for(ac in names(acute_metadata)){
   curr_gsms = acute_metadata[[ac]]$gsms
   curr_subjects = acute_sample_meta$subject[curr_gsms]
@@ -35,7 +40,14 @@ for(ac in names(acute_metadata)){
   curr_training = rep(acute_metadata[[ac]]$training,length(curr_gsms))
   curr_type = rep("acute",length(curr_gsms))
   m = cbind(curr_gsms,curr_subjects,curr_sex,curr_tissue,curr_training,curr_type)
-  complete_sample_table = rbind(complete_sample_table,m)
+  if(length(unique(acute_metadata[[ac]]$times))<2){
+    complete_sample_table_excluded_from_meta_analysis = rbind(
+      complete_sample_table_excluded_from_meta_analysis, m
+    )
+  }
+  else{
+    complete_sample_table = rbind(complete_sample_table,m)
+  }
 }
 for(lo in names(longterm_metadata)){
   curr_gsms = longterm_metadata[[lo]]$gsms
@@ -46,9 +58,48 @@ for(lo in names(longterm_metadata)){
   curr_training = rep(longterm_metadata[[lo]]$training,length(curr_gsms))
   curr_type = rep("longterm",length(curr_gsms))
   m = cbind(curr_gsms,curr_subjects,curr_sex,curr_tissue,curr_training,curr_type)
-  complete_sample_table = rbind(complete_sample_table,m)
+  if(length(unique(longterm_metadata[[lo]]$times))<2){
+    complete_sample_table_excluded_from_meta_analysis = rbind(
+      complete_sample_table_excluded_from_meta_analysis, m
+    )
+  }
+  else{
+    complete_sample_table = rbind(complete_sample_table,m)
+  }
 }
 apply(complete_sample_table,2,table)
+
+# by tissue
+tissues_count_info = unique(complete_sample_table[,c(1,4)])
+dim(tissues_count_info)
+table(tissues_count_info[,2])
+# should fit the numbers in Supp Table 1
+dim(complete_sample_table[complete_sample_table[,4]!="fat",])
+# This should fit the count of non-fat excluded datasets (362 as of May 2019):
+dim(complete_sample_table_excluded_from_meta_analysis[
+  complete_sample_table_excluded_from_meta_analysis[,4]!="fat",
+])
+
+# Read in the sample-level metadata and get the counts
+metadata_file = 'GEO_sample_metadata.xlsx'
+library('xlsx')
+acute_metadata = read.xlsx2(file=metadata_file,sheetIndex=1)
+longterm_metadata = read.xlsx2(file=metadata_file,sheetIndex=2)
+sample_level_meta = rbind(acute_metadata[,c("GSM","GSE","Subject.id","Tissue","Gender","Numeric_Age")],
+                          longterm_metadata[,c("GSM","GSE","Subject.id","Tissue","Gender","Numeric_Age")])
+dim(sample_level_meta)
+sample_level_meta_in_metaanalysis = sample_level_meta[
+  is.element(sample_level_meta[,1],
+             set=complete_sample_table[,1]),]
+dim(sample_level_meta_in_metaanalysis)
+subject_ids = paste(sample_level_meta_in_metaanalysis[,"GSE"],
+                    sample_level_meta_in_metaanalysis[,"Subject.id"])
+sample_level_meta_in_metaanalysis = cbind(sample_level_meta_in_metaanalysis,subject_ids)
+length(unique(subject_ids))
+sex_info = unique(sample_level_meta_in_metaanalysis[,c("subject_ids","Gender")])
+table(sex_info$Gender!="")
+table(grepl("f",sex_info$Gender,ignore.case = T))
+acute_metadata[1:5,1:5]
 
 ############################################################################
 ############################################################################
@@ -625,11 +676,14 @@ for(nn in names(analysis2selected_genes)[1:3]){
   cols = c(cols,c("blue","red"))
 }
 dev.off()
-par(mar=c(8,8,8,8))
-names(l) = c("ac,mu,untr","ac,mu,exercise","ac,bl,untr","ac,bl,exercise",
-             "lo,mu,untr","lo,mu,exercise")
-boxplot(l,las=2,col=cols,horizontal=T,cex.axis=1,
-        pch=20,ylim=c(0,1.6),xlab="Fold change")
+par(mar=c(4,8,4,4))
+names(l) = c("untrained","exercise","untrained","exercise",
+             "untrained","exercise")
+cols = c("red","red","cyan","cyan","green","green")
+par(cex.lab=2,cex.axis=1.3)
+boxplot(l,las=2,col=cols,horizontal=T,pch=20,ylim=c(0,2))
+legend(x="topright",c("muscle,acute","blood,acute","muscle,long-term"),
+       fil=c("red","cyan","green"),cex=1.3)
 
 # # 3. GO enrichments: not a must
 # bg = unique(c(unlist(sapply(simple_REs,names))))
@@ -683,10 +737,11 @@ analysis1 = all_meta_analysis_res$`acute,muscle`
 analysis1[[gene]][[1]]$mod_p
 aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
 dev.off()
-forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T)
+forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T,cex = 1.15,addfit = F)
+par(cex.lab=1.5,cex.axis=1.4,mar = c(6,6,6,6))
 boxplot(yi~time,data=gdata,
         main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
-        xlab="Time",names=c("0-1h","2-5h",">20h"),ylab="Fold change")
+        xlab="Time window",names=c("0-1h","2-5h",">20h"),ylab="")
 
 # Other genes: LPL, CPT1B, SMAD3, ACTN3, VEGFA, FOXO1 and IL6R
 genes = c("1375","4023","4088","89","7422","2308","3570")
@@ -761,7 +816,7 @@ boxplot(yi~time,data=gdata,
         main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
         xlab="Time",names=c("0-1h","2-5h",">20h"),ylab="Fold change")
 
-# Selected examples, before the March 2019 update
+# COL4A1
 gene = "1282"
 gene_name = entrez2symbol[[gene]]
 curr_m = simple_REs$`longterm,muscle`[[gene]]
@@ -773,7 +828,60 @@ curr_times = rep("",nrow(gdata))
 curr_times[gdata$time==2] = ",> 150 days"
 curr_m$slab = paste(gdata$training,curr_times,sep="")
 analysis1 = all_meta_analysis_res$`acute,muscle`
-forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T)
+forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T,cex=1.05)
+
+# Plots with sex info - longterm muscle
+genes = c("8897","567","50","11217")
+par(mfrow=c(2,2))
+for(gene in genes){
+  gene_name = entrez2symbol[[gene]]
+  curr_m = simple_REs$`longterm,muscle`[[gene]]
+  all_meta_analysis_res$`longterm,muscle`[[gene]]
+  curr_m$I2
+  gdata = meta_reg_datasets$`longterm,muscle`[[gene]]
+  curr_m$slab.null = F
+  curr_times = rep("",nrow(gdata))
+  curr_times[gdata$time==2] = ",> 150 days"
+  curr_m$slab = paste("prop males: ",format(gdata$prop_males,digits=2),sep="")
+  analysis1 = all_meta_analysis_res$`longterm,muscle`
+  aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
+  currmain=paste(gene_name,": by sex (aic diff:",format(aic_diff,digits=3),")",sep="")
+  forest(curr_m,main=currmain,annotate = T)
+}
+
+# Genes in both muscle analyses: DDN, ID3 and PLEKHO1
+genes = c("23109","3399","51177")
+par(mfrow=c(3,1),mar=c(3,0,3,0))
+for(gene in genes){
+  gene_name = entrez2symbol[[gene]]
+  curr_m = simple_REs$`longterm,muscle`[[gene]]
+  all_meta_analysis_res$`longterm,muscle`[[gene]]
+  curr_m$I2
+  gdata = meta_reg_datasets$`longterm,muscle`[[gene]]
+  curr_m$slab.null = F
+  curr_m$slab = paste(gdata$training)
+  analysis1 = all_meta_analysis_res$`longterm,muscle`
+  aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
+  currmain=paste("LT,",gene_name," (aic diff:",format(aic_diff,digits=3),")",sep="")
+  forest(curr_m,main=currmain,annotate = T,addfit = F,showweights = T,top=0,cex=0.7,
+         transf=transf.ztor, digits=3, alim=c(-1,1))
+}
+par(mfrow=c(3,1),mar=c(3,0,3,0))
+for(gene in genes){
+  gene_name = entrez2symbol[[gene]]
+  curr_m = simple_REs$`acute,muscle`[[gene]]
+  all_meta_analysis_res$`acute,muscle`[[gene]]
+  curr_m$I2
+  gdata = meta_reg_datasets$`acute,muscle`[[gene]]
+  curr_m$slab.null = F
+  curr_m$slab = paste(gdata$training)
+  analysis1 = all_meta_analysis_res$`acute,muscle`
+  aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
+  currmain=paste("Acute,",gene_name," (aic diff:",format(aic_diff,digits=3),")",sep="")
+  forest(curr_m,main=currmain,annotate = T,addfit = F,showweights = T,top=0,cex=0.7,
+         transf=transf.ztor, digits=3, alim=c(-1,1))
+}
+
 
 ############################################################################
 ############################################################################
@@ -1069,12 +1177,12 @@ for(set_name in all_enriched_clusters){
   cex_genes = 0.4
   if(nrow(mat)<40){cex_genes = 0.7}
   if(nrow(mat)<20){cex_genes = 1}
-  if(nrow(mat)<10){cex_genes = 1}
+  if(nrow(mat)<10){cex_genes = 1.5}
   pdf(paste("supp_tables/",gsub(",|;","_",set_name),".pdf",sep=""))
   par(cex.main=0.7)
-  heatmap.2(mat,trace = "none",scale = "none",Colv = T,col=bluered,
+  heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,
             cexRow = cex_genes,main=curr_main,
-            Rowv = T,srtCol=45,hclustfun = hclust_func,density.info="none",
+            Rowv = F,srtCol=45,hclustfun = hclust_func,density.info="none",
             key.title = NA,keysize = 1.1,key.xlab = "t-statistic",
             key.par = list("cex.axis"=1.1),margins = c(10,10))
   dev.off()
@@ -1120,20 +1228,8 @@ curr_pathways = reactome_pathways_subgroups_fdr[reactome_pathways_subgroups_fdr[
 
 
 
-
-
-
-
-
 # Try another plot: select cluster names and plot all of their patterns
 # along with selected enrichments
-
-
-
-
-
-
-
 
 
 
@@ -1327,10 +1423,9 @@ for(nn in names(meta_reg_datasets)[1:3]){
            main=paste(nn," - rho (Spearman)"),mar=c(0,2,4,0),cex.main=1.5,tl.cex = 1.4)
   corrplot(cov_eval$r2s,p.mat = cov_eval$lmmp,main=paste(nn," - lm test"),
            mar=c(0,2,4,0),cl.lim = c(0,1),cex.main=1.5,tl.cex = 1.4)
+  print(cov_eval$r2s)
+  print(median(cov_eval$r2s))
 }
-
-cor(gdataM[,"N"],gdataM[,"prop_males"])
-cor.test(gdataM[,"N"],gdataM[,"prop_males"])
 
 ###############################################
 ###############################################
