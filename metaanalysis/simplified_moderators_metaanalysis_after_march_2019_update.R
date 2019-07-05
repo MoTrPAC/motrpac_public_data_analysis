@@ -743,6 +743,50 @@ boxplot(yi~time,data=gdata,
         main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
         xlab="Time window",names=c("0-1h","2-5h",">20h"),ylab="")
 
+#BHLHE40
+gene = "8553"
+curr_genes[gene]
+gene_name = entrez2symbol[[gene]]
+curr_m = simple_REs$`acute,muscle`[[gene]]
+gdata = meta_reg_datasets$`acute,muscle`[[gene]]
+curr_m$slab.null = F
+curr_times = rep("0-1h",nrow(gdata))
+curr_times[gdata$time==2] = "2-5h"
+curr_times[gdata$time==3] = ">20h"
+curr_m$slab = paste(gdata$training,curr_times,sep=",")
+analysis1 = all_meta_analysis_res$`acute,muscle`
+analysis1[[gene]][[1]]$mod_p
+analysis1[[gene]][[1]]
+aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
+dev.off()
+forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T,cex = 1.15,addfit = F)
+par(cex.lab=1.5,cex.axis=1.4,mar = c(6,6,6,6))
+boxplot(yi~time,data=gdata,
+        main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
+        xlab="Time window",names=c("0-1h","2-5h",">20h"),ylab="")
+
+
+gene = "6566"
+gene_name = entrez2symbol[[gene]]
+curr_m = simple_REs$`acute,muscle`[[gene]]
+gdata = meta_reg_datasets$`acute,muscle`[[gene]]
+curr_m$slab.null = F
+curr_times = rep("0-1h",nrow(gdata))
+curr_times[gdata$time==2] = "2-5h"
+curr_times[gdata$time==3] = ">20h"
+curr_m$slab = paste(gdata$training,curr_times,sep=",")
+analysis1 = all_meta_analysis_res$`acute,muscle`
+analysis1[[gene]][[1]]$mod_p
+analysis1[[gene]][[1]]
+aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
+dev.off()
+forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T,cex = 1.15,addfit = F)
+par(cex.lab=1.5,cex.axis=1.4,mar = c(6,6,6,6))
+boxplot(yi~time,data=gdata,
+        main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
+        xlab="Time window",names=c("0-1h","2-5h",">20h"),ylab="")
+
+
 # Other genes: LPL, CPT1B, SMAD3, ACTN3, VEGFA, FOXO1 and IL6R
 genes = c("1375","4023","4088","89","7422","2308","3570")
 par(mfrow=c(2,2))
@@ -1498,6 +1542,10 @@ for(nn in supp_table_1_all_cohorts[,1]){
   if(is.element(nn,longterm_meta_tmp$V1)){
     ind = which(nn==longterm_meta_tmp$V1)[1]
     currg = paste("longterm",longterm_meta_tmp$tissue[ind],sep=",")
+    if(!grepl("endur",longterm_meta_tmp$training[ind]) &&
+       !grepl("resis",longterm_meta_tmp$training[ind])){
+      currg = paste("untrained,",currg,sep="")
+    }
   }
   if(is.element(nn,acute_meta_tmp$V1)){
     ind = which(nn==acute_meta_tmp$V1)[1]
