@@ -41,10 +41,10 @@ The main analysis script that takes the database and generates all results and d
 
 The actual meta-analysis is performed using auxiliary scripts called wrapper_for_run_meta_analysis_on_sherlock.R and run_meta_analysis_on_sherlock.R. These were created for running the meta-analysis in parallel using multiple CPUs. Nevertheless, the code for running all possible models per gene are implemented in these scripts. Also, these scripts take as input an RData file called [meta_analysis_input.RData](https://storage.googleapis.com/motrpac-portal-user-davidama/meta_analysis_input.RData). Their output can be downloaded [here](https://storage.googleapis.com/motrpac-portal-user-davidama/meta_analysis_output.RData). It is used within the metaanalysis/simplified_moderators_metaanalysis.R script for gene selection and for creating figures.
 
-Genes were selected based on the following criteria to minimize the inflation of false positives observed in past meta-analyses (Sweeny et al. NAR 2016). Note that each gene can have several measured effects (b0, b1 above)
-1. FDR < 0.01 for at least one of the measured fold change effects
-2. Effect sizes should be at least 0.5 for acute data analysis or 0.25 for longterm data analysis
-3. Effect sizes should be different than the average fold change observed in all available controls (e.g., muscle biopsies from untrained subjects). Thresholds are the same as in step 2 above. 
+Genes were selected based several criteria to minimize the inflation of false positives observed in past meta-analyses (some are based on Sweeny et al. NAR 2016). 
+1. The selected model of a gene either include moderators or not. Models that include moderators must have an improvement in their AICc score of at least five as compared to the model without any moderators. If no such model exists, then the model without moderators is selected only if its I^2 score is lower than 50%
+2. There is at least one effect size > 0.5 for acute data analysis or > 0.25 for longterm data analysis
+3. FDR < 0.01 for the selected model
 
 ## Contact
 
