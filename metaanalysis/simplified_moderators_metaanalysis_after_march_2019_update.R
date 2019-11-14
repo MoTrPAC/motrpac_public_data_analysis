@@ -146,7 +146,7 @@ clean_acute_table <-function(gdata,tissue="muscle",remove_untrained=T){
   return(gdata)
 }
 # Long term data preprocessing:
-#   Binarize time based on 150 days
+# Binarize time based on 150 days
 clean_longterm_table <-function(gdata,tissue="muscle",remove_untrained=T){
   if(remove_untrained){
     gdata = gdata[!is.element(gdata$training,set=c("yoga","control","untrained")),]
@@ -240,7 +240,6 @@ for(nn in names(datasets)){
   datasets[[nn]] = datasets[[nn]][!to_rem] 
 }
 sapply(datasets,length)
-sapply()
 
 # Reshape data for replication analysis
 get_gene_data_for_rep_analysis<-function(gdata,exclude){
@@ -720,88 +719,80 @@ for(nn in names(all_meta_analysis_res)){
 }
 
 # Examples of genes for the paper
+
+# Acute, muscle:
 curr_genes = analysis2selected_genes$`acute,muscle`
-curr_genes[curr_genes=="base_model"]
 #PGC1a
 gene = "10891"
-curr_genes[gene]
-gene_name = entrez2symbol[[gene]]
-curr_m = simple_REs$`acute,muscle`[[gene]]
-gdata = meta_reg_datasets$`acute,muscle`[[gene]]
-curr_m$slab.null = F
-curr_times = rep("0-1h",nrow(gdata))
-curr_times[gdata$time==2] = "2-5h"
-curr_times[gdata$time==3] = ">20h"
-curr_m$slab = paste(gdata$training,curr_times,sep=",")
-analysis1 = all_meta_analysis_res$`acute,muscle`
-analysis1[[gene]][[1]]$mod_p
-aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
-dev.off()
-forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T,cex = 1.15,addfit = F)
-par(cex.lab=1.5,cex.axis=1.4,mar = c(6,6,6,6))
-boxplot(yi~time,data=gdata,
-        main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
-        xlab="Time window",names=c("0-1h","2-5h",">20h"),ylab="")
-
 #BHLHE40
 gene = "8553"
-curr_genes[gene]
-gene_name = entrez2symbol[[gene]]
-curr_m = simple_REs$`acute,muscle`[[gene]]
-gdata = meta_reg_datasets$`acute,muscle`[[gene]]
-curr_m$slab.null = F
-curr_times = rep("0-1h",nrow(gdata))
-curr_times[gdata$time==2] = "2-5h"
-curr_times[gdata$time==3] = ">20h"
-curr_m$slab = paste(gdata$training,curr_times,sep=",")
-analysis1 = all_meta_analysis_res$`acute,muscle`
-analysis1[[gene]][[1]]$mod_p
-analysis1[[gene]][[1]]
-aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
-dev.off()
-forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T,cex = 1.15,addfit = F)
-par(cex.lab=1.5,cex.axis=1.4,mar = c(6,6,6,6))
-boxplot(yi~time,data=gdata,
-        main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
-        xlab="Time window",names=c("0-1h","2-5h",">20h"),ylab="")
-
-
+#
 gene = "6566"
+# SMAD3
+gene = "4088"
+# FOXO1
+gene = "2308"
+# ID1
+gene = "3397"
+# VEGFA
+gene = "7422"
+# HES1
+gene = "3280"
+
 gene_name = entrez2symbol[[gene]]
-curr_m = simple_REs$`acute,muscle`[[gene]]
 gdata = meta_reg_datasets$`acute,muscle`[[gene]]
-curr_m$slab.null = F
+gdata = gdata[order(gdata$time),]
 curr_times = rep("0-1h",nrow(gdata))
 curr_times[gdata$time==2] = "2-5h"
 curr_times[gdata$time==3] = ">20h"
-curr_m$slab = paste(gdata$training,curr_times,sep=",")
+gdata$training = gsub("endurance","EN",gdata$training)
+gdata$training = gsub("resistance","RE",gdata$training)
+gdata$V1 = gsub("GE_","",gdata$V1)
+slabels = paste(gdata$V1,gdata$training,curr_times,sep=",")
 analysis1 = all_meta_analysis_res$`acute,muscle`
 analysis1[[gene]][[1]]$mod_p
-analysis1[[gene]][[1]]
 aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
+forest(x = gdata$yi,sei = gdata$sdd,slab = slabels,
+       main=gene_name,annotate = F,cex = 1,addfit = F,xlab = "log2(fchange)",
+       pch = 19)
+
 dev.off()
-forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T,cex = 1.15,addfit = F)
+
 par(cex.lab=1.5,cex.axis=1.4,mar = c(6,6,6,6))
 boxplot(yi~time,data=gdata,
         main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
         xlab="Time window",names=c("0-1h","2-5h",">20h"),ylab="")
-
 
 # Other genes: LPL, CPT1B, SMAD3, ACTN3, VEGFA, FOXO1 and IL6R
 genes = c("1375","4023","4088","89","7422","2308","3570")
-par(mfrow=c(2,2))
-for(gene in genes[5:7]){
+# Validated genes
+library("metaviz")
+validated_genes = c(
+  "SMAD3" = "4088",
+  "ID1" = "3397",
+  "NR4A1" = "3164",
+  "HES1" = "3280",
+  "SCN2B" = "6327",
+  "SLC25A25" = "114789",
+  "PPARGC1A" = "10891"
+)
+for(gene in validated_genes){
   gene_name = entrez2symbol[[gene]]
-  curr_m = simple_REs$`acute,muscle`[[gene]]
   gdata = meta_reg_datasets$`acute,muscle`[[gene]]
-  curr_m$slab.null = F
+  gdata = gdata[order(gdata$time),]
   curr_times = rep("0-1h",nrow(gdata))
   curr_times[gdata$time==2] = "2-5h"
   curr_times[gdata$time==3] = ">20h"
-  curr_m$slab = paste(gdata$training,curr_times,sep=",")
+  gdata$V1 = gsub("GE_","",gdata$V1)
+  slabels = paste(gdata$V1,gdata$training,curr_times,sep=",")
   analysis1 = all_meta_analysis_res$`acute,muscle`
+  analysis1[[gene]][[1]]$mod_p
   aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
-  forest(curr_m,main=paste(gene_name),annotate = T)
+  pdf(paste(gene_name,".pdf"))
+  forest(x = gdata$yi,sei = gdata$sdd,slab = slabels,
+         main=gene_name,annotate = F,cex = 1,xlab = "log2(fchange)",
+         pch = 19)
+  dev.off()
 }
 
 # RPL24 in acute blood
@@ -863,16 +854,20 @@ boxplot(yi~time,data=gdata,
 # COL4A1
 gene = "1282"
 gene_name = entrez2symbol[[gene]]
-curr_m = simple_REs$`longterm,muscle`[[gene]]
 all_meta_analysis_res$`longterm,muscle`[[gene]]
-curr_m$I2
 gdata = meta_reg_datasets$`longterm,muscle`[[gene]]
-curr_m$slab.null = F
+gdata = gdata[order(gdata$time),]
 curr_times = rep("",nrow(gdata))
 curr_times[gdata$time==2] = ",> 150 days"
-curr_m$slab = paste(gdata$training,curr_times,sep="")
+gdata$V1 = gsub("GE_","",gdata$V1)
+slabels = paste(gdata$training,curr_times,sep="")
+slabels = paste(gdata$V1,slabels,sep=",")
 analysis1 = all_meta_analysis_res$`acute,muscle`
-forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T,cex=1.05)
+pdf(paste(gene_name,".pdf"))
+forest(x = gdata$yi,sei = gdata$sdd,slab = slabels,
+       main=gene_name,annotate = F,cex = 1.1,xlab = "log2(fchange)",
+       pch = 19)
+dev.off()
 
 # Plots with sex info - longterm muscle
 genes = c("8897","567","50","11217")
@@ -1224,9 +1219,9 @@ for(set_name in all_enriched_clusters){
   if(nrow(mat)<10){cex_genes = 1.5}
   pdf(paste("supp_tables/",gsub(",|;","_",set_name),".pdf",sep=""))
   par(cex.main=0.7)
-  heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,
+  heatmap.2(mat,trace = "none",scale = "none",Colv = T,col=bluered,
             cexRow = cex_genes,main=curr_main,
-            Rowv = F,srtCol=45,hclustfun = hclust_func,density.info="none",
+            Rowv = T,srtCol=45,hclustfun = hclust_func,density.info="none",
             key.title = NA,keysize = 1.1,key.xlab = "t-statistic",
             key.par = list("cex.axis"=1.1),margins = c(10,10))
   dev.off()
@@ -1622,5 +1617,73 @@ write.xlsx(supp_table_enrichments,file=supp_file,
 # save the workspace
 save.image(file="meta_analysis_interpretation_results.RData")
 
+###############################################
+###############################################
+###############################################
+# Prepare gene-csv files for the portal
+###############################################
+###############################################
+###############################################
+load("meta_analysis_interpretation_results.RData")
+
+write_to_bucket<-function(m,fname,bucket){
+  write.csv(m,row.names = F,quote = T,file=fname)
+  system(paste("~/google-cloud-sdk/bin/gsutil cp",fname,bucket))
+  system(paste("rm",fname))
+}
+
+for(nn in names(meta_reg_datasets)){
+  bucket = paste("gs://bic_data_analysis/meta_analysis_human/",nn,"/",sep="")
+  bucket = gsub(",","_",bucket)
+  genes = names(meta_reg_datasets[[nn]])
+  curr_gene_table = c()
+  for(gene in genes){
+    gname = entrez2symbol[[gene]]
+    gdata = meta_reg_datasets[[nn]][[gene]]
+    base_model = simple_REs[[nn]][[gene]]
+    if(length(base_model)==1 && is.na(base_model)){next}
+    i2 = base_model$I2
+    tau2 = base_model$tau2
+    p_model = base_model$pval
+    selected = is.element(gene,names(analysis2selected_genes[[nn]]))
+
+    if(grepl("acute",nn)){
+      curr_times = rep("0-1h",nrow(gdata))
+      curr_times[gdata$time==2] = "2-5h"
+      curr_times[gdata$time==3] = ">20h"
+    }
+    else{
+      curr_times = rep("0-150 days",nrow(gdata))
+      curr_times[gdata$time==2] = ">150 days"
+    }
+    
+    gdata$time = curr_times
+    meta_reg_analysis = all_meta_analysis_res[[nn]][[gene]]
+    aic_diff = meta_reg_analysis[[1]]$aic_c - meta_reg_analysis$`simple:base_model`$aic_c
+    
+    selected_model_name = names(meta_reg_analysis)[1]
+    if(grepl("base_model",selected_model_name)){
+      selected_model_name = ":base_model (simple RE)" # add ':' just for the split later
+    }
+    else{
+      p_model = meta_reg_analysis[[1]]$mod_p
+    }
+    
+    selected_model_name = strsplit(selected_model_name,":")[[1]][2]
+    selected_model_name = gsub("avg_","",selected_model_name)
+    selected_model_name = gsub(";",",",selected_model_name)
+    
+    curr_gene_table = rbind(curr_gene_table,
+      c(gname,gene,selected_model_name,i2,tau2,p_model,aic_diff,selected))
+    
+    curr_gfile = paste(gname,".csv",sep="")
+    write_to_bucket(gdata,curr_gfile,bucket)
+  }
+  colnames(curr_gene_table) = c("Symbol","Entrez","SelectedModel",
+                                "I2","Tau2","P-value","AICcDiff","Selected?")
+  
+  fname = "gene_stats.csv"
+  write_to_bucket(curr_gene_table,fname,bucket)
+}
 
 
