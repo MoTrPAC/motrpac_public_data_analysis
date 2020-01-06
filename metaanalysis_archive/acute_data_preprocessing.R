@@ -92,7 +92,8 @@ names(sample2subject) = metadata[,1]
 # Dataset id -  a level below study id. It separates samples by:
 # GSE id, tissue, platform, training, study subgroup
 # The dataset ids contain the above information, separated by ';'
-dataset_ids = paste(metadata$GSE,metadata$Tissue,metadata$platform_id,sample2training_type,metadata$Study.subgroup,sep=';')
+dataset_ids = paste(metadata$GSE,metadata$Tissue,metadata$platform_id,
+                    sample2training_type,metadata$Study.subgroup,sep=';')
 names(dataset_ids) = metadata[,1]
 sort(table(dataset_ids))[1:5]
 # Time series by sample
