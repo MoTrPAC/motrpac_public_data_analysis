@@ -1,8 +1,8 @@
 library(org.Hs.eg.db);library(metafor)
-source('/Users/David/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions.R')
+source('~/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions.R')
 entrez2symbol = as.list(org.Hs.egSYMBOL)
 
-setwd('/Users/David/Desktop/MoTrPAC/project_release_feb_2018/data/')
+setwd('~/Desktop/MoTrPAC/project_release_feb_2018/data/')
 # Prepare the datasets for the different analyses below
 # Load the datasets and their metadata
 load("human_ge_cohort_preprocessed_db_acute.RData")
@@ -17,6 +17,10 @@ longterm_sample2time = sample2time
 acute_sample2time = sample2time
 longterm_sample_meta = sample_metadata
 load("human_ge_cohort_preprocessed_db_gene_tables.RData")
+
+# set the output dir for RData files
+# out_dir = "" # for the WD
+out_dir = "~/Desktop/MoTrPAC/project_release_feb_2018/data/revision_feb_2020/"
 
 ############################################################################
 ############################################################################
@@ -81,10 +85,21 @@ dim(complete_sample_table_excluded_from_meta_analysis[
 ])
 
 # Read in the sample-level metadata and get the counts
-metadata_file = 'GEO_sample_metadata.xlsx'
+# metadata_file = 'GEO_sample_metadata.xlsx'
+metadata_file = './revision_feb_2020/GEO_sample_metadata.xlsx'
+
+# Read the sample metadata - these are the sample sets to be analyzed
+# The loaded RData objects contain more datasets than what is used for the 
+# different meta-analyses
+# Use xlsx
 library('xlsx')
 acute_metadata = read.xlsx2(file=metadata_file,sheetIndex=1)
 longterm_metadata = read.xlsx2(file=metadata_file,sheetIndex=2)
+# use readxl instead (xslx has some issues in mac)
+library(readxl)
+acute_metadata = data.frame(read_xlsx(metadata_file,sheet=1))
+longterm_metadata = data.frame(read_xlsx(metadata_file,sheet=2))
+
 sample_level_meta = rbind(acute_metadata[,c("GSM","GSE","Subject.id","Tissue","Gender","Numeric_Age")],
                           longterm_metadata[,c("GSM","GSE","Subject.id","Tissue","Gender","Numeric_Age")])
 dim(sample_level_meta)
@@ -303,7 +318,7 @@ rep_filter <-function(gdata,num=1,thr=0.01){
 to_rem1 = sapply(datasets,function(x)!sapply(x,rep_filter,num=2,thr=0.05))
 
 rm(acute_gene_tables);rm(longterm_gene_tables)
-save.image(file="workspace_before_rep_analysis.RData")
+save.image(file=paste(out_dir,"workspace_before_rep_analysis.RData",sep=""))
 
 # Create the input files for meta-regression and replication analysis
 meta_reg_datasets = list()
@@ -325,7 +340,7 @@ meta_reg_to_mods = list(
   "longterm,blood" = "training"
 )
 save(meta_reg_datasets,meta_reg_to_mods,
-     untrained_datasets,file="meta_analysis_input.RData")
+     untrained_datasets,file=paste(out_dir,"meta_analysis_input.RData",sep=""))
 
 ############################################################################
 ############################################################################
