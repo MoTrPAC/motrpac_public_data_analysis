@@ -2,7 +2,8 @@ library(org.Hs.eg.db);library(metafor)
 source('~/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions.R')
 entrez2symbol = as.list(org.Hs.egSYMBOL)
 
-setwd('~/Desktop/MoTrPAC/project_release_feb_2018/data/')
+# setwd('~/Desktop/MoTrPAC/project_release_feb_2018/data/')
+setwd('~/Desktop/MoTrPAC/project_release_feb_2018/revision_feb_2020/')
 # Prepare the datasets for the different analyses below
 # Load the datasets and their metadata
 load("human_ge_cohort_preprocessed_db_acute.RData")
@@ -20,7 +21,8 @@ load("human_ge_cohort_preprocessed_db_gene_tables.RData")
 
 # set the output dir for RData files
 # out_dir = "" # for the WD
-out_dir = "~/Desktop/MoTrPAC/project_release_feb_2018/data/revision_feb_2020/"
+# out_dir = "~/Desktop/MoTrPAC/project_release_feb_2018/data/"
+out_dir = "~/Desktop/MoTrPAC/project_release_feb_2018/revision_feb_2020/"
 
 ############################################################################
 ############################################################################
@@ -85,20 +87,21 @@ dim(complete_sample_table_excluded_from_meta_analysis[
 ])
 
 # Read in the sample-level metadata and get the counts
-# metadata_file = 'GEO_sample_metadata.xlsx'
-metadata_file = './revision_feb_2020/GEO_sample_metadata.xlsx'
+metadata_file = 'GEO_sample_metadata.xlsx'
 
 # Read the sample metadata - these are the sample sets to be analyzed
 # The loaded RData objects contain more datasets than what is used for the 
 # different meta-analyses
 # Use xlsx
-library('xlsx')
-acute_metadata = read.xlsx2(file=metadata_file,sheetIndex=1)
-longterm_metadata = read.xlsx2(file=metadata_file,sheetIndex=2)
+# library('xlsx')
+# acute_metadata = read.xlsx2(file=metadata_file,sheetIndex=1)
+# longterm_metadata = read.xlsx2(file=metadata_file,sheetIndex=2)
 # use readxl instead (xslx has some issues in mac)
 library(readxl)
 acute_metadata = data.frame(read_xlsx(metadata_file,sheet=1))
+acute_metadata[is.na(acute_metadata)] = ""
 longterm_metadata = data.frame(read_xlsx(metadata_file,sheet=2))
+longterm_metadata[is.na(longterm_metadata)] = ""
 
 sample_level_meta = rbind(acute_metadata[,c("GSM","GSE","Subject.id","Tissue","Gender","Numeric_Age")],
                           longterm_metadata[,c("GSM","GSE","Subject.id","Tissue","Gender","Numeric_Age")])
@@ -146,11 +149,14 @@ simplify_training_for_exercise_analysis<-function(gdata){
 # New analyses:
 #   Acute: time is binned to immediate (<=1h), early (1-5h), and late(>=20h)
 #   Age is kept as numeric
-clean_acute_table <-function(gdata,tissue="muscle",remove_untrained=T){
+clean_acute_table <-function(gdata,tissue="muscle",remove_untrained=T,gses_to_remove = NULL){
   if(remove_untrained){
     gdata = gdata[!is.element(gdata$training,set=c("yoga","control","untrained")),]
   }
   gdata = gdata[gdata$tissue==tissue,]
+  if(!is.null(gses_to_remove)){
+    gdata = gdata[! gdata$gse %in% gses_to_remove,]
+  }
   gdata$vi = pmax(gdata$vi,1e-5)
   newtime = rep(2,nrow(gdata))
   newtime[gdata$time<=1] = 1
@@ -162,11 +168,14 @@ clean_acute_table <-function(gdata,tissue="muscle",remove_untrained=T){
 }
 # Long term data preprocessing:
 # Binarize time based on 150 days
-clean_longterm_table <-function(gdata,tissue="muscle",remove_untrained=T){
+clean_longterm_table <-function(gdata,tissue="muscle",remove_untrained=T,gses_to_remove=NULL){
   if(remove_untrained){
     gdata = gdata[!is.element(gdata$training,set=c("yoga","control","untrained")),]
   }
   gdata = gdata[gdata$tissue==tissue,]
+  if(!is.null(gses_to_remove)){
+    gdata = gdata[!gdata$gse %in% gses_to_remove,]
+  }
   gdata$vi = pmax(gdata$vi,1e-5)
   # time analysis
   newtime = rep(2,nrow(gdata))
@@ -240,7 +249,8 @@ get_coeffs_str<-function(coeffs){
 # Get the cleaned, filtered datasets
 datasets = list()
 datasets[["acute,muscle"]] = lapply(acute_gene_tables,clean_acute_table,tissue="muscle")
-datasets[["acute,blood"]] = lapply(acute_gene_tables,clean_acute_table,tissue="blood")
+datasets[["acute,blood"]] = lapply(acute_gene_tables,clean_acute_table,tissue="blood",
+              gses_to_remove = c("GSE8668","GSE18966","GSE83578","GSE28498","GSE41914","GSE43856","GSE51835"))
 datasets[["longterm,muscle"]] = lapply(longterm_gene_tables,clean_longterm_table,tissue="muscle")
 datasets[["longterm,blood"]] = lapply(longterm_gene_tables,clean_longterm_table,tissue="blood")
 
@@ -263,7 +273,7 @@ get_gene_data_for_rep_analysis<-function(gdata,exclude){
   names(x)=paste(gdata$V1,gdata$time,sep=";")
   return(x)
 }
-load("human_ge_gene_coverage_analysis.RData")
+load("~/Desktop/MoTrPAC/project_release_feb_2018/data/human_ge_gene_coverage_analysis.RData")
 rep_datasets = list()
 for(nn in names(datasets)){
   m = sapply(datasets[[nn]][all_genes],get_gene_data_for_rep_analysis,
@@ -328,14 +338,26 @@ for(nn in names(simple_RE_beta)){
 }
 sapply(meta_reg_datasets,length)
 
-# After the data update of March 2019
+# # After the data update of March 2019
+# # Not enough non-male acute muscle studies
+# # Not enough resistance training datasets for acute, blood
+# # For longterm blood we take training only as we assume that it will
+# # be the primary cause of differential abundance
+# meta_reg_to_mods = list(
+#   "acute,muscle" = c("time","training","avg_age"),
+#   "acute,blood" = c("time","prop_males","avg_age"),
+#   "longterm,muscle" = c("training","time","avg_age","prop_males"),
+#   "longterm,blood" = "training"
+# )
+
+# Revision on Feb 2020
 # Not enough non-male acute muscle studies
-# Not enough resistance training datasets for acute, blood
+# No resistance training and enough time points for acute, blood
 # For longterm blood we take training only as we assume that it will
 # be the primary cause of differential abundance
 meta_reg_to_mods = list(
   "acute,muscle" = c("time","training","avg_age"),
-  "acute,blood" = c("time","prop_males","avg_age"),
+  "acute,blood" = c("prop_males","avg_age"),
   "longterm,muscle" = c("training","time","avg_age","prop_males"),
   "longterm,blood" = "training"
 )
@@ -1630,7 +1652,7 @@ write.xlsx(supp_table_enrichments,file=supp_file,
            row.names = F,append=T)
 
 # save the workspace
-save.image(file="meta_analysis_interpretation_results.RData")
+save.image(file=paste(out_dir,"meta_analysis_interpretation_results.RData",sep=""))
 
 ###############################################
 ###############################################

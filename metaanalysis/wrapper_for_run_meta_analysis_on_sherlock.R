@@ -74,7 +74,7 @@ wait_for_job<-function(jobs_before=NULL,waittime=30,max_wait=6000){
 
 
 # Load the input
-load("meta_analysis_input.RData")
+load("~/motrpac_metaanalysis/v3_feb_2020/meta_analysis/meta_analysis_input.RData")
 num_genes_per_job = 200
 for (i in 1:length(meta_reg_datasets)){
   curr_length = length(meta_reg_datasets[[i]])
@@ -83,11 +83,19 @@ for (i in 1:length(meta_reg_datasets)){
   while(start < curr_length){
     end = start+num_genes_per_job-1
     
+    # v2
+    # cmd = paste(
+    #   "Rscript run_meta_analysis_on_sherlock.R", 
+    #   "~/motrpac_metaanalysis/v2_march_2019/meta_analysis/",
+    #   1,i,start,end
+    # )
+    
     cmd = paste(
-      "Rscript run_meta_analysis_on_sherlock.R", 
-      "~/motrpac_metaanalysis/v2_march_2019/meta_analysis/",
+      "Rscript ~/motrpac_metaanalysis/v2_march_2019/run_meta_analysis_on_sherlock.R", 
+      "~/motrpac_metaanalysis/v3_feb_2020/meta_analysis/",
       1,i,start,end
     )
+    
     run_command(cmd,paste(getwd(),"/",sep=""),
                 paste("run_",i,"_",start,"_",end,sep=""))
     

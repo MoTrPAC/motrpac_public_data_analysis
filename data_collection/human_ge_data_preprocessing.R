@@ -16,17 +16,19 @@
 ###############################################
 ###############################################
 # Paths
-WD = "/Users/David/Desktop/MoTrPAC/project_release_feb_2018/data"
-SCRIPTS = "/Users/David/Desktop/repos/motrpac_public_data_analysis/metaanalysis/"
+# WD = "~/Desktop/MoTrPAC/project_release_feb_2018/data/"
+WD = "~/Desktop/MoTrPAC/project_release_feb_2018/revision_feb_2020/"
+SCRIPTS = "~/Desktop/repos/motrpac_public_data_analysis/data_collection/"
 # Assumption: these files is in the working dir (WD)
 # our annotated excel file with acute samples in sheet1
 # and longterm samples in sheet2. The format of these tables is the same and the basic id is the GSM id
 # of a sample.
 metadata_file = 'GEO_sample_metadata.xlsx' 
-# The output expression database from human_ge_data_download.R
-raw_data_output_obj = 'human_ge_profiles_db.RData'
+# The output expression database from human_ge_data_download.R: 
+raw_data_output_obj = '~/Desktop/MoTrPAC/project_release_feb_2018/data/human_ge_profiles_db.RData'
+gpl_data_objects_path = "~/Desktop/MoTrPAC/project_release_feb_2018/data/gpl_mappings_to_entrez.RData"
 # The output expression matrices from rnaseq_data_retreival.R
-rnaseq_matrices_obj = "rnaseq_matrices.RData"
+rnaseq_matrices_obj = "~/Desktop/MoTrPAC/project_release_feb_2018/data/rnaseq_matrices.RData"
 
 # Analysis constants
 # specifies that we will work on transcriptomics
@@ -40,7 +42,7 @@ OUT_FILE_ACUTE = "human_ge_cohort_preprocessed_db_acute.RData"
 OUT_FILE_LONGTERM = "human_ge_cohort_preprocessed_db_longterm.RData"
 # Keep the results of the comparison of the different platforms by
 # their gene coverage
-GENE_FILTER_ANALYSIS = "human_ge_gene_coverage_analysis.RData"
+GENE_FILTER_ANALYSIS = "~/Desktop/MoTrPAC/project_release_feb_2018/data/human_ge_gene_coverage_analysis.RData"
 # For the meta-analysis the basic data unit is a "gene table":
 # the table of summary statistics and moderators for each gene.
 # In these tables we put a row for each summary statistics. That is,
@@ -50,11 +52,12 @@ OUT_FILE_GENE_TABLES = "human_ge_cohort_preprocessed_db_gene_tables.RData"
 
 # Set the working directory and load the gene expression database
 setwd(WD)
-library('xlsx');library(corrplot)
+library('xlsx')
+library(corrplot)
 source(paste(SCRIPTS,'ge_download_preprocessing_helper_functions.R',sep=''))
 load(raw_data_output_obj)
 load(rnaseq_matrices_obj)
-load('gpl_mappings_to_entrez.RData')
+load(gpl_data_objects_path)
 
 # Comments about the acute metadata
 # Time series:
@@ -199,7 +202,8 @@ get_simplified_sample_information<-function(metadata){
   # table(is.na(metadata$GSE)|metadata$GSE=="")
   # Study ids are primarily based on pubmed data
   study_ids = as.character(metadata$pmid)
-  study_ids[study_ids==""] = as.character(metadata[study_ids=="","GSE"])
+  curr_inds = is.na(study_ids) | study_ids==""
+  study_ids[curr_inds] = as.character(metadata[curr_inds,"GSE"])
   names(study_ids) = metadata[,1]
   # Subject names as given in the original GEO datasets
   sample2subject = as.character(metadata[,"Subject.id"])
@@ -489,9 +493,18 @@ get_matrix_p_adjust<-function(x,q=0.1,...){
 ######### Acute data preprocessing ############
 ###############################################
 ###############################################
+library(readxl)
+acute_metadata_raw = data.frame(read_xlsx(metadata_file,sheet=1))
+# this makes sure that the output is similar to that of the xlsx package:
+acute_metadata_raw[is.na(acute_metadata_raw)] = ""
+longterm_metadata_raw = data.frame(read_xlsx(metadata_file,sheet=2))
+# this makes sure that the output is similar to that of the xlsx package:
+longterm_metadata_raw[is.na(longterm_metadata_raw)] = ""
 
 # Sheet 1 has the acute samples metadata
-metadata = clean_raw_metadata(read.xlsx2(file=metadata_file,sheetIndex=1))
+# older: requires the xlsx package, which has some installing issues 
+# metadata = clean_raw_metadata(read.xlsx2(file=metadata_file,sheetIndex=1))
+metadata = clean_raw_metadata(acute_metadata_raw)
 sample_metadata = get_simplified_sample_information(metadata)
 dim(metadata)
 # Select the relevant samples
@@ -581,7 +594,9 @@ save(sample_metadata,cohort_data,cohort_metadata,
 ###############################################
 
 # Sheet 2 has the longterm samples metadata
-metadata = clean_raw_metadata(read.xlsx2(file=metadata_file,sheetIndex=2))
+# older: requires the xlsx package, which has some installing issues 
+# metadata = clean_raw_metadata(read.xlsx2(file=metadata_file,sheetIndex=2))
+metadata = clean_raw_metadata(longterm_metadata_raw)
 sample_metadata = get_simplified_sample_information(metadata)
 
 # Select the relevant samples
@@ -834,7 +849,7 @@ dim(newx_sex)
 
 inds = !missing_set 
 table(inds)
-source("/Users/David/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions_classification.R")
+source("~/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions_classification.R")
 # lso_res_qx_sex = leave_study_out2(as.factor(y[inds]),
 #                 t(quntx_sex[,inds]),z[inds],
 #                 func = svm,class.weights=c("female"=10,"male"=1),
@@ -932,7 +947,7 @@ get_gene_table<-function(gene,dataset_effects,moderators){
 }
 
 load(OUT_FILE_LONGTERM)
-metadata = clean_raw_metadata(read.xlsx2(file=metadata_file,sheetIndex=2))
+metadata = clean_raw_metadata(longterm_metadata_raw)
 sample_metadata = get_simplified_sample_information(metadata)
 for(nn in names(cohort_metadata)){
   samps = cohort_metadata[[nn]]$gsms
@@ -966,7 +981,7 @@ longterm_gene_tables = gene_tables
 rm(gene_tables);gc()
 
 load(OUT_FILE_ACUTE)
-metadata = clean_raw_metadata(read.xlsx2(file=metadata_file,sheetIndex=1))
+metadata = clean_raw_metadata(acute_metadata_raw)
 sample_metadata = get_simplified_sample_information(metadata)
 for(nn in names(cohort_metadata)){
   samps = cohort_metadata[[nn]]$gsms
@@ -1015,12 +1030,5 @@ acute_gene_tables = gene_tables
 # }
 
 save(longterm_gene_tables,acute_gene_tables,file=OUT_FILE_GENE_TABLES)
-
-table(sapply(acute_gene_tables,function(x)"GE_A_12" %in% x$V1))
-table(sapply(acute_gene_tables,function(x)"GE_A_14" %in% x$V1))
-table(sapply(acute_gene_tables,function(x)"GE_A_15" %in% x$V1))
-table(sapply(acute_gene_tables,function(x)"GE_A_25" %in% x$V1))
-which(!sapply(acute_gene_tables,function(x)"GE_A_26" %in% x$V1))[1]
-acute_gene_tables[["26682"]]
 
 
