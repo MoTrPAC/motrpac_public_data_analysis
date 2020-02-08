@@ -390,7 +390,7 @@ library(parallel);library(metafor)
 load("meta_analysis_results.RData")
 load("workspace_before_rep_analysis.RData")
 load("meta_analysis_input.RData")
-source('/Users/David/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions.R')
+source('~/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions.R')
 
 I2_thr = 50
 AIC_diff_thr = 5
@@ -435,6 +435,7 @@ for(nn in names(all_meta_analysis_res)){
   pvals = sapply(analysis1,function(x)x[[1]]$mod_p)
   all_pvals = c(all_pvals,pvals)
   i2s = simple_RE_I2s[[nn]][names(pvals)]
+  i2s[is.na(i2s)] = 100
   # separate into two gene sets: those that passed the aic diff test vs. those that did not
   # define the set of filters
   # 1. AICc filter
@@ -468,6 +469,7 @@ for(nn in names(all_meta_analysis_res)){
   selected_aic_diff_genes = names(aic_diffs)[genes_with_high_aic_diff & model2beta & pval_filter]
   selected_base_model_genes = names(aic_diffs)[i2_filter & model2beta & pval_filter]
   selected_base_model_genes = setdiff(selected_base_model_genes,selected_aic_diff_genes)
+  selected_base_model_genes = selected_base_model_genes[!is.na(selected_base_model_genes)]
   curr_selected_genes = union(selected_aic_diff_genes,selected_base_model_genes)
   curr_selected_genes_names = sapply(analysis1[selected_aic_diff_genes],function(x)names(x)[1])
   curr_selected_genes_names = sapply(curr_selected_genes_names,function(x)strsplit(x,split=":")[[1]][2])
@@ -477,6 +479,7 @@ for(nn in names(all_meta_analysis_res)){
   coeffs[selected_base_model_genes] = lapply(simple_REs[[nn]][selected_base_model_genes],
                                              function(x){y=cbind(x$beta,x$pval);colnames(y)=c("beta","pval");y})
   coeffs = coeffs[curr_selected_genes]
+  # coeffs = coeffs[!is.na(names(coeffs))]
   coeffs_v = sapply(coeffs,get_coeffs_str)
   m = cbind(
     unlist(names(curr_selected_genes_names)), # entrez gene id
@@ -639,7 +642,7 @@ reactome_pathways_by_cov_fdr[,1] = as.character(reactome_pathways_by_cov_fdr[,1]
 
 # 1. Replication analysis
 # Load SCREEN's results
-scr_path = "/Users/David/Desktop/MoTrPAC/PA_database/screen_res/"
+scr_path = "~/Desktop/MoTrPAC/PA_database/screen_res/"
 pvals_files = list.files(scr_path)
 pvals_files = pvals_files[grepl("pvals.txt",pvals_files)]
 screen_results = list()

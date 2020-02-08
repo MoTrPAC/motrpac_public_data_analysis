@@ -18,7 +18,7 @@ get_sh_default_prefix<-function(err="",log="",time="6:00:00"){
       "#SBATCH --mem=2000",
       paste("#SBATCH --error",err),
       paste("#SBATCH --out",log),
-      "#SBATCH -x sh-113-15",
+      "#SBATCH --gpus-per-task=0",
       "",
       "module load R"
     )
@@ -73,7 +73,8 @@ wait_for_job<-function(jobs_before=NULL,waittime=30,max_wait=6000){
 }
 
 
-# Load the input
+# Load the input and set the WD
+setwd("~/motrpac_metaanalysis/v3_feb_2020/meta_analysis/")
 load("~/motrpac_metaanalysis/v3_feb_2020/meta_analysis/meta_analysis_input.RData")
 num_genes_per_job = 200
 for (i in 1:length(meta_reg_datasets)){
@@ -91,7 +92,7 @@ for (i in 1:length(meta_reg_datasets)){
     # )
     
     cmd = paste(
-      "Rscript ~/motrpac_metaanalysis/v2_march_2019/run_meta_analysis_on_sherlock.R", 
+      "Rscript ~/motrpac_metaanalysis/v2_march_2019/meta_analysis/run_meta_analysis_on_sherlock.R", 
       "~/motrpac_metaanalysis/v3_feb_2020/meta_analysis/",
       1,i,start,end
     )

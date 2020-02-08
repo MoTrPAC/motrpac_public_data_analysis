@@ -62,3 +62,38 @@ for(gene in sample(shared_l)[1:3000]){
 }
 
 
+# Check meta-analysis input
+load("~/Desktop/MoTrPAC/project_release_feb_2018/data/meta_analysis_input.RData")
+a2 = meta_reg_datasets$`acute,muscle`
+load("~/Desktop/MoTrPAC/project_release_feb_2018/revision_feb_2020/meta_analysis_input.RData")
+a1 = meta_reg_datasets$`acute,muscle`
+
+length(setdiff(names(a1),names(a2)))==0
+length(setdiff(names(a2),names(a1)))==0
+shared_a = intersect(names(a1),names(a2))
+for(gene in sample(shared_a)[1:3000]){
+  print (gene)
+  m1 = a1[[gene]]
+  m2 = a2[[gene]]
+  stopifnot(all(dim(m1)==dim(m2)))
+  setdiff(m2$gse,m1$gse)
+  for(j in c(2,6:ncol(m1))){
+    m1[[j]] = as.numeric(m1[[j]])
+    m1[[j]] = round(m1[[j]],digits = 6)
+    m2[[j]] = as.numeric(m2[[j]])
+    m2[[j]] = round(m2[[j]],digits = 6)
+  }
+  m1[,2] = as.integer(m1[,2])
+  m2[,2] = as.integer(m2[,2])
+  rownames(m1) = apply(m1[,c(2:5,ncol(m1))],1,paste,collapse=",")
+  rownames(m1) = gsub(" ","",rownames(m1))
+  rownames(m2) = apply(m2[,c(2:5,ncol(m2))],1,paste,collapse=",")
+  rownames(m2) = gsub(" ","",rownames(m2))
+  stopifnot(all(rownames(m1) %in% rownames(m2)))
+  # print(setdiff(rownames(m1),rownames(m2)))
+  m2 = m2[rownames(m1),]
+  stopifnot(sum(m2[,-c(1,8)]!=m1[,-c(1,8)],na.rm = T)==0)
+  stopifnot(all(is.na(m1[is.na(m2)])))
+  stopifnot(all(is.na(m2[is.na(m1)])))
+}
+

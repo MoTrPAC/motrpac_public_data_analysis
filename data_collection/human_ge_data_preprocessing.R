@@ -52,7 +52,7 @@ OUT_FILE_GENE_TABLES = "human_ge_cohort_preprocessed_db_gene_tables.RData"
 
 # Set the working directory and load the gene expression database
 setwd(WD)
-library('xlsx')
+# library('xlsx')
 library(corrplot)
 source(paste(SCRIPTS,'ge_download_preprocessing_helper_functions.R',sep=''))
 load(raw_data_output_obj)
