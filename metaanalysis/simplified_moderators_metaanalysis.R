@@ -285,6 +285,16 @@ for(nn in names(datasets)){
 sapply(rep_datasets,dim)
 sapply(rep_datasets,function(x)all(rownames(x)==all_genes))
 sapply(rep_datasets,colnames)
+# write down the p-value matrices
+for(nn in names(rep_datasets)){
+  pvals_m = rep_datasets[[nn]]
+  pvals_m[is.na(pvals_m)] = 0.5
+  nn_file = paste(
+    gsub(",","_",nn),"_pvals_matrix.txt",sep=""
+  )
+  write.table(pvals_m,file=nn_file,sep="\t",row.names = T,col.names = T,quote = F)
+}
+
 
 # Get the untrained controls datasets
 untrained_datasets = list()
@@ -600,12 +610,10 @@ intersect(gene_sets_per_cov$`acute,muscle,Time-linear,Down`,
           gene_sets_per_cov$`acute,muscle,Time-Q,Up`)
 
 library(corrplot)
-corrplot(gene_overlaps[[1]],is.corr = F,method="number",type = "upper",cl.length = 5,
-         cl.cex = 1.2,cl.ratio = 0.3,bg = "gray",mar=c(1, 0, 1, 0))
-corrplot(gene_overlaps[[2]],is.corr = F,method="number",type = "upper",cl.length = 5,
-         cl.cex = 1.2,cl.ratio = 0.3,bg = "gray",mar=c(1, 0, 1, 0))
-corrplot(gene_overlaps[[3]],is.corr = F,method="number",type = "upper",cl.length = 5,
-         cl.cex = 1.2,cl.ratio = 0.3,bg = "gray",mar=c(1, 0, 1, 0))
+for(j in 1:length(gene_overlaps)){
+  corrplot(gene_overlaps[[j]],is.corr = F,method="number",type = "upper",cl.length = 5,
+           cl.cex = 1.2,cl.ratio = 0.3,bg = "gray",mar=c(1, 0, 1, 0))
+}
 
 sort(sapply(gene_sets_per_cov,length))
 
@@ -966,7 +974,7 @@ for(gene in genes){
 ############################################################################
 ############################################################################
 # Interpretation of the results: defining subgroups by clustering mean patterns
-
+library(parallel)
 # Some helper functions for reformatting the data
 get_ts<-function(gdata){
   v = as.numeric(gdata$tstat)
@@ -976,6 +984,12 @@ get_ts<-function(gdata){
   return(v)
 }
 get_t_matrix_from_list<-function(tstats){
+  if("matrix" %in% class(tstats)){
+    if(ncol(tstats)>nrow(tstats)){
+      tstats = t(tstats)
+    }
+    return(tstats)
+  }
   all_ns = unique(unlist(sapply(tstats,names)))
   all_genes = names(tstats)
   m = matrix(0,nrow=length(all_genes),ncol=length(all_ns),
@@ -990,8 +1004,8 @@ get_t_matrix_from_list<-function(tstats){
 # Reminder: the resulting matrices may have many zeroes because
 # we basically merge all available t-statistics and not all genes
 # are represented in all studies.
-dataset_tstats = lapply(datasets,function(x)sapply(x,get_ts))
-mean_effect_matrices = lapply(dataset_tstats,get_t_matrix_from_list)
+dataset_tstats = mclapply(datasets,function(x)sapply(x,get_ts),mc.cores = 4)
+mean_effect_matrices = mclapply(dataset_tstats,get_t_matrix_from_list,mc.cores = 4)
 sapply(mean_effect_matrices,dim)
 sapply(mean_effect_matrices,function(x)table(x==0))
 for(nn in names(mean_effect_matrices)){
