@@ -27,14 +27,9 @@ out_dir = "~/Desktop/MoTrPAC/project_release_feb_2018/revision_feb_2020/"
 ############################################################################
 ############################################################################
 ############################################################################
-
 # Get some stats for the main paper
-# Total number of samples
-tot_samples = length(union(
-  unique(unlist(sapply(acute_metadata, function(x)x$gsms))),
-  unique(unlist(sapply(longterm_metadata, function(x)x$gsms)))
-))
-# subjects, tissues, sex
+
+# GSM-based table: subjects, tissues, sex
 complete_sample_table = c()
 complete_sample_table_excluded_from_meta_analysis = c()
 for(ac in names(acute_metadata)){
@@ -73,12 +68,14 @@ for(lo in names(longterm_metadata)){
     complete_sample_table = rbind(complete_sample_table,m)
   }
 }
-apply(complete_sample_table,2,table)
-
-# by tissue
+print("sample based counts:")
+print("table of NAs in sex:")
+print(table(is.na(complete_sample_table[,3])))
+print("tissue vs. study type:")
+print(table(complete_sample_table[,"curr_tissue"],complete_sample_table[,"curr_type"]))
+print("tissue counts:")
 tissues_count_info = unique(complete_sample_table[,c(1,4)])
-dim(tissues_count_info)
-table(tissues_count_info[,2])
+print(table(tissues_count_info[,2]))
 # should fit the numbers in Supp Table 1
 dim(complete_sample_table[complete_sample_table[,4]!="fat",])
 # This should fit the count of non-fat excluded datasets (362 as of May 2019):
@@ -89,35 +86,35 @@ dim(complete_sample_table_excluded_from_meta_analysis[
 # Read in the sample-level metadata and get the counts
 metadata_file = 'GEO_sample_metadata.xlsx'
 
-# Read the sample metadata - these are the sample sets to be analyzed
-# The loaded RData objects contain more datasets than what is used for the 
-# different meta-analyses
-# Use xlsx
-# library('xlsx')
-# acute_metadata = read.xlsx2(file=metadata_file,sheetIndex=1)
-# longterm_metadata = read.xlsx2(file=metadata_file,sheetIndex=2)
-# use readxl instead (xslx has some issues in mac)
-library(readxl)
-acute_metadata = data.frame(read_xlsx(metadata_file,sheet=1))
-acute_metadata[is.na(acute_metadata)] = ""
-longterm_metadata = data.frame(read_xlsx(metadata_file,sheet=2))
-longterm_metadata[is.na(longterm_metadata)] = ""
-
-sample_level_meta = rbind(acute_metadata[,c("GSM","GSE","Subject.id","Tissue","Gender","Numeric_Age")],
-                          longterm_metadata[,c("GSM","GSE","Subject.id","Tissue","Gender","Numeric_Age")])
-dim(sample_level_meta)
-sample_level_meta_in_metaanalysis = sample_level_meta[
-  is.element(sample_level_meta[,1],
-             set=complete_sample_table[,1]),]
-dim(sample_level_meta_in_metaanalysis)
-subject_ids = paste(sample_level_meta_in_metaanalysis[,"GSE"],
-                    sample_level_meta_in_metaanalysis[,"Subject.id"])
-sample_level_meta_in_metaanalysis = cbind(sample_level_meta_in_metaanalysis,subject_ids)
-length(unique(subject_ids))
-sex_info = unique(sample_level_meta_in_metaanalysis[,c("subject_ids","Gender")])
-table(sex_info$Gender!="")
-table(grepl("f",sex_info$Gender,ignore.case = T))
-acute_metadata[1:5,1:5]
+# # Read the sample metadata - these are the sample sets to be analyzed
+# # The loaded RData objects contain more datasets than what is used for the 
+# # different meta-analyses
+# # Use xlsx
+# # library('xlsx')
+# # acute_metadata = read.xlsx2(file=metadata_file,sheetIndex=1)
+# # longterm_metadata = read.xlsx2(file=metadata_file,sheetIndex=2)
+# # use readxl instead (xslx has some issues in mac)
+# library(readxl)
+# acute_metadata = data.frame(read_xlsx(metadata_file,sheet=1))
+# acute_metadata[is.na(acute_metadata)] = ""
+# longterm_metadata = data.frame(read_xlsx(metadata_file,sheet=2))
+# longterm_metadata[is.na(longterm_metadata)] = ""
+# 
+# sample_level_meta = rbind(acute_metadata[,c("GSM","GSE","Subject.id","Tissue","Gender","Numeric_Age")],
+#                           longterm_metadata[,c("GSM","GSE","Subject.id","Tissue","Gender","Numeric_Age")])
+# dim(sample_level_meta)
+# sample_level_meta_in_metaanalysis = sample_level_meta[
+#   is.element(sample_level_meta[,1],
+#              set=complete_sample_table[,1]),]
+# dim(sample_level_meta_in_metaanalysis)
+# subject_ids = paste(sample_level_meta_in_metaanalysis[,"GSE"],
+#                     sample_level_meta_in_metaanalysis[,"Subject.id"])
+# sample_level_meta_in_metaanalysis = cbind(sample_level_meta_in_metaanalysis,subject_ids)
+# length(unique(subject_ids))
+# sex_info = unique(sample_level_meta_in_metaanalysis[,c("subject_ids","Gender")])
+# table(sex_info$Gender!="")
+# table(grepl("f",sex_info$Gender,ignore.case = T))
+# acute_metadata[1:5,1:5]
 
 ############################################################################
 ############################################################################
@@ -250,21 +247,20 @@ get_coeffs_str<-function(coeffs){
 datasets = list()
 datasets[["acute,muscle"]] = lapply(acute_gene_tables,clean_acute_table,tissue="muscle")
 datasets[["acute,blood"]] = lapply(acute_gene_tables,clean_acute_table,tissue="blood",
-              gses_to_remove = c("GSE8668","GSE18966","GSE83578","GSE28498","GSE41914","GSE43856","GSE51835"))
+      gses_to_remove = c("GSE8668","GSE18966","GSE83578","GSE28498","GSE41914","GSE43856","GSE51835"))
 datasets[["longterm,muscle"]] = lapply(longterm_gene_tables,clean_longterm_table,tissue="muscle")
 datasets[["longterm,blood"]] = lapply(longterm_gene_tables,clean_longterm_table,tissue="blood")
 
 # A new filter added after the update on March 2019: exclude
 # genes with extremely low number of studies from each analysis
-par(mfrow=c(2,2))
+# par(mfrow=c(2,2))
 for(nn in names(datasets)){
   num_datasets = sapply(datasets[[nn]],function(x)length(unique(x$gse)))
-  hist(num_datasets,main=nn)
+  # hist(num_datasets,main=nn)
   to_rem = (num_datasets/max(num_datasets)) < 0.75
   print(table(to_rem))
   datasets[[nn]] = datasets[[nn]][!to_rem] 
 }
-sapply(datasets,length)
 
 # Reshape data for replication analysis
 get_gene_data_for_rep_analysis<-function(gdata,exclude){
@@ -386,12 +382,6 @@ save(meta_reg_datasets,meta_reg_to_mods,
 ############################################################################
 ############################################################################
 ############################################################################
-############################################################################
-############################################################################
-############################################################################
-############################################################################
-############################################################################
-############################################################################
 
 # Meta-regression and model selection for selected genes
 library(parallel);library(metafor)
@@ -406,7 +396,7 @@ I2_thr = 50
 AIC_diff_thr = 5
 ACUTE_beta_thr = 0.25
 LONGTERM_beta_thr = 0.1
-P_thr = 1e-04
+P_thr = 1e-03
 
 # A few helper methods to work with the meta-analysis output
 get_aicc_diff<-function(x){
@@ -504,8 +494,8 @@ for(nn in names(all_meta_analysis_res)){
 }
 sapply(analysis2selected_genes,length)
 
-# Sanity checks and tests: our p-value threshold is lower than BY correction
-max(all_pvals[p.adjust(all_pvals,method = "BY")<0.05])>1e-4
+# Sanity checks and tests: our p-value threshold is similar to the FDR adjusted one
+fdr0.01_thr = max(all_pvals[p.adjust(all_pvals,method = "fdr")<0.01])
 
 # Overlaps
 names(analysis2selected_genes_stats)
@@ -545,6 +535,7 @@ for(nn in names(analysis2selected_genes_stats)){
   bipartite_graphs[[nn]] = curr_edges
 }
 sapply(bipartite_graphs,dim)
+table(bipartite_graphs$`acute,blood`[,3])
 
 # Fix the feature name issue
 for(nn in names(bipartite_graphs)){
@@ -579,14 +570,9 @@ gene_sets_per_cov = list()
 for(nn in names(bipartite_graphs)){
   m = bipartite_graphs[[nn]]
   m = m[m[,3]!="b0",]
-  # m = m[m[,3]!="base_model",]
   if(nrow(m)==0){next}
-  covered_genes1 = unique(m[,1])
-  # m = m[abs(as.numeric(m[,4]))>0.05,]
-  covered_genes2 = unique(m[,1])
-  setdiff(covered_genes1,covered_genes2)
   curr_features = unique(m[,3])
-  if(length(curr_features)==1){next}
+  # if(length(curr_features)==1){next}
   curr_names = sort(c(paste(curr_features,",Up",sep=""),
                     paste(curr_features,",Down",sep="")))
   overlap_m = matrix(0,nrow=length(curr_names),ncol=length(curr_names),
@@ -609,12 +595,13 @@ for(nn in names(bipartite_graphs)){
 intersect(gene_sets_per_cov$`acute,muscle,Time-linear,Down`,
           gene_sets_per_cov$`acute,muscle,Time-Q,Up`)
 
+dev.off()
+par(mfrow=c(1,2))
 library(corrplot)
-for(j in 1:length(gene_overlaps)){
+for(j in c("longterm,muscle","acute,muscle")){
   corrplot(gene_overlaps[[j]],is.corr = F,method="number",type = "upper",cl.length = 5,
            cl.cex = 1.2,cl.ratio = 0.3,bg = "gray",mar=c(1, 0, 1, 0))
 }
-
 sort(sapply(gene_sets_per_cov,length))
 
 bg = unique(c(unlist(sapply(all_meta_analysis_res,names))))
@@ -647,6 +634,7 @@ reactome_pathways_by_cov_fdr[,1] = as.character(reactome_pathways_by_cov_fdr[,1]
 ############################################################################
 ############################################################################
 # Validation analyses of the selected gene sets
+# TODO: rerun screen
 
 # 1. Replication analysis
 # Load SCREEN's results
@@ -685,27 +673,7 @@ for(nn in names(analysis2selected_genes)[1:3]){
   abline(h = 0.2,lty=2,col="red",lwd=1.5)
 }
 
-# 2. Look at effects in untrained
-# par(mfrow=c(1,3),mar=c(10,4,2,2),cex.lab=1.2,cex.axis=1.2,cex=1,cex.main=0.9)
-# for(nn in names(analysis2selected_genes)[1:3]){
-#   x = simple_REs_untrained_beta[[nn]]
-#   analyzed_genes = names(meta_reg_datasets[[nn]])
-#   x = x[intersect(names(x),analyzed_genes)]
-#   s = names(analysis2selected_genes[[nn]])
-#   s_c = setdiff(names(x),s)
-#   analysis1 = all_meta_analysis_res[[nn]][s]
-#   y = sapply(analysis1,function(x)max(abs(x[[1]]$coeffs[,1])))
-#   p = wilcox.test(x[s],y,paired=T)$p.value
-#   p = format(p,digits=2)
-#   l = list(
-#     "untrained effects" = abs(x[s]),"exercise effects"=y,"other genes,\n untrained effects" = abs(x[s_c])
-#   )
-#   cols = c("blue","white","red")
-#   boxplot(l,las=2,col=cols,horizontal=F,cex.axis=0.9,
-#           ylab="Fold change",main = paste(nn," p=",p,sep=""),pch=20)
-# }
-
-# 2. alt, Look at effects in untrained - excluded untrained others
+# 2. Look at effects in untrained - excluded untrained others
 par(mar=c(8,4,2,2),cex.lab=1.2,cex.axis=1.2)
 l = list();cols=c()
 for(nn in names(analysis2selected_genes)[1:3]){
@@ -727,26 +695,26 @@ par(mar=c(4,8,4,4))
 names(l) = c("untrained","exercise","untrained","exercise",
              "untrained","exercise")
 cols = c("red","red","cyan","cyan","green","green")
-par(cex.lab=2,cex.axis=1.3)
+par(cex.lab=2.3,cex.axis=1.6)
 boxplot(l,las=2,col=cols,horizontal=T,pch=20,ylim=c(0,2))
-legend(x="topright",c("muscle,acute","blood,acute","muscle,long-term"),
-       fil=c("red","cyan","green"),cex=1.3)
+legend(x="topright",c("muscle, acute","blood, acute","muscle, long-term"),
+       fil=c("red","cyan","green"),cex=1.7)
 
 # # 3. GO enrichments: not a must
-# bg = unique(c(unlist(sapply(simple_REs,names))))
-# gs = lapply(analysis2selected_genes,names)
-# go_res = run_topgo_enrichment_fisher(
-#   gs,bg,go_dags = "BP",go_term_size = 20,go_max_size = 200)
-# go_res1 = go_res[go_res$Annotated < 1500,]
-# go_res1$classicFisher[is.na(as.numeric(go_res1$classicFisher))] = 1e-30
-# go_res1 = go_res[go_res1$Significant > 3,]
-# go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
-# go_res1$go_qvals = p.adjust(as.numeric(go_res1$classicFisher),method='fdr')
-# go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
-# table(go_res_fdr$setname)
-# gene_group_enrichments = go_res
-# gene_group_enrichments_fdr = go_res_fdr
-# get_most_sig_enrichments_by_groups(gene_group_enrichments_fdr,num=5)[,1:4]
+bg = unique(c(unlist(sapply(simple_REs,names))))
+gs = lapply(analysis2selected_genes,names)
+go_res = run_topgo_enrichment_fisher(
+  gs,bg,go_dags = "BP",go_term_size = 20,go_max_size = 200)
+go_res1 = go_res[go_res$Annotated < 1500,]
+go_res1$classicFisher[is.na(as.numeric(go_res1$classicFisher))] = 1e-30
+go_res1 = go_res[go_res1$Significant > 3,]
+go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
+go_res1$go_qvals = p.adjust(as.numeric(go_res1$classicFisher),method='fdr')
+go_res_fdr = go_res1[go_res1$go_qvals < 0.1,]
+table(go_res_fdr$setname)
+gene_group_enrichments = go_res
+gene_group_enrichments_fdr = go_res_fdr
+get_most_sig_enrichments_by_groups(gene_group_enrichments_fdr,num=5)[,1:4]
 
 ############################################################################
 ############################################################################
@@ -787,6 +755,7 @@ gene = "7422"
 # HES1
 gene = "3280"
 
+dev.off()
 gene_name = entrez2symbol[[gene]]
 gdata = meta_reg_datasets$`acute,muscle`[[gene]]
 gdata = gdata[order(gdata$time),]
@@ -800,11 +769,10 @@ slabels = paste(gdata$V1,gdata$training,curr_times,sep=",")
 analysis1 = all_meta_analysis_res$`acute,muscle`
 analysis1[[gene]][[1]]$mod_p
 aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
-forest(x = gdata$yi,sei = gdata$sdd,slab = slabels,
-       main=gene_name,annotate = F,cex = 1,addfit = F,xlab = "log2(fchange)",
-       pch = 19)
+forest(x = gdata$yi,sei = gdata$sdd,slab = slabels,showweights = F,
+       main=gene_name,annotate = F,cex = 1.3,xlab = "",
+       pch = 19,top=0.1,col="darkgray",cex.axis=1.4)
 
-dev.off()
 
 par(cex.lab=1.5,cex.axis=1.4,mar = c(6,6,6,6))
 boxplot(yi~time,data=gdata,
@@ -831,75 +799,38 @@ for(gene in validated_genes){
   curr_times = rep("0-1h",nrow(gdata))
   curr_times[gdata$time==2] = "2-5h"
   curr_times[gdata$time==3] = ">20h"
+  gdata$training = gsub("endurance","EN",gdata$training)
+  gdata$training = gsub("resistance","RE",gdata$training)
   gdata$V1 = gsub("GE_","",gdata$V1)
   slabels = paste(gdata$V1,gdata$training,curr_times,sep=",")
   analysis1 = all_meta_analysis_res$`acute,muscle`
   analysis1[[gene]][[1]]$mod_p
-  aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
   pdf(paste(gene_name,".pdf"))
-  forest(x = gdata$yi,sei = gdata$sdd,slab = slabels,
-         main=gene_name,annotate = F,cex = 1,xlab = "log2(fchange)",
-         pch = 19)
+  forest(x = gdata$yi,sei = gdata$sdd,slab = slabels,showweights = F,
+         main=gene_name,annotate = F,cex = 1.3,xlab = "",
+         pch = 19,top=0.1,col="darkgray",cex.axis=1.4)
   dev.off()
 }
 
-# RPL24 in acute blood
-gene = "3094"
-gene_name = entrez2symbol[[gene]]
-curr_m = simple_REs$`acute,blood`[[gene]]
-gdata = meta_reg_datasets$`acute,blood`[[gene]]
-curr_m$slab.null = F
-curr_times = rep("0-1h",nrow(gdata))
-curr_times[gdata$time==2] = "2-5h"
-curr_times[gdata$time==3] = ">20h"
-curr_m$slab = paste(gdata$training,curr_times,sep=",")
-analysis1 = all_meta_analysis_res$`acute,blood`
-analysis1[[gene]][[1]]
-aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
-forest(curr_m,main=paste(gene_name),annotate = T)
+# # Other blood genes
+# genes = c("3482","9172","57105","1178","5004","5005")
+# par(mfrow=c(2,2))
+# for(gene in genes[5:6]){
+#   gene_name = entrez2symbol[[gene]]
+#   curr_m = simple_REs$`acute,blood`[[gene]]
+#   gdata = meta_reg_datasets$`acute,blood`[[gene]]
+#   curr_m$slab.null = F
+#   curr_times = rep("0-1h",nrow(gdata))
+#   curr_times[gdata$time==2] = "2-5h"
+#   curr_times[gdata$time==3] = ">20h"
+#   curr_m$slab = paste(gdata$training,curr_times,sep=",")
+#   analysis1 = all_meta_analysis_res$`acute,blood`
+#   analysis1[[gene]][[1]]
+#   aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
+#   forest(curr_m,main=paste(gene_name),annotate = T)
+# }
 
-
-# Other blood genes
-genes = c("3482","9172","57105","1178","5004","5005")
-par(mfrow=c(2,2))
-for(gene in genes[5:6]){
-  gene_name = entrez2symbol[[gene]]
-  curr_m = simple_REs$`acute,blood`[[gene]]
-  gdata = meta_reg_datasets$`acute,blood`[[gene]]
-  curr_m$slab.null = F
-  curr_times = rep("0-1h",nrow(gdata))
-  curr_times[gdata$time==2] = "2-5h"
-  curr_times[gdata$time==3] = ">20h"
-  curr_m$slab = paste(gdata$training,curr_times,sep=",")
-  analysis1 = all_meta_analysis_res$`acute,blood`
-  analysis1[[gene]][[1]]
-  aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
-  forest(curr_m,main=paste(gene_name),annotate = T)
-}
-
-
-#RXRA
-gene = "81848"
-curr_genes[gene]
-gene_name = entrez2symbol[[gene]]
-curr_m = simple_REs$`acute,muscle`[[gene]]
-gdata = meta_reg_datasets$`acute,muscle`[[gene]]
-curr_m$slab.null = F
-curr_times = rep("0-1h",nrow(gdata))
-curr_times[gdata$time==2] = "2-5h"
-curr_times[gdata$time==3] = ">20h"
-curr_m$slab = paste(gdata$training,curr_times,sep=",")
-analysis1 = all_meta_analysis_res$`acute,muscle`
-analysis1[[gene]][[1]]$mod_p
-aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
-dev.off()
-forest(curr_m,main=paste(gene_name," all cohorts"),annotate = T)
-par(mar=c(6,6,6,6))
-boxplot(yi~time,data=gdata,
-        main=paste(gene_name,": by time (aic diff:",format(aic_diff,digits=3),")",sep=""),
-        xlab="Time",names=c("0-1h","2-5h",">20h"),ylab="Fold change")
-
-# COL4A1
+# COL4A1 in longterm muscle
 gene = "1282"
 gene_name = entrez2symbol[[gene]]
 all_meta_analysis_res$`longterm,muscle`[[gene]]
@@ -908,66 +839,69 @@ gdata = gdata[order(gdata$time),]
 curr_times = rep("",nrow(gdata))
 curr_times[gdata$time==2] = ",> 150 days"
 gdata$V1 = gsub("GE_","",gdata$V1)
+gdata$training = gsub("endurance","EN",gdata$training)
+gdata$training = gsub("resistance","RE",gdata$training)
 slabels = paste(gdata$training,curr_times,sep="")
 slabels = paste(gdata$V1,slabels,sep=",")
 analysis1 = all_meta_analysis_res$`acute,muscle`
 pdf(paste(gene_name,".pdf"))
-forest(x = gdata$yi,sei = gdata$sdd,slab = slabels,
-       main=gene_name,annotate = F,cex = 1.1,xlab = "log2(fchange)",
-       pch = 19)
+forest(x = gdata$yi,sei = gdata$sdd,slab = slabels,showweights = F,
+       main=gene_name,annotate = F,cex = 1.3,xlab = "",
+       pch = 19,top=0.1,col="darkgray",cex.axis=1.4)
 dev.off()
 
-# Plots with sex info - longterm muscle
-genes = c("8897","567","50","11217")
-par(mfrow=c(2,2))
-for(gene in genes){
-  gene_name = entrez2symbol[[gene]]
-  curr_m = simple_REs$`longterm,muscle`[[gene]]
-  all_meta_analysis_res$`longterm,muscle`[[gene]]
-  curr_m$I2
-  gdata = meta_reg_datasets$`longterm,muscle`[[gene]]
-  curr_m$slab.null = F
-  curr_times = rep("",nrow(gdata))
-  curr_times[gdata$time==2] = ",> 150 days"
-  curr_m$slab = paste("prop males: ",format(gdata$prop_males,digits=2),sep="")
-  analysis1 = all_meta_analysis_res$`longterm,muscle`
-  aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
-  currmain=paste(gene_name,": by sex (aic diff:",format(aic_diff,digits=3),")",sep="")
-  forest(curr_m,main=currmain,annotate = T)
-}
+# # Plots with sex info - longterm muscle
+# genes = c("8897","567","50","11217")
+# par(mfrow=c(2,2))
+# for(gene in genes){
+#   gene_name = entrez2symbol[[gene]]
+#   curr_m = simple_REs$`longterm,muscle`[[gene]]
+#   all_meta_analysis_res$`longterm,muscle`[[gene]]
+#   curr_m$I2
+#   gdata = meta_reg_datasets$`longterm,muscle`[[gene]]
+#   curr_m$slab.null = F
+#   curr_times = rep("",nrow(gdata))
+#   curr_times[gdata$time==2] = ",> 150 days"
+#   curr_m$slab = paste("prop males: ",format(gdata$prop_males,digits=2),sep="")
+#   analysis1 = all_meta_analysis_res$`longterm,muscle`
+#   aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
+#   currmain=paste(gene_name,": by sex (aic diff:",format(aic_diff,digits=3),")",sep="")
+#   forest(curr_m,main=currmain,annotate = T)
+# }
 
-# Genes in both muscle analyses: DDN, ID3 and PLEKHO1
-genes = c("23109","3399","51177")
-par(mfrow=c(3,1),mar=c(3,0,3,0))
-for(gene in genes){
-  gene_name = entrez2symbol[[gene]]
-  curr_m = simple_REs$`longterm,muscle`[[gene]]
-  all_meta_analysis_res$`longterm,muscle`[[gene]]
-  curr_m$I2
-  gdata = meta_reg_datasets$`longterm,muscle`[[gene]]
-  curr_m$slab.null = F
-  curr_m$slab = paste(gdata$training)
-  analysis1 = all_meta_analysis_res$`longterm,muscle`
-  aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
-  currmain=paste("LT,",gene_name," (aic diff:",format(aic_diff,digits=3),")",sep="")
-  forest(curr_m,main=currmain,annotate = T,addfit = F,showweights = T,top=0,cex=0.7,
-         transf=transf.ztor, digits=3, alim=c(-1,1))
-}
-par(mfrow=c(3,1),mar=c(3,0,3,0))
-for(gene in genes){
-  gene_name = entrez2symbol[[gene]]
-  curr_m = simple_REs$`acute,muscle`[[gene]]
-  all_meta_analysis_res$`acute,muscle`[[gene]]
-  curr_m$I2
-  gdata = meta_reg_datasets$`acute,muscle`[[gene]]
-  curr_m$slab.null = F
-  curr_m$slab = paste(gdata$training)
-  analysis1 = all_meta_analysis_res$`acute,muscle`
-  aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
-  currmain=paste("Acute,",gene_name," (aic diff:",format(aic_diff,digits=3),")",sep="")
-  forest(curr_m,main=currmain,annotate = T,addfit = F,showweights = T,top=0,cex=0.7,
-         transf=transf.ztor, digits=3, alim=c(-1,1))
-}
+# # Genes in both muscle analyses: DDN, ID3 and PLEKHO1
+# genes = c("23109","3399","51177")
+# par(mfrow=c(3,1),mar=c(3,0,3,0))
+# for(gene in genes){
+#   gene_name = entrez2symbol[[gene]]
+#   curr_m = simple_REs$`longterm,muscle`[[gene]]
+#   all_meta_analysis_res$`longterm,muscle`[[gene]]
+#   curr_m$I2
+#   gdata = meta_reg_datasets$`longterm,muscle`[[gene]]
+#   curr_m$slab.null = F
+#   curr_m$slab = paste(gdata$training)
+#   analysis1 = all_meta_analysis_res$`longterm,muscle`
+#   aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
+#   currmain=paste("LT,",gene_name," (aic diff:",format(aic_diff,digits=3),")",sep="")
+#   forest(curr_m,main=currmain,annotate = T,addfit = F,showweights = T,top=0,cex=0.7,
+#          transf=transf.ztor, digits=3, alim=c(-1,1))
+# }
+
+# par(mfrow=c(3,1),mar=c(3,0,3,0))
+# for(gene in genes){
+#   gene_name = entrez2symbol[[gene]]
+#   curr_m = simple_REs$`acute,muscle`[[gene]]
+#   all_meta_analysis_res$`acute,muscle`[[gene]]
+#   curr_m$I2
+#   gdata = meta_reg_datasets$`acute,muscle`[[gene]]
+#   curr_m$slab.null = F
+#   curr_m$slab = paste(gdata$training)
+#   analysis1 = all_meta_analysis_res$`acute,muscle`
+#   aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
+#   currmain=paste("Acute,",gene_name," (aic diff:",format(aic_diff,digits=3),")",sep="")
+#   forest(curr_m,main=currmain,annotate = T,addfit = F,showweights = T,top=0,cex=0.7,
+#          transf=transf.ztor, digits=3, alim=c(-1,1))
+# }
 
 
 ############################################################################
@@ -1029,7 +963,8 @@ process_t_matrix<-function(data,thr1=1,thr2=5){
   data = data[!apply(data==0,1,all),]
   return(data)
 }
-get_num_clusters_wss_kmeans<-function(data,k.max=10,wss_imp_thr=0.7){
+get_num_clusters_wss_kmeans<-function(data,k.max=10,wss_imp_thr=0.7,seed = 1){
+  set.seed(seed)
   for(j in 1:ncol(data)){
     if(sd(data[,j])>0){
       tmp1 = mean(data[,j])
@@ -1151,7 +1086,7 @@ gene_subgroup_enrichments_fdr = go_res_fdr
 table(as.character(gene_subgroup_enrichments_fdr[,1]))
 get_most_sig_enrichments_by_groups(gene_subgroup_enrichments_fdr,num=2)[,c(1,4,8)]
 gene_subgroup_enrichments_fdr[grepl("ossi",gene_subgroup_enrichments_fdr$Term),]
-get_most_sig_enrichments_by_groups(gene_group_enrichments_fdr,num=3)[,1:4]
+# get_most_sig_enrichments_by_groups(gene_group_enrichments_fdr,num=3)[,1:4]
 
 # Other enrichment analyses
 library(ReactomePA)
@@ -1222,14 +1157,19 @@ library(gplots)
 hclust_func<-function(x){return(hclust(x,method = "ward.D2"))}
 # Plot all clusters with enrichments
 # pdf("supp_tables/all_heatmaps.pdf")
-for(set_name in all_enriched_clusters){
-  if(grepl("acute,muscle,time,",set_name)){next}
+dir.create("./supp_tables/")
+for(set_name in names(gene_subgroups)){
+  # if(grepl("acute,muscle,time,",set_name)){next}
   arr = strsplit(set_name,split=",")[[1]]
   table_name = paste(arr[1:2],collapse=",")
   table_name2 = paste(arr[1:3],collapse=",")
   set_genes = gene_subgroups[[set_name]]
+  if(length(set_genes)<3){next}
   mat = gene_t_patterns[[table_name2]][set_genes,]
-  rownames(mat) = unlist(entrez2symbol[rownames(mat)])
+  curr_gene_names = entrez2symbol[rownames(mat)]
+  missing_names = sapply(curr_gene_names, length) == 0
+  curr_gene_names[missing_names] = rownames(mat)[missing_names]
+  rownames(mat) = unlist(curr_gene_names)
   mat = mat[,-ncol(mat)]
   mat[mat>4]=4;mat[mat< -4]=-4
   if(is.null(dim(mat)) || nrow(mat)<2){next}
@@ -1259,12 +1199,14 @@ for(set_name in all_enriched_clusters){
   num_enrichments = min(3,nrow(curr_enrichments))
   curr_enrichments[,2] = format(as.numeric(curr_enrichments[,2]),digits=2)
   curr_enrichments[,1] = sapply(as.character(curr_enrichments[,1]),shorten_by_words)
-  curr_enrichments = curr_enrichments[1:num_enrichments,]
   curr_main = paste(set_name,"\n",sep="")
-  print(dim(curr_enrichments))
-  for(j in 1:nrow(curr_enrichments)){
-    curr_e = paste(curr_enrichments[j,1]," (p=",curr_enrichments[j,2],")",sep="")
-    curr_main = paste(curr_main,curr_e,"\n",sep="")
+  if(num_enrichments > 0){
+    curr_enrichments = curr_enrichments[1:num_enrichments,]
+    print(dim(curr_enrichments))
+    for(j in 1:nrow(curr_enrichments)){
+      curr_e = paste(curr_enrichments[j,1]," (p=",curr_enrichments[j,2],")",sep="")
+      curr_main = paste(curr_main,curr_e,"\n",sep="")
+    }
   }
   curr_main = gsub("\\.\\.\\.","",curr_main)
   cex_genes = 0.4
@@ -1280,17 +1222,7 @@ for(set_name in all_enriched_clusters){
             key.par = list("cex.axis"=1.1),margins = c(10,10))
   dev.off()
 }
-# dev.off()
 
-# Training-specific responses (indep of time)
-
-# # plot the t-stat over all cohorts
-# set_genes = gene_subgroups[[set_name]]
-# mat = mean_effect_matrices[[table_name]][set_genes,]
-# rownames(mat) = unlist(entrez2symbol[rownames(mat)])
-# mat = mat[,apply(mat,2,sd)>0]
-# mat[mat>5]=5;mat[mat< -5]=-5
-# heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 0.8)
 
 # Specifically for longterm muscle base models:
 makeRects <- function(m,lwd=2){
@@ -1305,6 +1237,7 @@ makeRects <- function(m,lwd=2){
 set_name = "longterm,muscle,base_model,2"
 table_name = "longterm,muscle"
 set_genes = gene_subgroups[[set_name]]
+length(set_genes)
 mat = mean_effect_matrices[[table_name]][set_genes,]
 rownames(mat) = unlist(entrez2symbol[rownames(mat)])
 mat = mat[,apply(mat,2,sd)>0]
@@ -1319,14 +1252,9 @@ heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 1.2,
 curr_gos = gene_subgroup_enrichments_fdr[gene_subgroup_enrichments_fdr[,1]==set_name,]
 curr_pathways = reactome_pathways_subgroups_fdr[reactome_pathways_subgroups_fdr[,1]==set_name,]
 
-
-
-# Try another plot: select cluster names and plot all of their patterns
-# along with selected enrichments
-
-
-
+###################################################################
 # The different patterns of acute muscle, time-dependent response
+###################################################################
 pref = "acute,muscle,time,\\d"
 clusters = names(gene_subgroups)[grepl(pref,names(gene_subgroups))]
 par(mfrow=c(2,2),cex.main=1.2)
@@ -1389,64 +1317,64 @@ for(cluster_name in names(m)){
 write.table(mm,file="supp_tables/acute_muscle_time_subgroups.txt",
             sep="\t",col.names = F,row.names = F,quote=F)
 
-pref = "acute,blood,time,\\d"
-clusters = names(gene_subgroups)[grepl(pref,names(gene_subgroups))]
-par(mfrow=c(1,3))
-cols = c("blue","red","green")
-names(cols) = clusters
-for(set_name in sort(clusters)[1:3]){
-  gene_set = gene_subgroups[[set_name]]
-  top_enrichments1 = reactome_pathways_subgroups_fdr[
-    reactome_pathways_subgroups_fdr[,1]==set_name,"Description"]
-  top_enrichments2 = gene_subgroup_enrichments_fdr[
-    gene_subgroup_enrichments_fdr[,1]==set_name,"Term"]
+# pref = "acute,blood,time,\\d"
+# clusters = names(gene_subgroups)[grepl(pref,names(gene_subgroups))]
+# par(mfrow=c(1,3))
+# cols = c("blue","red","green")
+# names(cols) = clusters
+# for(set_name in sort(clusters)[1:3]){
+#   gene_set = gene_subgroups[[set_name]]
+#   top_enrichments1 = reactome_pathways_subgroups_fdr[
+#     reactome_pathways_subgroups_fdr[,1]==set_name,"Description"]
+#   top_enrichments2 = gene_subgroup_enrichments_fdr[
+#     gene_subgroup_enrichments_fdr[,1]==set_name,"Term"]
+# 
+#   # remove embryo enrichments
+#   top_enrichments1 = top_enrichments1[!grepl("embryo",top_enrichments1)]
+#   top_enrichments2 = top_enrichments2[!grepl("embryo",top_enrichments2)]
+# 
+#   enrichment1 = top_enrichments1[1]
+#   if(any(grepl("muscle",top_enrichments1))){
+#     enrichment1 = top_enrichments1[grepl("muscle",top_enrichments1)][1]
+#   }
+#   enrichment2 = top_enrichments2[1]
+#   if(any(grepl("muscle",top_enrichments2))){
+#     enrichment2 = top_enrichments2[grepl("muscle",top_enrichments2)][1]
+#   }
+#   if(length(top_enrichments1)> 1 && (is.na(enrichment2) || length(enrichment2)==0)){
+#     enrichment2 = top_enrichments1[2]
+#   }
+#   if(is.na(enrichment1)){enrichment1 = NULL}
+#   if(is.na(enrichment2)){enrichment2 = NULL}
+#   enrichment1 = shorten_by_words(tolower(enrichment1))
+#   enrichment2 = shorten_by_words(tolower(enrichment2))
+#   new_set_name = paste(set_name," (",length(gene_set)," genes)",sep="")
+#   curr_main = paste(new_set_name,enrichment1,enrichment2,sep="\n")
+#   curr_main = gsub("\n\n","\n",curr_main)
+#   print(curr_main)
+#   mat = gene_t_patterns$`acute,blood,time`[gene_set,]
+#   rownames(mat) = unlist(entrez2symbol[rownames(mat)])
+#   mat = mat[,-ncol(mat)]
+#   plot_with_err_bars(c("0-1h","2-5h",">20h"),arrow_col = cols[set_name],
+#                      colMeans(mat),apply(mat,2,sd),lwd=2,xlab = "Time",
+#                      main=curr_main,ylab = "Mean t-statistic",col=cols[set_name])
+# }
 
-  # remove embryo enrichments
-  top_enrichments1 = top_enrichments1[!grepl("embryo",top_enrichments1)]
-  top_enrichments2 = top_enrichments2[!grepl("embryo",top_enrichments2)]
-
-  enrichment1 = top_enrichments1[1]
-  if(any(grepl("muscle",top_enrichments1))){
-    enrichment1 = top_enrichments1[grepl("muscle",top_enrichments1)][1]
-  }
-  enrichment2 = top_enrichments2[1]
-  if(any(grepl("muscle",top_enrichments2))){
-    enrichment2 = top_enrichments2[grepl("muscle",top_enrichments2)][1]
-  }
-  if(length(top_enrichments1)> 1 && (is.na(enrichment2) || length(enrichment2)==0)){
-    enrichment2 = top_enrichments1[2]
-  }
-  if(is.na(enrichment1)){enrichment1 = NULL}
-  if(is.na(enrichment2)){enrichment2 = NULL}
-  enrichment1 = shorten_by_words(tolower(enrichment1))
-  enrichment2 = shorten_by_words(tolower(enrichment2))
-  new_set_name = paste(set_name," (",length(gene_set)," genes)",sep="")
-  curr_main = paste(new_set_name,enrichment1,enrichment2,sep="\n")
-  curr_main = gsub("\n\n","\n",curr_main)
-  print(curr_main)
-  mat = gene_t_patterns$`acute,blood,time`[gene_set,]
-  rownames(mat) = unlist(entrez2symbol[rownames(mat)])
-  mat = mat[,-ncol(mat)]
-  plot_with_err_bars(c("0-1h","2-5h",">20h"),arrow_col = cols[set_name],
-                     colMeans(mat),apply(mat,2,sd),lwd=2,xlab = "Time",
-                     main=curr_main,ylab = "Mean t-statistic",col=cols[set_name])
-}
-
-# Write input to DREM
-m = gene_t_patterns$`acute,blood,time`[,1:3]
-rownames(m) = entrez2symbol[rownames(m)]
-write.table(m,file="drem/acute_blood_time.txt",
-            sep="\t",col.names = T,row.names = T,quote=F)
-# Write input for cytoscape
-m = gene_subgroups
-m = m[grepl("acute,blood,time,",names(m))]
-mm = c()
-for(cluster_name in names(m)){
-  mm = rbind(mm,
-             cbind(m[[cluster_name]],rep(cluster_name,length(m[[cluster_name]]))))
-}
-write.table(mm,file="supp_tables/acute_blood_time_subgroups.txt",
-            sep="\t",col.names = F,row.names = F,quote=F)
+# # Write input to DREM
+# m = gene_t_patterns$`acute,blood,time`[,1:3]
+# rownames(m) = entrez2symbol[rownames(m)]
+# write.table(m,file="drem/acute_blood_time.txt",
+#             sep="\t",col.names = T,row.names = T,quote=F)
+# # Write input for cytoscape
+# m = gene_subgroups
+# m = m[grepl("acute,blood,time,",names(m))]
+# mm = c()
+# for(cluster_name in names(m)){
+#   mm = rbind(mm,
+#              cbind(m[[cluster_name]],rep(cluster_name,length(m[[cluster_name]]))))
+# }
+# write.table(mm,file="supp_tables/acute_blood_time_subgroups.txt",
+#             sep="\t",col.names = F,row.names = F,quote=F)
 
 ###############################################
 ###############################################
@@ -1501,8 +1429,8 @@ get_assoc_matrix<-function(gdata,ys = c("avg_age","prop_males","N")){
   return(list(rhos=rhos,rhosp=rhosp,lmmp=p,lmmb=betas,r2s=r2s))
 }
 
-par(mfrow=c(3,2))
-for(nn in names(meta_reg_datasets)[1:3]){
+par(mfrow=c(2,2))
+for(nn in names(meta_reg_datasets)[c(1,3)]){
   dataset = meta_reg_datasets[[nn]]
   dataset_sizes = sapply(dataset,nrow)
   selected_dataset = which(dataset_sizes == max(dataset_sizes))[1]
@@ -1528,27 +1456,34 @@ for(nn in names(meta_reg_datasets)[1:3]){
 ###############################################
 ###############################################
 
+load("human_ge_cohort_preprocessed_db_acute.RData")
+acute_datasets = cohort_data
+acute_metadata = cohort_metadata
+acute_sample2time = sample2time
+acute_sample_meta = sample_metadata
+load("human_ge_cohort_preprocessed_db_longterm.RData")
+longterm_datasets = cohort_data
+longterm_metadata = cohort_metadata
+longterm_sample2time = sample2time
+acute_sample2time = sample2time
+longterm_sample_meta = sample_metadata
+
 system(paste("mkdir","supp_tables"))
 supp_path = paste(getwd(),"supp_tables/",sep="/")
-supp_file = paste(supp_path,"SupplementaryTables_v2.xlsx",sep="/")
-library(xlsx)
-options(java.parameters = "-Xmx2g" )
+supp_file = paste(supp_path,"SupplementaryTables.xlsx",sep="/")
+library(readxl)
 
-# 1. Tables presenting the cohorts
+# 1. Tables presenting the cohorts (unnecessarily slow, consider changing this)
 longterm_meta_tmp = c()
 for(gd in longterm_gene_tables){
   longterm_meta_tmp = rbind(longterm_meta_tmp,gd[,1:9])
   longterm_meta_tmp = unique(longterm_meta_tmp)
-  if(length(setdiff(names(longterm_metadata),longterm_meta_tmp[,1]))==0){break}
-  print(setdiff(names(longterm_metadata),longterm_meta_tmp[,1]))
 }
 rownames(longterm_meta_tmp) = longterm_meta_tmp[,1]
 acute_meta_tmp = c()
 for(gd in acute_gene_tables){
   acute_meta_tmp = rbind(acute_meta_tmp,gd[,1:9])
   acute_meta_tmp = unique(acute_meta_tmp)
-  if(length(setdiff(names(acute_metadata),acute_meta_tmp[,1]))==0){break}
-  print(setdiff(names(acute_metadata),acute_meta_tmp[,1]))
 }
 acute_meta_tmp = unique(acute_meta_tmp[,-2])
 rownames(acute_meta_tmp) = acute_meta_tmp[,1]
@@ -1557,7 +1492,7 @@ cohorts_without_time_points = union(setdiff(names(longterm_metadata),longterm_me
 
 metadata_row_for_supp_table<-function(cohort_name,cohort_metadata,
                                       cohort_info,sample2subject){
-  samp2time = cohort_metadata[[nn]]$times
+  samp2time = cohort_metadata[[cohort_name]]$times
   curr_samps = samp2time[cohort_metadata[[cohort_name]]$gsms]
   curr_samps = curr_samps[!is.na(curr_samps)]
   Nsample = length(curr_samps)
@@ -1609,6 +1544,8 @@ for(nn in supp_table_1_all_cohorts[,1]){
 supp_table_1_all_cohorts = cbind(supp_table_1_all_cohorts,meta_analysis_group)
 colnames(supp_table_1_all_cohorts)[1]="Cohort_ID"
 write.xlsx(supp_table_1_all_cohorts,file=supp_file,sheetName = "STable1",row.names = F)
+write.table(supp_table_1_all_cohorts,file=paste(supp_path,"STable1.txt",sep="")
+            ,row.names = F,quote=F,sep="\t")
 length(unique(supp_table_1_all_cohorts[
   supp_table_1_all_cohorts[,ncol(supp_table_1_all_cohorts)]!="","GSE"]))
 
@@ -1629,6 +1566,8 @@ for(nn in names(analysis2selected_genes_stats)){
 }
 rownames(supp_table_genes)=NULL
 write.xlsx(supp_table_genes,file=supp_file,sheetName = "STable2",row.names = F,append = T)
+write.table(supp_table_genes,file=paste(supp_path,"STable2.txt",sep="")
+            ,row.names = F,quote=F,sep="\t")
 
 sheet_counter=3
 sapply(bipartite_graphs,function(x)unique(x[,3]))
@@ -1641,9 +1580,9 @@ for(nn in names(bipartite_graphs)){
   m[,3] = gsub(m[,3],pattern="trainingresistance",replacement = "Training-RE")
   m[,3] = gsub(m[,3],pattern="intrcpt",replacement = "b0")
   colnames(m) = c("Entrez","Symbol","Group","Effect","-log_P")
-  write.xlsx(m,file=supp_file,
-               sheetName = paste("STable",sheet_counter,"_",nn,sep=""),
-               row.names = F,append = T,col.names = T)
+  # write.xlsx(m,file=supp_file,
+  #              sheetName = paste("STable",sheet_counter,"_",nn,sep=""),
+  #              row.names = F,append = T,col.names = T)
   write.table(m,sep="\t",
              file = paste("supp_tables/STable",sheet_counter,"_",nn,".txt",sep=""),
              row.names = F,col.names = T,quote=F)
@@ -1658,6 +1597,9 @@ colnames(supp_table_enrichments)[1] = "Discovered in"
 write.xlsx(supp_table_enrichments,file=supp_file,
            sheetName = paste("STable",sheet_counter,"_GO_enrichments",sep=""),
            row.names = F,append=T)
+write.table(supp_table_enrichments,file=paste(supp_path,"STable7.txt",sep="")
+            ,row.names = F,quote=F,sep="\t")
+
 
 # Same for Reactome
 sheet_counter = sheet_counter+1
@@ -1667,6 +1609,8 @@ colnames(supp_table_enrichments)[1] = "Discovered in"
 write.xlsx(supp_table_enrichments,file=supp_file,
            sheetName = paste("STable",sheet_counter,"_Reactome_enrichments",sep=""),
            row.names = F,append=T)
+write.table(supp_table_enrichments,file=paste(supp_path,"STable8.txt",sep="")
+            ,row.names = F,quote=F,sep="\t")
 
 # save the workspace
 save.image(file=paste(out_dir,"meta_analysis_interpretation_results.RData",sep=""))

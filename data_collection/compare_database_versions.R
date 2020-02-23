@@ -71,12 +71,12 @@ a1 = meta_reg_datasets$`acute,muscle`
 length(setdiff(names(a1),names(a2)))==0
 length(setdiff(names(a2),names(a1)))==0
 shared_a = intersect(names(a1),names(a2))
-for(gene in sample(shared_a)[1:3000]){
+for(gene in sample(shared_a)[1:1000]){
   print (gene)
   m1 = a1[[gene]]
   m2 = a2[[gene]]
   stopifnot(all(dim(m1)==dim(m2)))
-  setdiff(m2$gse,m1$gse)
+  stopifnot(length(setdiff(m2$gse,m1$gse))==0)
   for(j in c(2,6:ncol(m1))){
     m1[[j]] = as.numeric(m1[[j]])
     m1[[j]] = round(m1[[j]],digits = 6)
@@ -96,4 +96,5 @@ for(gene in sample(shared_a)[1:3000]){
   stopifnot(all(is.na(m1[is.na(m2)])))
   stopifnot(all(is.na(m2[is.na(m1)])))
 }
+
 
