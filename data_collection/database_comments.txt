@@ -1,0 +1,3 @@
+Database comments:
+1. Datasets "GE_L_34" "GE_L_30" "GE_L_25" came from platform with less gene coverage than other datasets and were not used for sex imputation even though they had NAs
+2. 

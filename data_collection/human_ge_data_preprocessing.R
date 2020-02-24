@@ -747,11 +747,11 @@ save(all_genes,low_coverage_platforms,file=GENE_FILTER_ANALYSIS)
 load(GENE_FILTER_ANALYSIS)
 stats_matrix = c()
 load(OUT_FILE_LONGTERM)
-# load("longterm_tmp1.RData")
 ge_matrices1 = lapply(cohort_data,function(x)x$gene_data)
 gses1 = sapply(cohort_metadata, function(x)x$gse)
 tissue1 = sapply(cohort_metadata, function(x)x$tissue)
 sex1 = sample2sex
+table(is.na(sample2sex))
 for(nn in names(cohort_metadata)){
   stats_matrix = rbind(stats_matrix,c(nn,ncol(cohort_data[[nn]]$gene_data),cohort_metadata[[nn]]$tissue))
 }
@@ -762,6 +762,7 @@ ge_matrices2 = lapply(cohort_data,function(x)x$gene_data)
 gses2 = sapply(cohort_metadata, function(x)x$gse)
 tissue2 = sapply(cohort_metadata, function(x)x$tissue)
 sex2 = sample2sex
+table(is.na(sample2sex))
 acute_gsms = unique(unlist(sapply(ge_matrices2,colnames)))
 for(nn in names(cohort_metadata)){
   stats_matrix = rbind(stats_matrix,c(nn,ncol(cohort_data[[nn]]$gene_data),cohort_metadata[[nn]]$tissue))
@@ -785,9 +786,25 @@ sex1[names(sex2)] = sex2
 y=sex1
 table(y)
 
+# get the Y chromosome genes
+library(GenomicRanges)
+library(Homo.sapiens)
+library(DESeq2)
+geneRanges <- function(db=Homo.sapiens, column="ENTREZID"){
+  g <- genes(db, columns=column)
+  col <- mcols(g)[[column]]
+  genes <- granges(g)[rep(seq_along(g), elementNROWS(col))]
+  mcols(genes)[[column]] <- as.character(unlist(col))
+  genes
+}
+entrez_gr = geneRanges(Homo.sapiens, column="ENTREZID")
+entrez_gr = as.data.frame(entrez_gr)
+selected_genes = entrez_gr[entrez_gr$seqnames=="chrY" | entrez_gr$seqnames=="chrX","ENTREZID"]
+
 # Merge the gene expression profiles
 x = c(); z = c(); y2=c()
-for(nn in setdiff(names(ge_matrices1),low_coverage_platforms)){
+# for(nn in setdiff(names(ge_matrices1),low_coverage_platforms)){
+for(nn in names(ge_matrices1)){
   currx = ge_matrices1[[nn]][all_genes,]
   x = cbind(x,currx)
   currz = rep(gses1[nn],ncol(currx))
@@ -808,20 +825,6 @@ table(y2[longterm_gsms])
 # Define the set of samples with missing sex information
 missing_set = is.na(y)
 table(missing_set)
-
-library(GenomicRanges)
-library(Homo.sapiens)
-library(DESeq2)
-geneRanges <- function(db=Homo.sapiens, column="ENTREZID"){
-  g <- genes(db, columns=column)
-  col <- mcols(g)[[column]]
-  genes <- granges(g)[rep(seq_along(g), elementNROWS(col))]
-  mcols(genes)[[column]] <- as.character(unlist(col))
-  genes
-}
-entrez_gr = geneRanges(Homo.sapiens, column="ENTREZID")
-entrez_gr = as.data.frame(entrez_gr)
-selected_genes = entrez_gr[entrez_gr$seqnames=="chrY" | entrez_gr$seqnames=="chrX","ENTREZID"]
 
 # # normalize x using rank transform
 # quntx = normalizeQuantiles(x)
@@ -879,7 +882,7 @@ te = newx_sex[,missing_set]
 preds = predict(svm_model,t(te))
 table(preds)
 
-# save(tr,svm_model,te,lso_res_newx_sex,newx_sex,missing_set,y,inds,file="sex_imputation_experiment.RData")
+save(tr,svm_model,te,lso_res_newx_sex,newx_sex,missing_set,y,inds,file="sex_imputation_experiment.RData")
 
 load(OUT_FILE_ACUTE)
 inds = intersect(names(preds),names(sample2sex))
