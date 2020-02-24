@@ -260,6 +260,10 @@ reactome_pathways_by_cov_fdr[,1] = as.character(reactome_pathways_by_cov_fdr[,1]
 
 save(gs,bg,go_enrichments_by_cov_fdr,reactome_pathways_by_cov_fdr,
      file = paste(out_dir_rdata,"covariate_sets_enrichments.RData",sep=""))
+table(as.character(go_enrichments_by_cov_fdr[,1]))
+table(as.character(reactome_pathways_by_cov_fdr[,1]))
+reactome_pathways_by_cov_fdr[grepl("blood",reactome_pathways_by_cov_fdr[,1]),]
+go_enrichments_by_cov_fdr[grepl("blood",go_enrichments_by_cov_fdr[,1]),]
 
 ############################################################################
 ############################################################################
@@ -352,7 +356,8 @@ get_most_sig_enrichments_by_groups(gene_group_enrichments_fdr,num=5)[,1:4]
 
 save(gs,bg,gene_group_enrichments_fdr,
      file = paste(out_dir_rdata,"large_gene_sets_enrichments.RData",sep=""))
-
+table(as.character(gene_group_enrichments_fdr[,1]))
+gene_group_enrichments_fdr[grepl("blood",gene_group_enrichments_fdr[,1]),]
 
 ############################################################################
 ############################################################################
@@ -749,6 +754,10 @@ reactome_pathways_subgroups_fdr[,1] = as.character(reactome_pathways_subgroups_f
 save(gs,bg,gene_subgroup_enrichments_fdr,
      reactome_pathways_subgroups_fdr,
      file = paste(out_dir_rdata,"gene_subgroups_enrichments.RData",sep=""))
+table(as.character(gene_subgroup_enrichments_fdr[,1]))
+gene_subgroup_enrichments_fdr[grepl("blood",gene_subgroup_enrichments_fdr[,1]),]
+table(as.character(reactome_pathways_subgroups_fdr[,1]))
+reactome_pathways_subgroups_fdr[grepl("blood",reactome_pathways_subgroups_fdr[,1]),]
 
 # We want to examine which clusters to analyze, sort by number of enrichments
 enriched_clusters_go = sort(table(as.character(gene_subgroup_enrichments_fdr$setname)))
@@ -997,7 +1006,7 @@ for(cluster_name in names(m)){
   mm = rbind(mm,
              cbind(m[[cluster_name]],rep(cluster_name,length(m[[cluster_name]]))))
 }
-write.table(mm,file="supp_tables/acute_muscle_time_subgroups.txt",
+write.table(mm,file=paste(out_dir_figs,"acute_muscle_time_subgroups.txt",sep=""),
             sep="\t",col.names = F,row.names = F,quote=F)
 
 # pref = "acute,blood,time,\\d"
@@ -1152,6 +1161,7 @@ longterm_metadata = cohort_metadata
 longterm_sample2time = sample2time
 acute_sample2time = sample2time
 longterm_sample_meta = sample_metadata
+load("human_ge_cohort_preprocessed_db_gene_tables.RData")
 
 system(paste("mkdir","supp_tables"))
 supp_path = paste(getwd(),"supp_tables/",sep="/")
@@ -1228,7 +1238,7 @@ for(nn in supp_table_1_all_cohorts[,1]){
 }
 supp_table_1_all_cohorts = cbind(supp_table_1_all_cohorts,meta_analysis_group)
 colnames(supp_table_1_all_cohorts)[1]="Cohort_ID"
-write.xlsx(supp_table_1_all_cohorts,file=supp_file,sheetName = "STable1",row.names = F)
+# write.xlsx(supp_table_1_all_cohorts,file=supp_file,sheetName = "STable1",row.names = F)
 write.table(supp_table_1_all_cohorts,file=paste(supp_path,"STable1.txt",sep="")
             ,row.names = F,quote=F,sep="\t")
 length(unique(supp_table_1_all_cohorts[
@@ -1250,7 +1260,7 @@ for(nn in names(analysis2selected_genes_stats)){
   supp_table_genes = rbind(supp_table_genes,m)
 }
 rownames(supp_table_genes)=NULL
-write.xlsx(supp_table_genes,file=supp_file,sheetName = "STable2",row.names = F,append = T)
+# write.xlsx(supp_table_genes,file=supp_file,sheetName = "STable2",row.names = F,append = T)
 write.table(supp_table_genes,file=paste(supp_path,"STable2.txt",sep="")
             ,row.names = F,quote=F,sep="\t")
 
@@ -1279,9 +1289,9 @@ supp_table_enrichments = gene_subgroup_enrichments_fdr[,c(1:4,9:10,8)]
 colnames(supp_table_enrichments)[6] = "q-value"
 colnames(supp_table_enrichments)[5] = "Genes"
 colnames(supp_table_enrichments)[1] = "Discovered in"
-write.xlsx(supp_table_enrichments,file=supp_file,
-           sheetName = paste("STable",sheet_counter,"_GO_enrichments",sep=""),
-           row.names = F,append=T)
+# write.xlsx(supp_table_enrichments,file=supp_file,
+#            sheetName = paste("STable",sheet_counter,"_GO_enrichments",sep=""),
+#            row.names = F,append=T)
 write.table(supp_table_enrichments,file=paste(supp_path,"STable7.txt",sep="")
             ,row.names = F,quote=F,sep="\t")
 
@@ -1291,9 +1301,9 @@ sheet_counter = sheet_counter+1
 supp_table_enrichments = reactome_pathways_subgroups_fdr[,c(1,3,8,9,6)]
 colnames(supp_table_enrichments)[3] = "q-value"
 colnames(supp_table_enrichments)[1] = "Discovered in"
-write.xlsx(supp_table_enrichments,file=supp_file,
-           sheetName = paste("STable",sheet_counter,"_Reactome_enrichments",sep=""),
-           row.names = F,append=T)
+# write.xlsx(supp_table_enrichments,file=supp_file,
+#            sheetName = paste("STable",sheet_counter,"_Reactome_enrichments",sep=""),
+#            row.names = F,append=T)
 write.table(supp_table_enrichments,file=paste(supp_path,"STable8.txt",sep="")
             ,row.names = F,quote=F,sep="\t")
 
