@@ -756,8 +756,10 @@ save(gs,bg,gene_subgroup_enrichments_fdr,
      file = paste(out_dir_rdata,"gene_subgroups_enrichments.RData",sep=""))
 table(as.character(gene_subgroup_enrichments_fdr[,1]))
 gene_subgroup_enrichments_fdr[grepl("blood",gene_subgroup_enrichments_fdr[,1]),]
+gene_subgroup_enrichments_fdr[grepl("avg_age",gene_subgroup_enrichments_fdr[,1]),]
 table(as.character(reactome_pathways_subgroups_fdr[,1]))
 reactome_pathways_subgroups_fdr[grepl("blood",reactome_pathways_subgroups_fdr[,1]),]
+reactome_pathways_subgroups_fdr[grepl("avg_age",reactome_pathways_subgroups_fdr[,1]),]
 
 # We want to examine which clusters to analyze, sort by number of enrichments
 enriched_clusters_go = sort(table(as.character(gene_subgroup_enrichments_fdr$setname)))
@@ -951,7 +953,7 @@ names(cols) = clusters
 
 pdf(paste(out_dir_figs,"Figure3A.pdf"))
 par(mfrow=c(2,2),cex.main=1.2)
-for(set_name in sort(clusters)){
+for(set_name in sort(clusters)[c(3,1,4,2)]){
   gene_set = gene_subgroups[[set_name]]
   top_enrichments1 = reactome_pathways_subgroups_fdr[
     reactome_pathways_subgroups_fdr[,1]==set_name,"Description"]
@@ -985,6 +987,7 @@ for(set_name in sort(clusters)){
   print(paste(set_name,is.element("10891",set=rownames(mat))))
   rownames(mat) = unlist(entrez2symbol[rownames(mat)])
   mat = mat[,-ncol(mat)]
+  curr_main = "" # consider keeping the main instead
   plot_with_err_bars(c("0-1h","2-5h",">20h"),
                      colMeans(mat),apply(mat,2,sd),col=cols[set_name],lwd=3,
                      main=curr_main,ylab = "Mean t-statistic",xlab="Time",cex.main=1.1,
@@ -1168,25 +1171,26 @@ supp_path = paste(getwd(),"supp_tables/",sep="/")
 supp_file = paste(supp_path,"SupplementaryTables.xlsx",sep="/")
 library(readxl)
 
-# 1. Tables presenting the cohorts (unnecessarily slow, consider changing this)
-longterm_meta_tmp = c()
-for(gd in longterm_gene_tables){
-  longterm_meta_tmp = rbind(longterm_meta_tmp,gd[,1:9])
-  longterm_meta_tmp = unique(longterm_meta_tmp)
+# Parse the information from the datasets used in the meta-analysis
+meta_reg_datasets_cohort_names = 
+  lapply(meta_reg_datasets,function(x)unique(unlist(lapply(x,function(y)y$V1))))
+untrained_datasets_cohort_names = 
+  lapply(untrained_datasets,function(x)unique(unlist(lapply(x,function(y)y$V1))))
+
+
+get_gene_table_with_cohort_info<-function(cohort_name,gtables){
+  for(g in gtables){
+    if(cohort_name %in% g[,1]){
+      v = g[which(g[,1]==cohort_name)[1],]
+      names(v) = colnames(g)
+      return((v))
+    }
+  }
+  return(NULL)
 }
-rownames(longterm_meta_tmp) = longterm_meta_tmp[,1]
-acute_meta_tmp = c()
-for(gd in acute_gene_tables){
-  acute_meta_tmp = rbind(acute_meta_tmp,gd[,1:9])
-  acute_meta_tmp = unique(acute_meta_tmp)
-}
-acute_meta_tmp = unique(acute_meta_tmp[,-2])
-rownames(acute_meta_tmp) = acute_meta_tmp[,1]
-cohorts_without_time_points = union(setdiff(names(longterm_metadata),longterm_meta_tmp[,1]),
-                                    setdiff(names(acute_metadata),acute_meta_tmp[,1]))
 
 metadata_row_for_supp_table<-function(cohort_name,cohort_metadata,
-                                      cohort_info,sample2subject){
+                                      gtable_row,sample2subject){
   samp2time = cohort_metadata[[cohort_name]]$times
   curr_samps = samp2time[cohort_metadata[[cohort_name]]$gsms]
   curr_samps = curr_samps[!is.na(curr_samps)]
@@ -1194,50 +1198,81 @@ metadata_row_for_supp_table<-function(cohort_name,cohort_metadata,
   curr_samps[curr_samps==min(samp2time)]="Pre"
   Nsubject=length(unique(sample2subject[cohort_metadata[[cohort_name]]$gsms]))
   tps = paste(unique(curr_samps),collapse=",")
-  res = c(cohort_name,"GSE"=cohort_metadata[[cohort_name]]$gse,
-          "Tissue"=cohort_metadata[[cohort_name]]$tissue,
-          "Training"=cohort_metadata[[cohort_name]]$training,
-          "Nsample"=Nsample,"Nsubject"=Nsubject,
-          "Time_points"=tps,"Avg_age"=cohort_info[cohort_name,"avg_age"],
-          "Prop_males"=cohort_info[cohort_name,"prop_males"],
-          "Additional Info"=cohort_metadata[[cohort_name]]$additional_info)
+  res = c(cohort_name,"GSE"= cohort_metadata[[cohort_name]]$gse,
+          "Tissue" = cohort_metadata[[cohort_name]]$tissue,
+          "Training"= cohort_metadata[[cohort_name]]$training,
+          "Nsample"= Nsample,"Nsubject" = Nsubject,
+          "Time_points"= tps,
+          "Avg_age"= as.numeric(gtable_row["avg_age"]),
+          "Prop_males" = as.numeric(gtable_row["prop_males"]),
+          "Additional Info" = cohort_metadata[[cohort_name]]$additional_info)
   return(res)
 }
 m1 = c()
+# Add the meta-anaysis used cohorts
+for(analysis_name in names(meta_reg_datasets_cohort_names)){
+  curr_metadata = acute_metadata
+  curr_sample_meta = acute_sample_meta
+  if(grepl("longterm",analysis_name)){
+    curr_metadata = longterm_metadata
+    curr_sample_meta = longterm_sample_meta
+  }
+  for(cohort_name in meta_reg_datasets_cohort_names[[analysis_name]]){
+    curr_gtable_row = get_gene_table_with_cohort_info(
+      cohort_name,meta_reg_datasets[[analysis_name]]) 
+    curr_info = metadata_row_for_supp_table(
+      cohort_name,curr_metadata,curr_gtable_row,curr_sample_meta$subject)
+    curr_info["Analysis_group"] = analysis_name
+    names(curr_info)[1] = "Cohort_ID"
+    m1 = rbind(m1,curr_info)
+  }
+}
+# add the untrained cohorts
+for(analysis_name in names(untrained_datasets_cohort_names)){
+  curr_metadata = acute_metadata
+  curr_sample_meta = acute_sample_meta
+  if(grepl("longterm",analysis_name)){
+    curr_metadata = longterm_metadata
+    curr_sample_meta = longterm_sample_meta
+  }
+  for(cohort_name in untrained_datasets_cohort_names[[analysis_name]]){
+    curr_gtable_row = get_gene_table_with_cohort_info(
+      cohort_name,untrained_datasets[[analysis_name]]) 
+    curr_info = metadata_row_for_supp_table(
+      cohort_name,curr_metadata,curr_gtable_row,curr_sample_meta$subject)
+    curr_info["Analysis_group"] = paste(analysis_name,"untrained",sep=",")
+    names(curr_info)[1] = "Cohort_ID"
+    m1 = rbind(m1,curr_info)
+  }
+}
+# add the unused datasets
 for(nn in names(acute_metadata)){
+  if(nn %in% m1[,1]){next}
+  curr_gtable_row = get_gene_table_with_cohort_info(nn,acute_gene_tables) 
+  if(is.null(curr_gtable_row)){
+    curr_gtable_row = c("avg_age" = NA, "prop_males" = NA)
+  }
   curr_info = metadata_row_for_supp_table(
-    nn,acute_metadata,acute_meta_tmp,acute_sample_meta$subject)
+    nn,acute_metadata,curr_gtable_row,acute_sample_meta$subject)
+  curr_info["Analysis_group"] = "Not used in meta-analysis"
+  names(curr_info)[1] = "Cohort_ID"
   m1 = rbind(m1,curr_info)
 }
+
 for(nn in names(longterm_datasets)){
+  if(nn %in% m1[,1]){next}
+  curr_gtable_row = get_gene_table_with_cohort_info(nn,longterm_gene_tables) 
+  if(is.null(curr_gtable_row)){
+    curr_gtable_row = c("avg_age" = NA, "prop_males" = NA)
+  }
   curr_info = metadata_row_for_supp_table(
-    nn,longterm_metadata,longterm_meta_tmp,longterm_sample_meta$subject)
+    nn,longterm_metadata,curr_gtable_row,longterm_sample_meta$subject)
+  curr_info["Analysis_group"] = "Not used in meta-analysis"
+  names(curr_info)[1] = "Cohort_ID"
   m1 = rbind(m1,curr_info)
 }
+
 supp_table_1_all_cohorts = m1
-meta_analysis_group=c()
-for(nn in supp_table_1_all_cohorts[,1]){
-  currg = ""
-  if(is.element(nn,longterm_meta_tmp$V1)){
-    ind = which(nn==longterm_meta_tmp$V1)[1]
-    currg = paste("longterm",longterm_meta_tmp$tissue[ind],sep=",")
-    if(!grepl("endur",longterm_meta_tmp$training[ind]) &&
-       !grepl("resis",longterm_meta_tmp$training[ind])){
-      currg = paste("untrained,",currg,sep="")
-    }
-  }
-  if(is.element(nn,acute_meta_tmp$V1)){
-    ind = which(nn==acute_meta_tmp$V1)[1]
-    currg = paste("acute",acute_meta_tmp$tissue[ind],sep=",")
-    if(!grepl("endur",acute_meta_tmp$training[ind]) &&
-       !grepl("resis",acute_meta_tmp$training[ind])){
-      currg = paste("untrained,",currg,sep="")
-    }
-  }
-  meta_analysis_group[nn]=currg
-}
-supp_table_1_all_cohorts = cbind(supp_table_1_all_cohorts,meta_analysis_group)
-colnames(supp_table_1_all_cohorts)[1]="Cohort_ID"
 # write.xlsx(supp_table_1_all_cohorts,file=supp_file,sheetName = "STable1",row.names = F)
 write.table(supp_table_1_all_cohorts,file=paste(supp_path,"STable1.txt",sep="")
             ,row.names = F,quote=F,sep="\t")
