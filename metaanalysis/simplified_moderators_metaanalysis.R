@@ -1,6 +1,8 @@
 library(org.Hs.eg.db);library(metafor)
 source('~/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions.R')
 entrez2symbol = as.list(org.Hs.egSYMBOL)
+symbol2entrez = as.list(org.Hs.egSYMBOL2EG)
+table(sapply(symbol2entrez,length))
 
 # setwd('~/Desktop/MoTrPAC/project_release_feb_2018/data/')
 out_dir = "~/Desktop/MoTrPAC/project_release_feb_2018/revision_feb_2020/"
@@ -144,6 +146,22 @@ intersect(analysis2selected_genes_stats[[3]][,2],analysis2selected_genes_stats[[
 intersect(analysis2selected_genes_stats[[3]][,2],analysis2selected_genes_stats[[4]][,2])
 
 # Add GSEA enrichments: use the inferred beta values
+library(data.table)
+gtex_mean_tpm = fread("./GTEx_Analysis_2017-06-05_v8_RNASeQCv1.1.9_gene_median_tpm.gct",
+                      skip=2,sep="\t",data.table = F,stringsAsFactors = F)
+gtex_entrez = symbol2entrez[gtex_mean_tpm[,2]]
+inds = sapply(gtex_entrez,length)>1
+gtex_entrez[inds] = sapply(gtex_entrez[inds],function(x)x[1])
+gtex_entrez = unlist(gtex_entrez)
+gtex_mean_tpm = gtex_mean_tpm[gtex_mean_tpm[,2] %in% names(gtex_entrez),]
+gtex_mean_tpm[,1] = gtex_entrez[gtex_mean_tpm[,2]]
+colSums(gtex_mean_tpm > 5 )
+colnames(gtex_mean_tpm)[grepl("blood",colnames(gtex_mean_tpm),ignore.case = T)]
+colnames(gtex_mean_tpm)[grepl("musc",colnames(gtex_mean_tpm),ignore.case = T)]
+blood_gtex_genes = gtex_mean_tpm[gtex_mean_tpm[, "Whole Blood"] > 1,1]
+muscle_gtex_genes = gtex_mean_tpm[gtex_mean_tpm[, "Muscle - Skeletal"] > 1,1]
+length(blood_gtex_genes)
+length(muscle_gtex_genes)
 
 gsea_input_scores = list()
 for(nn in names(simple_RE_beta)){
@@ -151,10 +169,18 @@ for(nn in names(simple_RE_beta)){
   curri2 = simple_RE_I2s[[nn]]
   curri2 = curri2/100
   currps = simple_RE_pvals[[nn]]
-  r_currbeta = sign(currbetas) * rank(abs(currbetas))
-  r_curri2 = sign(currbetas) * rank(1-curri2)
+  r_currbeta = rank(currbetas)
+  r_curri2 =  rank(sign(currbetas)*curri2)
   gsea_input_scores[[nn]] = cbind(currbetas,curri2,r_currbeta,r_curri2)
+  if(grepl("muscle",nn)){
+    inds = names(currbetas) %in% muscle_gtex_genes
+  }
+  else{
+    inds = names(currbetas) %in% blood_gtex_genes
+  }
+  gsea_input_scores[[nn]] = gsea_input_scores[[nn]][inds,]
 }
+sapply(gsea_input_scores,dim)
 
 # # redo the lonterm muscle analysis without the overlap with the acute analysis
 # remove_by_gse<-function(gtable,gses){
@@ -173,15 +199,18 @@ simple_re_longterm_reduced_i2 =
 gsea_input_scores[["longterm_overlap_removed"]] = cbind(
   simple_re_longterm_reduced_beta,
   simple_re_longterm_reduced_i2,
-  sign(simple_re_longterm_reduced_beta) * rank(simple_re_longterm_reduced_beta),
-  sign(simple_re_longterm_reduced_beta) * rank(simple_re_longterm_reduced_i2)
+  rank(simple_re_longterm_reduced_beta),
+  rank(sign(simple_re_longterm_reduced_beta)*simple_re_longterm_reduced_i2)
 )
+inds = names(simple_re_longterm_reduced_beta) %in% muscle_gtex_genes
+gsea_input_scores[["longterm_overlap_removed"]] = gsea_input_scores[["longterm_overlap_removed"]][inds,]
+sapply(gsea_input_scores,dim)
 
 library(fgsea)
 gsea_reactome_results = list()
 for(nn in names(gsea_input_scores)){
   # beta GSEA
-  currscores = gsea_input_scores[[nn]][,3]
+  currscores = gsea_input_scores[[nn]][,1]
   currscores = na.omit(currscores)
   currscores = sample(currscores)
   pathways = reactomePathways(names(currscores))
@@ -196,7 +225,7 @@ for(nn in names(gsea_input_scores)){
   currscores = na.omit(currscores)
   currscores = sample(currscores)
   pathways = reactomePathways(names(currscores))
-  pathways = pathways[sapply(pathways,length)>10]
+  pathways = pathways[sapply(pathways,length)>20]
   pathways = pathways[sapply(pathways,length)<200]
   all_p_genes = unique(unlist(pathways))
   fgsea_res = fgsea(pathways,currscores[all_p_genes],nperm=50000)
@@ -204,14 +233,13 @@ for(nn in names(gsea_input_scores)){
   gsea_reactome_results[[paste("I2",nn,sep="_")]] = fgsea_res
 }
 
-
 all_gsea_ps = unlist(sapply(gsea_reactome_results,function(x)x$pval))
 hist(all_gsea_ps)
 fdr_BY_thr = max(all_gsea_ps[p.adjust(all_gsea_ps,method="BY") < 0.1],na.rm=T)
 gsea_reactome_results_fdr = lapply(gsea_reactome_results,
                                function(x)x[x$pval<fdr_BY_thr,])
 sapply(gsea_reactome_results_fdr,nrow)
-lapply(gsea_reactome_results_fdr,function(x)x[1:3,1:5])
+lapply(gsea_reactome_results_fdr,function(x)x[1:3,c(1,3,5,7)])
 
 save(gsea_reactome_results,gsea_reactome_results_fdr,gsea_input_scores,
      file = paste(out_dir_rdata,"gsea_reactome_results.RData",sep=""))
@@ -241,27 +269,47 @@ num_pathways = 6
 library(gridExtra)
 library(grid)
 for(nn in names(gsea_input_scores)){
-  currscores = gsea_input_scores[[nn]][,3]
+  currscores = gsea_input_scores[[nn]][,1]
   currscores = na.omit(currscores)
   currscores = sample(currscores)
   curr_res = gsea_reactome_results[[paste("beta",nn,sep="_")]]
   inds1 = which(curr_res[["NES"]]>0)
   inds2 = which(curr_res[["NES"]]<0)
-  curr_selected_pathways = as.data.frame(curr_res[,1])[
-    c(inds1[1:(num_pathways/2)],inds2[1:(num_pathways/2)]),1]
+  inds = c(inds1[1:(num_pathways/2)],inds2[1:(num_pathways/2)])
+  curr_selected_pathways = as.data.frame(curr_res[,1])[inds,1]
   pathways = reactomePathways(names(currscores))
   all_p_genes = unique(unlist(pathways))
   curr_f_name = paste0(out_dir_figs,"gsea_top6_",gsub(",","_",nn),".pdf")
   pdf(curr_f_name)
   currpathways = pathways[curr_selected_pathways]
   curr_res = as.data.frame(curr_res)
+  dev.off()
   pl = plotGseaTable(currpathways,
                 currscores[all_p_genes],curr_res,gseaParam=0.5,
                 colwidths = c(5, 3, 0.8, 0, 1.2),render=T)
   dev.off()
-  write.table(t(t(names(currpathways))),row.names = F,
-              col.names = F,quote=F)
+  write.table(as.matrix(curr_res[inds,c(1,5,3)]),row.names = F,
+              col.names = F,quote=F,sep="\t")
 }
+
+# venn diagrams for the pathway overlap
+library(gplots)
+library(VennDiagram)
+l = lapply(gsea_reactome_results_fdr[c(1,3,9,7)],function(x)x[[1]])
+names(l) = c("acute,muscle","acute,blood","long-term,muscle","long-term,blood")
+venn(l)
+pdf(paste0(out_dir_figs,"gsea_venn.pdf"))
+dev.off()
+vp = venn.diagram(l,filename = NULL,fill = 2:5, alpha = 0.3)
+grid.draw(vp)
+dev.off()
+intersect_all = l[[1]]
+for(ll in l){
+  intersect_all = intersect(intersect_all,ll)
+}
+write.table(t(t(intersect_all)),quote=F,row.names = F)
+muscle_intersect = intersect(l$`acute,muscle`,l$`long-term,muscle`)
+write.table(t(t(muscle_intersect)),quote=F,row.names = F)
 
 ############################################################################
 ############################################################################
