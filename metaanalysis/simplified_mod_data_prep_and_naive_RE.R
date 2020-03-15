@@ -12,12 +12,14 @@ acute_datasets = cohort_data
 acute_metadata = cohort_metadata
 acute_sample2time = sample2time
 acute_sample_meta = sample_metadata
+sample2sex_a = sample2sex
 load("human_ge_cohort_preprocessed_db_longterm.RData")
 longterm_datasets = cohort_data
 longterm_metadata = cohort_metadata
 longterm_sample2time = sample2time
 acute_sample2time = sample2time
 longterm_sample_meta = sample_metadata
+sample2sex_l = sample2sex
 load("human_ge_cohort_preprocessed_db_gene_tables.RData")
 
 # set the output dir for RData files
@@ -33,9 +35,12 @@ try(dir.create(out_dir_figs))
 # Get some stats for the main paper
 
 # GSM-based table: subjects, tissues, sex
+gses_to_remove = c("GSE8668","GSE18966","GSE83578","GSE28498","GSE41914","GSE43856","GSE51835")
 complete_sample_table = c()
 complete_sample_table_excluded_from_meta_analysis = c()
 for(ac in names(acute_metadata)){
+  if(acute_metadata[[ac]]$gse %in% gses_to_remove){next}
+  if(acute_metadata[[ac]]$tissue == "fat"){next}
   curr_gsms = acute_metadata[[ac]]$gsms
   curr_subjects = acute_sample_meta$subject[curr_gsms]
   curr_subjects = paste(acute_metadata[[ac]]$gse,curr_subjects,sep=";")
@@ -54,6 +59,8 @@ for(ac in names(acute_metadata)){
   }
 }
 for(lo in names(longterm_metadata)){
+  if(longterm_metadata[[lo]]$gse %in% gses_to_remove){next}
+  if(longterm_metadata[[lo]]$tissue == "fat"){next}
   curr_gsms = longterm_metadata[[lo]]$gsms
   curr_subjects = longterm_sample_meta$subject[curr_gsms]
   curr_subjects = paste(longterm_metadata[[lo]]$gse,curr_subjects,sep=";")
@@ -71,6 +78,7 @@ for(lo in names(longterm_metadata)){
     complete_sample_table = rbind(complete_sample_table,m)
   }
 }
+dim(complete_sample_table)
 print("sample based counts:")
 print("table of NAs in sex:")
 na_inds = is.na(complete_sample_table[,3])
@@ -90,21 +98,57 @@ dim(complete_sample_table_excluded_from_meta_analysis[
 
 # Read in the sample-level metadata and get the counts
 metadata_file = 'GEO_sample_metadata.xlsx'
+complete_sample_table_metaanalysis = complete_sample_table[
+  !(rownames(complete_sample_table) %in% 
+      rownames(complete_sample_table_excluded_from_meta_analysis)),
+]
+dim(complete_sample_table_metaanalysis)
 
-# # Read the sample metadata - these are the sample sets to be analyzed
-# # The loaded RData objects contain more datasets than what is used for the
-# # different meta-analyses
-# # Use xlsx
-# # library('xlsx')
-# # acute_metadata = read.xlsx2(file=metadata_file,sheetIndex=1)
-# # longterm_metadata = read.xlsx2(file=metadata_file,sheetIndex=2)
-# # use readxl instead (xslx has some issues in mac)
-# library(readxl)
-# acute_metadata = data.frame(read_xlsx(metadata_file,sheet=1))
-# acute_metadata[is.na(acute_metadata)] = ""
-# longterm_metadata = data.frame(read_xlsx(metadata_file,sheet=2))
-# longterm_metadata[is.na(longterm_metadata)] = ""
-#
+# Read the sample metadata - these are the sample sets to be analyzed
+# The loaded RData objects contain more datasets than what is used for the
+# different meta-analyses
+library(readxl)
+acute_metadata_raw = data.frame(read_xlsx(metadata_file,sheet=1))
+acute_metadata_raw[is.na(acute_metadata_raw)] = ""
+longterm_metadata_raw = data.frame(read_xlsx(metadata_file,sheet=2))
+longterm_metadata_raw[is.na(longterm_metadata_raw)] = ""
+
+# Compare the sex imputation results
+added_names = setdiff(names(sample2sex_a),names(sample2sex_l))
+sample2sex = sample2sex_l
+sample2sex[added_names] = sample2sex_a[added_names]
+length(sample2sex)
+table(sample2sex)
+length(unique(names(sample2sex)))
+table(sample2sex)
+table(sample2sex[rownames(complete_sample_table)],complete_sample_table[,3])
+complete_sample_table[,3] = sample2sex[complete_sample_table[,1]]
+
+rawsex = acute_metadata_raw$Gender
+names(rawsex) = acute_metadata_raw$GSM
+rawsex[longterm_metadata_raw$GSM] = longterm_metadata_raw$Gender
+length(rawsex)
+
+# compare the names
+length(setdiff(names(rawsex),names(sample2sex)))
+length(setdiff(names(rawsex),names(rawsex)))
+
+rawsex = rawsex[names(sample2sex)]
+table(sample2sex,rawsex)
+table(sample2sex[complete_sample_table[,1]])
+table(is.na(sample2sex[complete_sample_table[,1]]))
+table(rawsex[complete_sample_table[,1]])
+length(sample2sex)
+dim(complete_sample_table)
+table(complete_sample_table[,4])
+length(unique(complete_sample_table[,2]))
+imputed_sex = names(rawsex)[rawsex==""]
+imputed_sex = imputed_sex[!is.na(sample2sex[imputed_sex])]
+imputed_sex = intersect(imputed_sex,rownames(complete_sample_table))
+table(unique(complete_sample_table[,2:4])[,2])
+table(unique(complete_sample_table[imputed_sex,2:4])[,2])
+table(is.na(unique(complete_sample_table[,2:4])[,2]))
+
 # sample_level_meta = rbind(acute_metadata[,c("GSM","GSE","Subject.id","Tissue","Gender","Numeric_Age")],
 #                           longterm_metadata[,c("GSM","GSE","Subject.id","Tissue","Gender","Numeric_Age")])
 # dim(sample_level_meta)
