@@ -304,7 +304,8 @@ library(VennDiagram)
 l = lapply(gsea_reactome_results_fdr[c(1,3,9,7)],function(x)x[[1]])
 names(l) = c("acute,muscle","acute,blood","long-term,muscle","long-term,blood")
 venn(l)
-vp = venn.diagram(l,filename = NULL,fill = 2:5, alpha = 0.3)
+vp = venn.diagram(l,filename = NULL,fill = 2:5, alpha = 0.3,
+                  cex = 1.4,cat.cex=1.6)
 pdf(paste0(out_dir_figs,"gsea_venn.pdf"))
 grid.draw(vp)
 dev.off()
@@ -318,6 +319,24 @@ for(ll in l){
 write.table(t(t(intersect_all)),quote=F,row.names = F)
 muscle_intersect = intersect(l$`acute,muscle`,l$`long-term,muscle`)
 write.table(t(t(muscle_intersect)),quote=F,row.names = F)
+
+# venn diagrams for the gene set overlap
+l = lapply(analysis2selected_genes,names)
+vp = venn.diagram(l,filename = NULL,fill = 2:5, alpha = 0.3,
+                  cex = 1.4,cat.cex=1.6)
+pdf(paste0(out_dir_figs,"genes_venn.pdf"))
+grid.draw(vp)
+dev.off()
+dev.off()
+grid.draw(vp)
+dev.off()
+intersect_all = l[[1]]
+for(ll in l){
+  intersect_all = intersect(intersect_all,ll)
+}
+entrez2symbol[
+  intersect(l$`acute,muscle`,l$`longterm,muscle`)
+]
 
 ############################################################################
 ############################################################################
@@ -837,6 +856,16 @@ for(nn in names(analysis2selected_genes_stats)){
   }
 }
 sort(sapply(gene_subgroups,length))
+
+# some stats
+# acute and age genes
+unique(unlist(gene_subgroups[
+  grepl("age",names(gene_subgroups)) & grepl("acute",names(gene_subgroups))
+]))
+unique(unlist(gene_subgroups[
+  grepl("age",names(gene_subgroups)) & grepl("long",names(gene_subgroups))
+]))
+
 base_model_ms = c()
 for(gg in names(gene_t_patterns)[grepl("base_model",names(gene_t_patterns))]){
   print(gg)

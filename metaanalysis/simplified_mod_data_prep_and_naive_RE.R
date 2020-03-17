@@ -361,14 +361,16 @@ simple_RE_tau2s = lapply(simple_REs,function(x)sapply(x,try_get_field,fname="tau
 simple_RE_beta = lapply(simple_REs,function(x)sapply(x,try_get_field,fname="beta"))
 simple_REs_untrained_beta = lapply(simple_REs_untrained,function(x)sapply(x,try_get_field,fname="beta"))
 
-pdf(paste(out_dir_figs,"Supp_Figure1.pdf"))
+pdf(paste0(out_dir_figs,"Supp_Figure1B.pdf"))
 par(mfrow=c(2,2))
 for(nn in names(simple_RE_pvals)){
-  pvalue_qqplot(simple_RE_pvals[[nn]],main=nn,pch=20,cex=0.5)
+  pvalue_qqplot(simple_RE_pvals[[nn]],n_random = 10000,
+                main=nn,pch=20,cex=0.5,
+                cex.main=1.7,cex.lab=1.4)
 }
 dev.off()
 
-pdf(paste(out_dir_figs,"Figure2A.pdf"))
+pdf(paste0(out_dir_figs,"Supp_Figure1A.pdf"))
 par(mfrow=c(2,2))
 for(nn in names(simple_RE_pvals)){
   r = hist(simple_RE_I2s[[nn]],plot=F)
@@ -376,7 +378,8 @@ for(nn in names(simple_RE_pvals)){
   per = format(per*100,digits=3)
   cols=rep("white",length(r$mids))
   cols[r$mids > 70] = "blue"
-  hist(simple_RE_I2s[[nn]],main=paste(nn,"(",per,"%)",sep=""),xlab = "I^2(%)",col=cols)
+  hist(simple_RE_I2s[[nn]],main=paste(nn,"(",per,"%)",sep=""),
+       xlab = "I^2(%)",col=cols,cex.main=1.7,cex.lab=1.4)
 }
 dev.off()
 
