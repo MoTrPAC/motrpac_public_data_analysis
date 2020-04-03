@@ -20,7 +20,6 @@ library(parallel);library(metafor)
 load("meta_analysis_results.RData")
 load("workspace_before_rep_analysis.RData")
 load("meta_analysis_input.RData")
-source('~/Desktop/repos/motrpac_public_data_analysis/metaanalysis/helper_functions.R')
 
 # Gather some statistics for the paper
 ######################################
@@ -865,6 +864,9 @@ unique(unlist(gene_subgroups[
 unique(unlist(gene_subgroups[
   grepl("age",names(gene_subgroups)) & grepl("long",names(gene_subgroups))
 ]))
+unique(unlist(gene_subgroups[
+  grepl("males",names(gene_subgroups)) & grepl("long",names(gene_subgroups))
+  ]))
 
 base_model_ms = c()
 for(gg in names(gene_t_patterns)[grepl("base_model",names(gene_t_patterns))]){
@@ -998,7 +1000,7 @@ for(set_name in names(gene_subgroups)){
   }
   if((grepl(",time;",set_name)||grepl(",time,",set_name))&& !grepl("acute",set_name)){
     colnames(mat) = gsub("^1","",colnames(mat))
-    colnames(mat) = gsub("^2","> 150 days;",colnames(mat))
+    colnames(mat) = gsub("^2",">150d",colnames(mat))
   }
   curr_enrichments = "";curr_reactome="";curr_go=""
   colnames(mat) = gsub(";",", ",colnames(mat))
@@ -1032,17 +1034,40 @@ for(set_name in names(gene_subgroups)){
   if(nrow(mat)<10){cex_genes = 1.5}
   pdf(paste(out_dir_figs,gsub(",|;","_",set_name),".pdf",sep=""))
   par(cex.main=0.7)
-  heatmap.2(mat,trace = "none",scale = "none",Colv = T,col=bluered,
-            cexRow = cex_genes,main=curr_main,
-            Rowv = T,srtCol=45,hclustfun = hclust_func,density.info="none",
-            key.title = NA,keysize = 1.1,key.xlab = "t-statistic",
-            key.par = list("cex.axis"=1.1),margins = c(10,10))
-  # heatmap.2(mat,trace = "none",scale = "none",Colv = T,col=bluered,
-  #           cexRow = cex_genes,main="",key = F,
-  #           Rowv = T,srtCol=45,hclustfun = hclust_func,density.info="none",
-  #           key.title = NA,keysize = 1.1,key.xlab = "t-statistic",
-  #           key.par = list("cex.axis"=1.1),margins = c(10,10))
-  dev.off()
+  
+  # some specific adjustments
+  if(set_name == "longterm,muscle,time;avg_age,1"){
+    colnames(mat) = sapply(colnames(mat),function(x)strsplit(x,split=", ")[[1]][1])
+    heatmap.2(mat,trace = "none",scale = "none",Colv = T,col=bluered,
+              cexRow = 1.2,main=curr_main,cexCol = 1.15,
+              Rowv = T,srtCol=60,hclustfun = hclust_func,density.info="none",
+              key = F,margins = c(10,10))
+    dev.off()
+  }
+  if(set_name == "acute,muscle,time;avg_age,1"){
+    colnames(mat) = gsub(" ","",colnames(mat))
+    colnames(mat) = gsub(",,",", ",colnames(mat))
+    heatmap.2(mat,trace = "none",scale = "none",Colv = T,col=bluered,
+              cexRow = 1.2,main="",cexCol = 1.15,
+              Rowv = T,srtCol=60,hclustfun = hclust_func,density.info="none",
+              key = F,margins = c(10,10))
+    dev.off()
+  }
+  if(set_name == "longterm,muscle,prop_males,1"){
+    heatmap.2(mat,trace = "none",scale = "none",Colv = T,col=bluered,
+              cexRow = 0.2,main="",cexCol = 1.5,
+              Rowv = T,srtCol=60,hclustfun = hclust_func,density.info="none",
+              key = F,margins = c(10,10))
+    dev.off()
+  }
+  else{
+    heatmap.2(mat,trace = "none",scale = "none",Colv = T,col=bluered,
+              cexRow = cex_genes,main=curr_main,
+              Rowv = T,srtCol=45,hclustfun = hclust_func,density.info="none",
+              key.title = NA,keysize = 1.1,key.xlab = "t-statistic",
+              key.par = list("cex.axis"=1.1),margins = c(10,10))
+  }
+  
 }
 
 # Specifically for longterm muscle base models:
@@ -1456,6 +1481,7 @@ for(nn in names(bipartite_graphs)){
 }
 
 # GO enrichments of subgroups
+sheet_counter = sheet_counter+1
 supp_table_enrichments = gene_subgroup_enrichments_fdr[,c(1:4,9:10,8)]
 colnames(supp_table_enrichments)[6] = "q-value"
 colnames(supp_table_enrichments)[5] = "Genes"

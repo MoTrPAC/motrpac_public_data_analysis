@@ -148,6 +148,9 @@ imputed_sex = intersect(imputed_sex,rownames(complete_sample_table))
 table(unique(complete_sample_table[,2:4])[,2])
 table(unique(complete_sample_table[imputed_sex,2:4])[,2])
 table(is.na(unique(complete_sample_table[,2:4])[,2]))
+dim(
+  complete_sample_table[setdiff(rownames(complete_sample_table),imputed_sex),])
+table(complete_sample_table[setdiff(rownames(complete_sample_table),imputed_sex),3])
 
 # sample_level_meta = rbind(acute_metadata[,c("GSM","GSE","Subject.id","Tissue","Gender","Numeric_Age")],
 #                           longterm_metadata[,c("GSM","GSE","Subject.id","Tissue","Gender","Numeric_Age")])
