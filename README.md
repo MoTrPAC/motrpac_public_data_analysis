@@ -2,7 +2,7 @@
 
 ## Human data
 
-This repository can be used to reproduce the preprocessing and (meta-)analysis of publicly available genomic exercise studies. Currently, only human gene expression data were analyzed. Manually curated metadata of all samples can be found [here](https://storage.googleapis.com/motrpac-portal-user-davidama/GEO_sample_metadata.xlsx).
+This repository can be used to reproduce the preprocessing and (meta-)analysis of publicly available gene expression exercise studies. Currently, only human gene expression data were analyzed. Manually curated metadata of all samples can be found [here](https://storage.googleapis.com/motrpac-portal-user-davidama/GEO_sample_metadata.xlsx).
 
 Assume we are interested in analysis of acute bout data from muscle tissues. The scripts in data_collection can be used to generate the database. The flow takes as input the manually curated sample information and creates the gene expression profiles. 
 
