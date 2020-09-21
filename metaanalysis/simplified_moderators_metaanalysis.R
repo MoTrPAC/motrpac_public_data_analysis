@@ -499,7 +499,7 @@ names(l) = c("untrained","exercise","untrained","exercise",
 cols = c("red","red","cyan","cyan","green","green")
 par(cex.lab=2.3,cex.axis=1.6)
 boxplot(l,las=2,col=cols,horizontal=T,pch=20,ylim=c(0,2))
-legend(x=0.5,y=4.8,c("muscle, acute","blood, acute","muscle, long-term"),
+legend(x=0.7,y=4.8,c("muscle, acute","blood, acute","muscle, long-term"),
        fil=c("red","cyan","green"),cex=1.6)
 dev.off()
 
@@ -545,6 +545,24 @@ dev.off()
 
 # Examples of genes for the paper
 
+# New forest plot: for resubmission (Sept 2020)
+gdata_forest_plot<-function(gdata,col.cex=0.8,plot.cex=0.8,title=""){
+  ind1 = max(gdata$yi+3*gdata$sdd)
+  ind2 = min(gdata$yi-3*gdata$sdd)
+  annot_pos = ind2 - c(5,4:1)
+  forest(x = gdata$yi,sei = gdata$sdd, xlim=c(min(annot_pos)-2, ind1), 
+         slab = gdata$V1,
+         ilab=cbind(gdata$N,gdata$training,round(gdata$avg_age,digits = 1), 
+                    round(gdata$prop_males,digits = 2)*100,gdata$time),
+         ilab.xpos=annot_pos, cex=plot.cex,
+         ylim=c(-1, nrow(gdata)+3),
+         xlab="Fold change", mlab="", 
+         psize=1, header="Cohort",showweights = F,annotate=F,
+         main = title)
+  text(annot_pos, nrow(gdata)+2, c("N","Type","Age","%M","Time"),cex=col.cex)
+  return(NULL)
+}
+
 # Acute, muscle:
 curr_genes = analysis2selected_genes$`acute,muscle`
 
@@ -571,17 +589,21 @@ gdata = gdata[order(gdata$time),]
 curr_times = rep("0-1h",nrow(gdata))
 curr_times[gdata$time==2] = "2-5h"
 curr_times[gdata$time==3] = ">20h"
-gdata$training = gsub("endurance","End",gdata$training)
-gdata$training = gsub("resistance","Res",gdata$training)
+gdata$time = curr_times
+gdata$training = gsub("endurance","EE",gdata$training)
+gdata$training = gsub("resistance","RE",gdata$training)
 gdata$V1 = gsub("GE_","",gdata$V1)
-slabels = paste(gdata$training,curr_times,sep=",")
+
 analysis1 = all_meta_analysis_res$`acute,muscle`
 analysis1[[gene]][[1]]$mod_p
 aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
-pdf(paste0(out_dir_figs,"Figure2B.pdf"))
-forest(x = gdata$yi,sei = gdata$sdd,slab = slabels,showweights = F,
-       main=gene_name,annotate = F,cex = 1.3,xlab = "",
-       pch = 19,top=0.1,col="darkgray",cex.axis=1.4)
+# pdf(paste0(out_dir_figs,"Figure2B.pdf"))
+# forest(x = gdata$yi,sei = gdata$sdd,slab = slabels,showweights = F,
+#        main=gene_name,annotate = F,cex = 1.3,xlab = "",
+#        pch = 19,top=0.1,col="darkgray",cex.axis=1.4)
+# dev.off()
+png(paste0(out_dir_figs,"Figure2B.png"), units="px", width=1600, height=1600, res=300)
+gdata_forest_plot(gdata,col.cex = 0.85)
 dev.off()
 
 # pdf(paste(out_dir_figs,"Figure2C.pdf"))
@@ -609,21 +631,27 @@ validated_genes = c(
 for(gene in validated_genes){
   gene_name = entrez2symbol[[gene]]
   gdata = meta_reg_datasets$`acute,muscle`[[gene]]
-  gdata = gdata[order(gdata$time),]
+  gdata = gdata[order(gdata$time,decreasing = F),]
   curr_times = rep("0-1h",nrow(gdata))
   curr_times[gdata$time==2] = "2-5h"
   curr_times[gdata$time==3] = ">20h"
-  gdata$training = gsub("endurance","End",gdata$training)
-  gdata$training = gsub("resistance","Res",gdata$training)
+  gdata$time = curr_times
+  gdata$training = gsub("endurance","EE",gdata$training)
+  gdata$training = gsub("resistance","RE",gdata$training)
   gdata$V1 = gsub("GE_","",gdata$V1)
   slabels = paste(gdata$training,curr_times,sep=",")
   analysis1 = all_meta_analysis_res$`acute,muscle`
   analysis1[[gene]][[1]]$mod_p
-  pdf(paste0(out_dir_figs,gene_name,".pdf",sep=""))
-  forest(x = gdata$yi,sei = gdata$sdd,slab = slabels,showweights = F,
-         main=gene_name,annotate = F,cex = 1.3,xlab = "",
-         pch = 19,top=0.1,col="darkgray",cex.axis=1.4)
+  # pdf(paste0(out_dir_figs,gene_name,".pdf",sep=""))
+  # forest(x = gdata$yi,sei = gdata$sdd,slab = slabels,showweights = F,
+  #        main=gene_name,annotate = F,cex = 1.3,xlab = "",
+  #        pch = 19,top=0.1,col="darkgray",cex.axis=1.4)
+  # dev.off()
+  png(paste0(out_dir_figs,gene_name,".png",sep=""), 
+      units="px", width=1600, height=1600, res=300)
+  gdata_forest_plot(gdata,col.cex = 0.85,plot.cex = 0.85,title=gene_name)
   dev.off()
+  
 }
 
 # COL4A1 in longterm muscle
@@ -632,19 +660,24 @@ gene_name = entrez2symbol[[gene]]
 all_meta_analysis_res$`longterm,muscle`[[gene]]
 gdata = meta_reg_datasets$`longterm,muscle`[[gene]]
 gdata = gdata[order(gdata$time),]
-curr_times = rep("",nrow(gdata))
-curr_times[gdata$time==2] = ",> 150 days"
+curr_times = rep("< 150 d",nrow(gdata))
+curr_times[gdata$time==2] = ",> 150 d"
+gdata$time = curr_times
 gdata$V1 = gsub("GE_","",gdata$V1)
-gdata$training = gsub("endurance","End",gdata$training)
-gdata$training = gsub("resistance","Res",gdata$training)
+gdata$training = gsub("endurance","EE",gdata$training)
+gdata$training = gsub("resistance","RE",gdata$training)
 slabels = paste(gdata$training,curr_times,sep="")
 # slabels = paste(gdata$V1,slabels,sep=",")
 analysis1 = all_meta_analysis_res$`acute,muscle`
-pdf(paste0(out_dir_figs,"FigureC.pdf"))
-forest(x = gdata$yi,sei = gdata$sdd,slab = slabels,showweights = F,
-       main=gene_name,annotate = F,cex = 1.3,xlab = "",
-       pch = 19,top=0.1,col="darkgray",cex.axis=1.4)
+# pdf(paste0(out_dir_figs,"FigureC.pdf"))
+# forest(x = gdata$yi,sei = gdata$sdd,slab = slabels,showweights = F,
+#        main=gene_name,annotate = F,cex = 1.3,xlab = "",
+#        pch = 19,top=0.1,col="darkgray",cex.axis=1.4)
+# dev.off()
+png(paste0(out_dir_figs,"Figure3C.png"), units="px", width=1600, height=1600, res=300)
+gdata_forest_plot(gdata,col.cex = 0.85)
 dev.off()
+
 
 # # Plots with sex info - longterm muscle
 # genes = c("8897","567","50","11217")
@@ -999,7 +1032,7 @@ for(set_name in names(gene_subgroups)){
     colnames(mat) = gsub("^3",">20h;",colnames(mat))
   }
   if((grepl(",time;",set_name)||grepl(",time,",set_name))&& !grepl("acute",set_name)){
-    colnames(mat) = gsub("^1","",colnames(mat))
+    colnames(mat) = gsub("^1","<150d",colnames(mat))
     colnames(mat) = gsub("^2",">150d",colnames(mat))
   }
   curr_enrichments = "";curr_reactome="";curr_go=""
@@ -1054,8 +1087,9 @@ for(set_name in names(gene_subgroups)){
     dev.off()
   }
   if(set_name == "longterm,muscle,prop_males,1"){
+    colnames(mat) = as.character(round(100*as.numeric(colnames(mat))))
     heatmap.2(mat,trace = "none",scale = "none",Colv = T,col=bluered,
-              cexRow = 0.2,main="",cexCol = 1.5,
+              cexRow = 0.2,main="",cexCol = 1.25,
               Rowv = T,srtCol=60,hclustfun = hclust_func,density.info="none",
               key = F,margins = c(10,10))
     dev.off()
