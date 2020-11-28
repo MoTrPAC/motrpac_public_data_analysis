@@ -157,7 +157,8 @@ keep_main_results_for_model_list<-function(l,num=2){
   for(nn in model_names){
     if(is.na(nn)){next}
     curr_m = l$models[[nn]]
-    coeffs = cbind(curr_m$beta,curr_m$se,curr_m$zval,curr_m$pval,curr_m$ci.lb,curr_m$ci.ub)
+    coeffs = cbind(curr_m$beta,curr_m$se,curr_m$zval,curr_m$pval,
+                   curr_m$ci.lb,curr_m$ci.ub)
     colnames(coeffs) = c("beta","se","zval","pval","lb","ub")
     new_l[[nn]] = list(
       aic_c = l$aics[nn],
@@ -167,7 +168,12 @@ keep_main_results_for_model_list<-function(l,num=2){
       het_q = try_get_field(curr_m,"QE"),
       sigma2 = try_get_field(curr_m,"sigma2"),
       tau2 = try_get_field(curr_m,"tau2"),
-      I2 = try_get_field(curr_m,"I2")
+      rhos = try_get_field(curr_m,"rho"),
+      gamma2 = try_get_field(curr_m,"gamma2"),
+      phi = try_get_field(curr_m,"phi"),
+      I2 = try_get_field(curr_m,"I2"),
+      R2 = try_get_field(curr_m,"R2"),
+      H2 = try_get_field(curr_m,"H2")
     )
   }
   return(new_l)

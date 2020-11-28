@@ -1610,4 +1610,64 @@ save.image(file=paste(out_dir,"meta_analysis_interpretation_results.RData",sep="
 #   write_to_bucket(curr_gene_table,fname,bucket)
 # }
 
+# examine blood vs. muscle using the base models
+x1 = simple_RE_beta$`acute,muscle`
+x2 = simple_RE_beta$`acute,blood`
+x12_shared_genes = intersect(names(x1),names(x2))
+x12_shared_genes = x12_shared_genes[!is.na(x1[x12_shared_genes])]
+x12_shared_genes = x12_shared_genes[!is.na(x2[x12_shared_genes])]
+plot(x = x1[x12_shared_genes],y = x2[x12_shared_genes],pch=20,cex=0.7,
+     xlab = "Muscle",ylab="Blood",main="log2 fold change",col="gray")
+cor.test(x1[x12_shared_genes],x2[x12_shared_genes])
+cor.test(x1[x12_shared_genes],x2[x12_shared_genes],method="spearman")
+median(abs(x1),na.rm=T)
+median(abs(x2),na.rm=T)
+table(abs(x1)>0.1)
+table(abs(x2)>0.1)
+
+x1 = simple_RE_I2s$`acute,muscle`
+x2 = simple_RE_I2s$`acute,blood`
+x12_shared_genes = intersect(names(x1),names(x2))
+x12_shared_genes = x12_shared_genes[!is.na(x1[x12_shared_genes])]
+x12_shared_genes = x12_shared_genes[!is.na(x2[x12_shared_genes])]
+plot(x = x1[x12_shared_genes],y = x2[x12_shared_genes],pch=20,cex=0.7,
+     xlab = "Muscle",ylab="Blood",main="I2",col="gray")
+cor.test(x1[x12_shared_genes],x2[x12_shared_genes])
+cor.test(x1[x12_shared_genes],x2[x12_shared_genes],method="spearman")
+cor.test(x1[x12_shared_genes],x2[x12_shared_genes],method="spearman")$p.value
+median(x1,na.rm=T)
+median(x2,na.rm=T)
+
+x1 = simple_RE_beta$`acute,muscle`
+x2 = simple_RE_beta$`longterm,muscle`
+x12_shared_genes = intersect(names(x1),names(x2))
+x12_shared_genes = x12_shared_genes[!is.na(x1[x12_shared_genes])]
+x12_shared_genes = x12_shared_genes[!is.na(x2[x12_shared_genes])]
+plot(x1[x12_shared_genes],x2[x12_shared_genes],pch=20,cex=0.7)
+cor.test(x1[x12_shared_genes],x2[x12_shared_genes])
+cor.test(x1[x12_shared_genes],x2[x12_shared_genes],method="spearman")
+
+x1 = simple_RE_beta$`longterm,blood`
+x2 = simple_RE_beta$`longterm,muscle`
+x12_shared_genes = intersect(names(x1),names(x2))
+x12_shared_genes = x12_shared_genes[!is.na(x1[x12_shared_genes])]
+x12_shared_genes = x12_shared_genes[!is.na(x2[x12_shared_genes])]
+plot(x1[x12_shared_genes],x2[x12_shared_genes],pch=20,cex=0.7)
+cor.test(x1[x12_shared_genes],x2[x12_shared_genes])
+cor.test(x1[x12_shared_genes],x2[x12_shared_genes],method="spearman")
+
+x1 = simple_RE_beta$`longterm,blood`
+x2 = simple_RE_beta$`acute,blood`
+x12_shared_genes = intersect(names(x1),names(x2))
+x12_shared_genes = x12_shared_genes[!is.na(x1[x12_shared_genes])]
+x12_shared_genes = x12_shared_genes[!is.na(x2[x12_shared_genes])]
+plot(x1[x12_shared_genes],x2[x12_shared_genes],pch=20,cex=0.7)
+cor.test(x1[x12_shared_genes],x2[x12_shared_genes])
+cor.test(x1[x12_shared_genes],x2[x12_shared_genes],method="spearman")
+
+# examine aicc diffs
+all_aicc_diffs = lapply(all_meta_analysis_res,function(x)sapply(x,get_aicc_diff))
+sapply(all_aicc_diffs,length)
+
+
 
