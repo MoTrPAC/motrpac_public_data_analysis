@@ -3,7 +3,9 @@ library(parallel)
 library(metafor,lib.loc="~/R/packages")
 library(nloptr,lib.loc="~/R/packages")
 
-print("Usage:<working dir with the input RData>
+print("Usage:
+      <input RData file>
+      <working dir where the output should be printed to>
       <num cores><indices of datasets in meta_reg_datasets, comma seperated single string>
       <gene start index><gene end index>")
 
@@ -11,16 +13,17 @@ args = commandArgs(trailingOnly=TRUE)
 print("Input args are:")
 print(args)
 
-if(length(args)!=5){
-  print("Number of command line arguments should be 3, check the command and rerun")
+if(length(args)!=6){
+  print("Number of command line arguments should be 6, check the command and rerun")
   q("no")
 }
 
-num_cores = as.numeric(args[2])
-inds = as.numeric(strsplit(args[3],split=",")[[1]])
-setwd(args[1])
-start = as.numeric(args[4])
-end = as.numeric(args[5])
+num_cores = as.numeric(args[3])
+inds = as.numeric(strsplit(args[4],split=",")[[1]])
+rdata_input_file = args[1]
+setwd(args[2])
+start = as.numeric(args[5])
+end = as.numeric(args[6])
 
 ############################################################################
 ############################################################################
@@ -203,7 +206,7 @@ pvalue_qqplot<-function(ps,...){
 ############################################################################
 
 # Load the input
-load("meta_analysis_input.RData")
+load(rdata_input_file)
 print("Gene tables were loaded, the meta-analyses names are:")
 print(names(meta_reg_datasets))
 meta_reg_datasets = meta_reg_datasets[inds]

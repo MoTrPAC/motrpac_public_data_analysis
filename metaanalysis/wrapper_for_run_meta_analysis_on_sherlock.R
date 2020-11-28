@@ -74,8 +74,9 @@ wait_for_job<-function(jobs_before=NULL,waittime=30,max_wait=6000){
 
 
 # Load the input and set the WD
-setwd("~/motrpac_metaanalysis/v3_feb_2020/meta_analysis/")
 load("~/motrpac_metaanalysis/v3_feb_2020/meta_analysis/meta_analysis_input.RData")
+dir.create("~/motrpac_metaanalysis/v3_feb_2020/meta_analysis/rerun_Nov2020",showWarnings = F)
+setwd("~/motrpac_metaanalysis/v3_feb_2020/meta_analysis/rerun_Nov2020/")
 num_genes_per_job = 200
 for (i in 1:length(meta_reg_datasets)){
   curr_length = length(meta_reg_datasets[[i]])
@@ -92,8 +93,9 @@ for (i in 1:length(meta_reg_datasets)){
     # )
     
     cmd = paste(
-      "Rscript ~/motrpac_metaanalysis/v2_march_2019/meta_analysis/run_meta_analysis_on_sherlock.R", 
-      "~/motrpac_metaanalysis/v3_feb_2020/meta_analysis/",
+      "Rscript ~/repos/motrpac_public_data_analysis/metaanalysis/run_meta_analysis_on_sherlock.R", 
+      "~/motrpac_metaanalysis/v3_feb_2020/meta_analysis/meta_analysis_input.RData",
+      "~/motrpac_metaanalysis/v3_feb_2020/meta_analysis/rerun_Nov2020/",
       1,i,start,end
     )
     
