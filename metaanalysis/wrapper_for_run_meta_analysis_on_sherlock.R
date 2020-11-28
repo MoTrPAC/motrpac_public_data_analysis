@@ -14,8 +14,8 @@ get_sh_default_prefix<-function(err="",log="",time="6:00:00"){
       "#",
       paste("#SBATCH --time=",time,sep=""),
       "#SBATCH --partition=euan,mrivas,normal,owners",
-      "#SBATCH -c 1",
-      "#SBATCH --mem=2000",
+      "#SBATCH -c 4",
+      "#SBATCH --mem=16000",
       paste("#SBATCH --error",err),
       paste("#SBATCH --out",log),
       "#SBATCH --gpus-per-task=0",
@@ -136,7 +136,7 @@ for (i in 1:length(meta_reg_datasets)){
     for(gg in names(analysis_res)){
       all_meta_analysis_res[[nn]][[gg]] = analysis_res[[gg]]
     }
-    system(paste("rm",curr_file))
+    # system(paste("rm",curr_file))
     start = end+1
   }
 }
@@ -147,9 +147,64 @@ save(all_meta_analysis_res,file="meta_analysis_results.RData")
 # clear the working directory
 system("rm *.log")
 system("rm *.err")
+system("rm *.sh")
 for(i in 1:length(all_meta_analysis_res)){
   system(paste("rm run_",i,"_*",sep=""))
 }
+
+#######################################
+#######################################
+# Compare two versions of the results
+load("meta_analysis_results.RData")
+res1 = all_meta_analysis_res
+load("../meta_analysis_results.RData")
+res2 = all_meta_analysis_res
+
+for(nn in names(res1)){
+  genes1 = names(res1[[nn]])
+  genes2 = names(res2[[nn]])
+  v = c()
+  aicc_diffs = c()
+  for(g in genes1){
+    x1 = res1[[nn]][[g]]
+    x2 = res2[[nn]][[g]]
+    v[g] = setequal(names(x1),names(x2))
+    if(!v[g]){
+      #print(paste("Error in analysis",nn,"gene:",g))
+    }
+    shared_models = intersect(names(x1),names(x2))
+    for(m in shared_models){
+      a1 = x1[[m]]$aic_c
+      a2 = x2[[m]]$aic_c
+      aicc_diffs[paste(g,m)] = abs(a1-a2)
+    }
+  }
+}
+quantile(aicc_diffs,probs = seq(0.9,1,by = 0.01))
+max(aicc_diffs) < 1e-10 # TRUE: rerun worked fine
+
+# Add R2, H2 to the older run
+for(nn in names(res1)){
+  genes1 = names(res1[[nn]])
+  for(g in genes1){
+    x1 = res1[[nn]][[g]]
+    x2 = res2[[nn]][[g]]
+    shared_models = intersect(names(x1),names(x2))
+    for(m in shared_models){
+      x2[[m]]$R2 = x1[[m]]$R2
+      x2[[m]]$H2 = x1[[m]]$H2
+      #print(x1[[m]]$R2)
+    }
+  }
+}
+all_meta_analysis_res = res2
+save(all_meta_analysis_res,file="../all_meta_analysis_res_withR2.RData")
+
+#######################################
+#######################################
+
+
+
 
 
 
