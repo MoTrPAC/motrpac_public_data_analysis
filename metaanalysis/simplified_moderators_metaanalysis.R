@@ -18,6 +18,8 @@ library(parallel);library(metafor)
 
 # Load the results (run on sherlock) instead of running the code above
 load("meta_analysis_results.RData")
+# same obj as above but with R2 scores
+load("./all_meta_analysis_res_withR2.RData")
 load("workspace_before_rep_analysis.RData")
 load("meta_analysis_input.RData")
 
@@ -65,6 +67,26 @@ all_pvals = c()
 for(nn in names(all_meta_analysis_res)){
   analysis1 = all_meta_analysis_res[[nn]]
   pvals = sapply(analysis1,function(x)x[[1]]$mod_p)
+  
+  # get the R2s of the selected models
+  R2s = c()
+  ngenes_with_R2 = 0
+  for(gene in names(pvals)){
+    obj = analysis1[[gene]]
+    R2s[gene] = NA
+    if(!is.na(obj[[1]]$R2) && !is.null(obj[[1]]$R2)){
+      R2s[gene] = analysis1[[gene]][[1]]$R2
+    }
+    for(jj in 1:length(obj)){
+      if(!is.na(obj[[jj]]$R2) && !is.null(obj[[jj]]$R2)){
+        ngenes_with_R2 = ngenes_with_R2 + 1
+        break
+      }
+    }
+  }
+  print(ngenes_with_R2)
+  print(table(is.na(R2s)))
+  
   all_pvals = c(all_pvals,pvals)
   i2s = simple_RE_I2s[[nn]][names(pvals)]
   i2s[is.na(i2s)] = 100
@@ -130,9 +152,10 @@ for(nn in names(all_meta_analysis_res)){
     unlist(curr_selected_genes_names), # gene group
     pvals[names(curr_selected_genes_names)], # model's p-value
     aic_diffs[names(curr_selected_genes_names)], # AICc difference
-    coeffs_v # details about the coefficients
+    coeffs_v, # details about the coefficients
+    R2s[curr_selected_genes]
   )
-  colnames(m)= c("Entrez","Symbol","Group","Model pvalue","AICc diff","Coefficients")
+  colnames(m)= c("Entrez","Symbol","Group","Model pvalue","AICc diff","Coefficients","R2")
   analysis2selected_genes_stats[[nn]] = m
 }
 sapply(analysis2selected_genes,length)
@@ -1477,6 +1500,7 @@ length(unique(supp_table_1_all_cohorts[
 supp_table_genes = c()
 for(nn in names(analysis2selected_genes_stats)){
   m = analysis2selected_genes_stats[[nn]]
+  colnames(m)[colnames(m)=="R2"] = "R2(if applicable)"
   m = cbind(rep(nn,nrow(m)),m)
   colnames(m)[1] = "Discovered in"
   currgenes = rownames(m)
@@ -1491,8 +1515,10 @@ for(nn in names(analysis2selected_genes_stats)){
 }
 rownames(supp_table_genes)=NULL
 # write.xlsx(supp_table_genes,file=supp_file,sheetName = "STable2",row.names = F,append = T)
-write.table(supp_table_genes,file=paste(supp_path,"STable3.txt",sep="")
+write.table(supp_table_genes,file=paste(supp_path,"STable3_v2.txt",sep="")
             ,row.names = F,quote=F,sep="\t")
+hist(as.numeric(supp_table_genes[,8]))
+sum(as.numeric(supp_table_genes[,8])>60,na.rm=T)/sum(!is.na(as.numeric(supp_table_genes[,8])))
 
 sheet_counter=4
 sapply(bipartite_graphs,function(x)unique(x[,3]))

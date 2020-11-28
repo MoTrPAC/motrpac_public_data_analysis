@@ -193,6 +193,7 @@ for(nn in names(res1)){
     for(m in shared_models){
       x2[[m]]$R2 = x1[[m]]$R2
       x2[[m]]$H2 = x1[[m]]$H2
+      res2[[nn]][[g]] = x2
       #print(x1[[m]]$R2)
     }
   }
