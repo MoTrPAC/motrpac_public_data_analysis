@@ -526,6 +526,28 @@ legend(x=0.7,y=4.8,c("muscle, acute","blood, acute","muscle, long-term"),
        fil=c("red","cyan","green"),cex=1.6)
 dev.off()
 
+# p-values
+# acute, muscle (1.525566e-88)
+wilcox.test(l[[1]],l[[2]],paired=T)$p.value
+# acute_blood (6.222399e-08)
+wilcox.test(l[[3]],l[[4]],paired=T)$p.value
+# longterm muscle (3.110914e-68)
+wilcox.test(l[[5]],l[[6]],paired=T)$p.value
+
+# src for the paper
+l_for_src1 = cbind(l[[1]],l[[2]])
+colnames(l_for_src1) = c("untrained","exercise")
+write.table(l_for_src1,paste0(out_dir,"supp_tables/fig3c_src_acute_muscle.txt"),
+                sep="\t",quote=F,row.names = F,col.names = T)
+l_for_src2 = cbind(l[[3]],l[[4]])
+colnames(l_for_src2) = c("untrained","exercise")
+write.table(l_for_src2,paste0(out_dir,"supp_tables/fig3c_src_acute_blood.txt"),
+            sep="\t",quote=F,row.names = F,col.names = T)
+l_for_src3 = cbind(l[[5]],l[[6]])
+colnames(l_for_src3) = c("untrained","exercise")
+write.table(l_for_src3,paste0(out_dir,"supp_tables/fig3c_src_longterm_muscle.txt"),
+            sep="\t",quote=F,row.names = F,col.names = T)
+
 # # 3. GO enrichments of the whole sets
 bg = unique(c(unlist(sapply(simple_REs,names))))
 gs = lapply(analysis2selected_genes,names)
@@ -617,6 +639,9 @@ gdata$training = gsub("endurance","EE",gdata$training)
 gdata$training = gsub("resistance","RE",gdata$training)
 gdata$V1 = gsub("GE_","",gdata$V1)
 
+write.table(gdata,paste0(out_dir,"supp_tables/pcg1a_gdata_source.txt"),
+            sep="\t",quote=F,row.names = T,col.names = T)
+
 analysis1 = all_meta_analysis_res$`acute,muscle`
 analysis1[[gene]][[1]]$mod_p
 aic_diff = analysis1[[gene]][[1]]$aic_c - analysis1[[gene]]$`simple:base_model`$aic_c
@@ -674,7 +699,8 @@ for(gene in validated_genes){
       units="px", width=1600, height=1600, res=300)
   gdata_forest_plot(gdata,col.cex = 0.85,plot.cex = 0.85,title=gene_name)
   dev.off()
-  
+  write.table(gdata,paste0(out_dir,"supp_tables/",gene_name,"_gdata_source.txt"),
+              sep="\t",quote=F,row.names = T,col.names = T)
 }
 
 # COL4A1 in longterm muscle
@@ -701,6 +727,8 @@ png(paste0(out_dir_figs,"Figure3C.png"), units="px", width=1600, height=1600, re
 gdata_forest_plot(gdata,col.cex = 0.85)
 dev.off()
 
+write.table(gdata,paste0(out_dir,"supp_tables/",gene_name,"_gdata_source.txt"),
+            sep="\t",quote=F,row.names = T,col.names = T)
 
 # # Plots with sex info - longterm muscle
 # genes = c("8897","567","50","11217")
@@ -1125,6 +1153,8 @@ for(set_name in names(gene_subgroups)){
               key.par = list("cex.axis"=1.1),margins = c(10,10))
   }
   
+  write.table(mat,paste0(out_dir,"supp_tables/",gsub(",","_",set_name),"_t_table.txt"),
+    sep="\t",row.names=T,col.names=T,quote=F)
 }
 
 # Specifically for longterm muscle base models:
@@ -1155,9 +1185,38 @@ pdf(paste(out_dir_figs,"Figure4A.pdf"))
 heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,cexRow = 1.2,
           add.expr={makeRects(mat==0)},Rowv = F,margins = c(5,8))
 dev.off()
+write.table(mat,paste0(out_dir,"supp_tables/",gsub(",","_",set_name),"_t_table.txt"),
+            sep="\t",row.names=T,col.names=T,quote=F)
 # get the top enrichments of the set
 curr_gos = gene_subgroup_enrichments_fdr[gene_subgroup_enrichments_fdr[,1]==set_name,]
 curr_pathways = reactome_pathways_subgroups_fdr[reactome_pathways_subgroups_fdr[,1]==set_name,]
+
+set_name = "acute,blood,base_model,2"
+table_name = "acute,blood"
+set_genes = unlist(gene_subgroups[set_name])
+mat = mean_effect_matrices[[table_name]][set_genes,]
+rownames(mat) = unlist(entrez2symbol[rownames(mat)])
+mat = mat[,apply(mat,2,sd)>0]
+mat = mat[,apply(mat==0,2,sum)/nrow(mat) < 0.5]
+mat = mat[apply(mat==0,1,sum)/ncol(mat) < 0.5,]
+mat[mat>4]=4;mat[mat< -4]=-4
+matnames = sapply(strsplit(colnames(mat),split=";"),function(x)x)[-2,]
+matnames[1,] = gsub("A_","ID:",matnames[1,])
+matnames[2,] = paste0(matnames[2,],"hr")
+matnames[3,] = paste0(matnames[3,],"y")
+matnames[4,] = paste0(as.numeric(matnames[4,])*100,"% M")
+matnames = apply(matnames[1:2,],2,paste,collapse=", ")
+colnames(mat) = matnames
+#pdf(paste(out_dir_figs,"Figure4A.pdf"))
+heatmap.2(mat,trace = "none",scale = "none",Colv = F,col=bluered,
+          cexRow = cex_genes,main="",
+          Rowv = F,srtCol=25,hclustfun = hclust_func,density.info="none",
+          key.title = NA,keysize = 1.2,key.xlab = "t-statistic",
+          add.expr={makeRects(mat==0)},
+          key.par = list("cex.axis"=1),margins = c(10,10))
+dev.off()
+write.table(mat,paste0(out_dir,"supp_tables/",gsub(",","_",set_name),"_t_table.txt"),
+            sep="\t",row.names=T,col.names=T,quote=F)
 
 lonterm_muscle_base_model_effects = rbind(
   lonterm_muscle_base_model_effects, 
@@ -1268,6 +1327,8 @@ for(set_name in sort(clusters)[c(3,4,1,2)]){
                      main=curr_main,ylab = "Mean t-statistic",xlab="Time",cex.main=1.1,
                      cex.lab=1.2,cex.axis=1.3,arrow_col = cols[set_name])
   abline(h = 0,lty=2,col="black")
+  print(paste("stats for cluster:",set_name))
+  write.table(t(c(colMeans(mat),apply(mat,2,sd))),sep="\t",row.names = F,col.names = F)
 }
 dev.off()
 
@@ -1518,6 +1579,7 @@ rownames(supp_table_genes)=NULL
 write.table(supp_table_genes,file=paste(supp_path,"STable3_v2.txt",sep="")
             ,row.names = F,quote=F,sep="\t")
 hist(as.numeric(supp_table_genes[,8]))
+table(is.na(as.numeric(supp_table_genes[,8])))
 sum(as.numeric(supp_table_genes[,8])>60,na.rm=T)/sum(!is.na(as.numeric(supp_table_genes[,8])))
 
 sheet_counter=4
@@ -1567,75 +1629,86 @@ write.table(supp_table_enrichments,file=paste(supp_path,"STable9.txt",sep="")
 # save the workspace
 save.image(file=paste(out_dir,"meta_analysis_interpretation_results.RData",sep=""))
 
-# ###############################################
-# ###############################################
-# ###############################################
-# # Prepare gene-csv files for the portal
-# ###############################################
-# ###############################################
-# ###############################################
-# load("meta_analysis_interpretation_results.RData")
-# 
-# write_to_bucket<-function(m,fname,bucket){
-#   write.csv(m,row.names = F,quote = T,file=fname)
-#   system(paste("~/google-cloud-sdk/bin/gsutil cp",fname,bucket))
-#   system(paste("rm",fname))
-# }
-# 
-# for(nn in names(meta_reg_datasets)){
-#   bucket = paste("gs://bic_data_analysis/meta_analysis_human/",nn,"/",sep="")
-#   bucket = gsub(",","_",bucket)
-#   genes = names(meta_reg_datasets[[nn]])
-#   curr_gene_table = c()
-#   for(gene in genes){
-#     gname = entrez2symbol[[gene]]
-#     gdata = meta_reg_datasets[[nn]][[gene]]
-#     base_model = simple_REs[[nn]][[gene]]
-#     if(length(base_model)==1 && is.na(base_model)){next}
-#     i2 = base_model$I2
-#     tau2 = base_model$tau2
-#     p_model = base_model$pval
-#     selected = is.element(gene,names(analysis2selected_genes[[nn]]))
-# 
-#     if(grepl("acute",nn)){
-#       curr_times = rep("0-1h",nrow(gdata))
-#       curr_times[gdata$time==2] = "2-5h"
-#       curr_times[gdata$time==3] = ">20h"
-#     }
-#     else{
-#       curr_times = rep("0-150 days",nrow(gdata))
-#       curr_times[gdata$time==2] = ">150 days"
-#     }
-#     
-#     gdata$time = curr_times
-#     meta_reg_analysis = all_meta_analysis_res[[nn]][[gene]]
-#     aic_diff = meta_reg_analysis[[1]]$aic_c - meta_reg_analysis$`simple:base_model`$aic_c
-#     
-#     selected_model_name = names(meta_reg_analysis)[1]
-#     if(grepl("base_model",selected_model_name)){
-#       selected_model_name = ":base_model (simple RE)" # add ':' just for the split later
-#     }
-#     else{
-#       p_model = meta_reg_analysis[[1]]$mod_p
-#     }
-#     
-#     selected_model_name = strsplit(selected_model_name,":")[[1]][2]
-#     selected_model_name = gsub("avg_","",selected_model_name)
-#     selected_model_name = gsub(";",",",selected_model_name)
-#     
-#     curr_gene_table = rbind(curr_gene_table,
-#       c(gname,gene,selected_model_name,i2,tau2,p_model,aic_diff,selected))
-#     
-#     curr_gfile = paste(gname,".csv",sep="")
-#     write_to_bucket(gdata,curr_gfile,bucket)
-#   }
-#   colnames(curr_gene_table) = c("Symbol","Entrez","SelectedModel",
-#                                 "I2","Tau2","P-value","AICcDiff","Selected?")
-#   
-#   fname = "gene_stats.csv"
-#   write_to_bucket(curr_gene_table,fname,bucket)
-# }
+###############################################
+###############################################
+###############################################
+# # Prepare gene-csv files for the data portal
+###############################################
+###############################################
+###############################################
+load("meta_analysis_interpretation_results.RData")
 
+library(data.table)
+out_dir_gcp = paste0(out_dir,"gcp/")
+dir.create(out_dir_gcp,showWarnings = F)
+for(nn in names(meta_reg_datasets)){
+  nn_out_dir_gcp = paste0(out_dir_gcp,gsub(",","_",nn),"/")
+  dir.create(nn_out_dir_gcp,showWarnings = F)
+  genes = names(meta_reg_datasets[[nn]])
+  curr_gene_table = c()
+  for(gene in genes){
+    gname = entrez2symbol[[gene]]
+    gdata = meta_reg_datasets[[nn]][[gene]]
+    base_model = simple_REs[[nn]][[gene]]
+    if(length(base_model)==1 && is.na(base_model)){next}
+    i2 = base_model$I2
+    tau2 = base_model$tau2
+    p_model = base_model$pval
+    selected = is.element(gene,names(analysis2selected_genes[[nn]]))
+
+    if(grepl("acute",nn)){
+      curr_times = rep("0-1h",nrow(gdata))
+      curr_times[gdata$time==2] = "2-5h"
+      curr_times[gdata$time==3] = ">20h"
+    }
+    else{
+      curr_times = rep("0-150 days",nrow(gdata))
+      curr_times[gdata$time==2] = ">150 days"
+    }
+
+    gdata$time = curr_times
+    meta_reg_analysis = all_meta_analysis_res[[nn]][[gene]]
+    aic_c = meta_reg_analysis[[1]]$aic_c
+    aic_diff = meta_reg_analysis[[1]]$aic_c - meta_reg_analysis$`simple:base_model`$aic_c
+    i2_selected_model = NA
+    if("I2" %in% names(meta_reg_analysis[[1]])){
+      i2_selected_model = meta_reg_analysis[[1]]$I2
+    }
+
+    selected_model_name = names(meta_reg_analysis)[1]
+    if(grepl("base_model",selected_model_name)){
+      selected_model_name = ":base_model (simple RE)" # add ':' just for the split later
+    }
+    else{
+      p_model = meta_reg_analysis[[1]]$mod_p
+    }
+
+    selected_model_name = strsplit(selected_model_name,":")[[1]][2]
+    selected_model_name = gsub("avg_","",selected_model_name)
+    selected_model_name = gsub(";",",",selected_model_name)
+
+    curr_gene_table = rbind(curr_gene_table,
+      c(gname,gene,i2,tau2,selected_model_name,
+        p_model,i2_selected_model,aic_c,aic_diff,
+        selected))
+
+    curr_gfile = paste0(nn_out_dir_gcp,gname,".csv")
+    fwrite(gdata,file=curr_gfile,sep=",",quote = F)
+  }
+  colnames(curr_gene_table) = c("Symbol","Entrez ID",
+                                "I2(base model)","Tau2(base model)",
+                                "Selected model name","P-value",
+                                "I2(selected model - if available)",
+                                "AICc(selected model)",
+                                "AICcDiff","Selected?")
+
+  fname = paste0(out_dir_gcp,gsub(",","_",nn),"_gene_stats.csv")
+  fwrite(curr_gene_table,file=fname,sep=",",quote=F)
+}
+
+#bucket = paste("gs://bic_data_analysis/meta_analysis_human/",nn,"/",sep="")
+
+# For the paper revision:
 # examine blood vs. muscle using the base models
 x1 = simple_RE_beta$`acute,muscle`
 x2 = simple_RE_beta$`acute,blood`

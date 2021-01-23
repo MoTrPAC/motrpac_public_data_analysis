@@ -370,6 +370,8 @@ for(nn in names(simple_RE_pvals)){
   pvalue_qqplot(simple_RE_pvals[[nn]],n_random = 10000,
                 main=nn,pch=20,cex=0.5,
                 cex.main=1.7,cex.lab=1.4)
+  write.table(t(t(simple_RE_pvals[[nn]])),paste0(out_dir,"supp_tables/sfig1_",nn,"_baseP.txt"),
+              sep="\t",quote=F,row.names = T,col.names = F)
 }
 dev.off()
 
@@ -383,6 +385,8 @@ for(nn in names(simple_RE_pvals)){
   cols[r$mids > 70] = "blue"
   hist(simple_RE_I2s[[nn]],main=paste(nn,"(",per,"%)",sep=""),
        xlab = "I^2(%)",col=cols,cex.main=1.7,cex.lab=1.4)
+  write.table(t(t(simple_RE_I2s[[nn]])),paste0(out_dir,"supp_tables/sfig1_",nn,"_baseI2.txt"),
+              sep="\t",quote=F,row.names = T,col.names = F)
 }
 dev.off()
 
