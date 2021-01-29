@@ -1,5 +1,6 @@
 ######################################################
 # Load libraries
+.libPaths("~/R/packages") # add our local installed R packages
 libraries = c("metafor","optparse")
 for(lib in libraries){
   load_worked = F
@@ -44,6 +45,7 @@ gdata_forest_plot<-function(gdata,model,fulltable=T,col.cex=0.8,plot.cex=0.8,tit
   gdata$V1 = gsub("GE_","",gdata$V1)
   gdata$training = gsub("endurance","endur",gdata$training)
   gdata$training = gsub("resistance","resist",gdata$training)
+  gdata$training = gsub("_treatment","",gdata$training)
   ind1 = max(gdata$yi+3*gdata$sdd)
   ind2 = min(gdata$yi-3*gdata$sdd)
   
@@ -59,7 +61,8 @@ gdata_forest_plot<-function(gdata,model,fulltable=T,col.cex=0.8,plot.cex=0.8,tit
     slab_name = "Cohort"
   }
   
-  forest(x = gdata$yi,sei = gdata$sdd, xlim=c(min(annot_pos)-2, ind1), 
+  forest(x = gdata$yi,sei = gdata$sdd, 
+         xlim=c(min(annot_pos)-2, ind1), 
          slab = slab,
          ilab = ilab,
          ilab.xpos = annot_pos, 
@@ -159,6 +162,7 @@ if(opt$verbose){
 
 png(paste0(getwd(),"/",opt$out,".forest.png"),
     width = 4, height = 4, units = 'in', res = 300,pointsize=10)
+par(mar=c(5,2,1,2))
 if(opt$forest == 1){
   tmp = gdata_forest_plot(d,me_result,F)
 }
@@ -167,6 +171,9 @@ if(opt$forest == 2){
 }
 tmp2 = dev.off()
 
+# print("################################")
+# print("warnings:")
+# print(warnings())
 print("################################")
 print("Mixed effects model summary stats:")
 write.table(t(t(results_summary_stats)),col.names=F,quote=F,sep="\t")
