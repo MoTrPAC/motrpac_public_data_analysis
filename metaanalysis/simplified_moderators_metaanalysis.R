@@ -1493,8 +1493,8 @@ for(nn in names(meta_reg_datasets)){
                                 "I2(selected model - if available)",
                                 "AICc(selected model)",
                                 "AICcDiff","Selected?")
-  fname = paste0(out_dir_gcp,gsub(",","_",nn),"_gene_stats.csv")
-  fwrite(curr_gene_table,file=fname,sep=",",quote=F)
+  fname = paste0(out_dir_gcp,gsub(",","_",nn),"_gene_stats.tsv")
+  write.table(curr_gene_table,file=fname,quote=F,sep="\t",row.names = F)
 }
 
 ###################################################################################

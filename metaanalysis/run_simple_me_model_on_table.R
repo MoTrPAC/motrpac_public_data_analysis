@@ -41,13 +41,45 @@ meta_analysis_wrapper<-function(gdata,func = rma.mv,...){
   return(NA)
 }
 
-gdata_forest_plot<-function(gdata,model,fulltable=T,col.cex=0.8,plot.cex=0.8,title=""){
+
+gdata_forest_plot<-function(gdata,model,fulltable=T,col.cex=0.8,
+                            plot.cex=0.8,min_interval_size = 1,
+                            max_interval_size = 10){
   gdata$V1 = gsub("GE_","",gdata$V1)
   gdata$training = gsub("endurance","endur",gdata$training)
   gdata$training = gsub("resistance","resist",gdata$training)
   gdata$training = gsub("_treatment","",gdata$training)
   ind1 = max(gdata$yi+3*gdata$sdd)
   ind2 = min(gdata$yi-3*gdata$sdd)
+  if(ind1 - ind2 < min_interval_size){
+    diff = ind1 - ind2 - min_interval_size
+    ind1 = ind1+diff/2
+    ind2 = ind2-diff/2
+  }
+  if(ind1 - ind2 > max_interval_size){
+    diff = ind1 - ind2 - min_interval_size
+    ind1 = ind1-diff/2
+    ind2 = ind2+diff/2
+  }
+  
+  I2 = format(model$I2,digits=4)
+  p = format(model$pval,digits=2)
+  beta = format(model$b[1,1],digits=2)
+  re_bound = paste0("[",
+       format(model$ci.lb,digits=3),
+       ",",
+       format(model$ci.ub,digits=3),
+       "]")
+  main = paste0("RE: P-value=",p,", beta=",beta,", I2=",I2)
+  main_col = "black"
+  if(I2 > 50){
+    main_col = "red"
+    main = paste0(main,"*")
+  }
+  if(I2 > 75){
+    main_col = "darkred"
+    main = paste0(main,"*")
+  }
   
   annot_pos = ind2
   ilab = NULL
@@ -60,28 +92,52 @@ gdata_forest_plot<-function(gdata,model,fulltable=T,col.cex=0.8,plot.cex=0.8,tit
     slab = gdata$V1
     slab_name = "Cohort"
   }
+  plot_xlim = c(min(annot_pos)-2, ind1)
+  print(plot_xlim)
   
   forest(x = gdata$yi,sei = gdata$sdd, 
-         xlim=c(min(annot_pos)-2, ind1), 
+         xlim=plot_xlim, 
          slab = slab,
          ilab = ilab,
          ilab.xpos = annot_pos, 
          cex=plot.cex,
          ylim=c(-2, nrow(gdata)+3),
-         xlab="Fold change", 
+         xlab="log2 fold change", 
          psize=1, header=slab_name,
          showweights = F,annotate=F,
          fonts = "Helvetica",
          col = "darkblue", pch = 20, steps = 10,
-         main = title
+         main = main,col.main=main_col,cex.main=1
   )
   if(fulltable){
     text(annot_pos, nrow(gdata)+2, c("N","Type","Age","%M","Time"),cex=col.cex)
   }
   ### add summary estimate from the random-effects model to forest plot
-  addpoly(model,col="gray")
+  poly_col = "gray"
+  if(I2 > 50){
+    poly_col = "red"
+  }
+  if(I2 > 75){
+    poly_col = "darkred"
+  }
+  addpoly(model,annotate = F,col=poly_col)
+  
   return(NULL)
 }
+
+# Genes to test:
+gene = "5166" #PDK4
+gene= "10891" # PCG1a
+gname = entrez2symbol[[gene]]
+nn = "acute,blood"
+gdata = meta_reg_datasets[[nn]][[gene]]
+model = simple_REs[[nn]][[gene]]
+png("~/Desktop/test_forest.png",
+    width = 4, height = 4, units = 'in', res = 300,pointsize=7)
+par(mar=c(5,2,1,2))
+gdata_forest_plot(gdata,model)
+dev.off()
+
 
 ######################################################
 # Parse the input parameters
@@ -161,7 +217,7 @@ if(opt$verbose){
 }
 
 png(paste0(getwd(),"/",opt$out,".forest.png"),
-    width = 4, height = 4, units = 'in', res = 300,pointsize=10)
+    width = 4, height = 4, units = 'in', res = 300,pointsize=7)
 par(mar=c(5,2,1,2))
 if(opt$forest == 1){
   tmp = gdata_forest_plot(d,me_result,F)
