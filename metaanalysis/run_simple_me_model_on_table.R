@@ -93,7 +93,7 @@ gdata_forest_plot<-function(gdata,model,fulltable=T,col.cex=0.8,
     slab_name = "Cohort"
   }
   plot_xlim = c(min(annot_pos)-2, ind1)
-  print(plot_xlim)
+  #print(plot_xlim)
   
   forest(x = gdata$yi,sei = gdata$sdd, 
          xlim=plot_xlim, 
@@ -107,7 +107,7 @@ gdata_forest_plot<-function(gdata,model,fulltable=T,col.cex=0.8,
          showweights = F,annotate=F,
          fonts = "Helvetica",
          col = "darkblue", pch = 20, steps = 10,
-         main = main,col.main=main_col,cex.main=1
+         main = main,col.main=main_col,cex.main=0.8
   )
   if(fulltable){
     text(annot_pos, nrow(gdata)+2, c("N","Type","Age","%M","Time"),cex=col.cex)
@@ -125,18 +125,20 @@ gdata_forest_plot<-function(gdata,model,fulltable=T,col.cex=0.8,
   return(NULL)
 }
 
-# Genes to test:
-gene = "5166" #PDK4
-gene= "10891" # PCG1a
-gname = entrez2symbol[[gene]]
-nn = "acute,blood"
-gdata = meta_reg_datasets[[nn]][[gene]]
-model = simple_REs[[nn]][[gene]]
-png("~/Desktop/test_forest.png",
-    width = 4, height = 4, units = 'in', res = 300,pointsize=7)
-par(mar=c(5,2,1,2))
-gdata_forest_plot(gdata,model)
-dev.off()
+# # Genes to test:
+# gene = "5166" #PDK4
+# gene= "10891" # PCG1a
+# gname = entrez2symbol[[gene]]
+# nn = "acute,blood"
+# nn = "longterm,muscle"
+# nn = "acute,muscle"
+# gdata = meta_reg_datasets[[nn]][[gene]]
+# model = simple_REs[[nn]][[gene]]
+# png("~/Desktop/test_forest.png",
+#     width = 5.5, height = 4, units = 'in', res = 400, pointsize=8)
+# par(mar=c(5,3,3,2))
+# gdata_forest_plot(gdata,model)
+# dev.off()
 
 
 ######################################################
@@ -217,8 +219,8 @@ if(opt$verbose){
 }
 
 png(paste0(getwd(),"/",opt$out,".forest.png"),
-    width = 4, height = 4, units = 'in', res = 300,pointsize=7)
-par(mar=c(5,2,1,2))
+    width = 5.5, height = 4, units = 'in', res = 400, pointsize=8)
+par(mar=c(5,3,3,3))
 if(opt$forest == 1){
   tmp = gdata_forest_plot(d,me_result,F)
 }
