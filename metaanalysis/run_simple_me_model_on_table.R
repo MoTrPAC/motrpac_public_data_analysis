@@ -28,7 +28,9 @@ meta_analysis_wrapper<-function(gdata,func = rma.mv,...){
   try({
     res = func(yi,vi,data=gdata,...)
   },silent=TRUE)
-  if(!is.null(res)){return(res)}
+  if(!is.null(res)){
+    return(res)
+  }
   
   for(rel.tol in c(1e-8,1e-7,1e-6)){
     cc=list(iter.max=10000,rel.tol=rel.tol)
@@ -51,15 +53,17 @@ gdata_forest_plot<-function(gdata,model,fulltable=T,col.cex=0.8,
   gdata$training = gsub("_treatment","",gdata$training)
   ind1 = max(gdata$yi+3*gdata$sdd)
   ind2 = min(gdata$yi-3*gdata$sdd)
+  #print(paste(ind1,ind2))
   if(ind1 - ind2 < min_interval_size){
     diff = ind1 - ind2 - min_interval_size
-    ind1 = ind1+diff/2
-    ind2 = ind2-diff/2
+    ind1 = ind1 + diff/2
+    ind2 = ind2 - diff/2
   }
   if(ind1 - ind2 > max_interval_size){
-    diff = ind1 - ind2 - min_interval_size
-    ind1 = ind1-diff/2
-    ind2 = ind2+diff/2
+    diff = ind1 - ind2 - max_interval_size
+    ind1 = ind1 - (diff/2)
+    ind2 = ind2 + (diff/2)
+    #print(paste(ind1,ind2))
   }
   
   I2 = format(model$I2,digits=4)
@@ -96,18 +100,23 @@ gdata_forest_plot<-function(gdata,model,fulltable=T,col.cex=0.8,
   #print(plot_xlim)
   
   forest(x = gdata$yi,sei = gdata$sdd, 
-         xlim=plot_xlim, 
+         xlim = plot_xlim,
+         alim = c(ind2,ind1),
          slab = slab,
          ilab = ilab,
          ilab.xpos = annot_pos, 
+         header=slab_name,
          cex=plot.cex,
          ylim=c(-2, nrow(gdata)+3),
          xlab="log2 fold change", 
-         psize=1, header=slab_name,
+         psize = 1,
+         top = 3,
+         digits = 1,
          showweights = F,annotate=F,
          fonts = "Helvetica",
-         col = "darkblue", pch = 20, steps = 10,
-         main = main,col.main=main_col,cex.main=0.8
+         col = "darkblue",
+         pch = 20, steps = 10,
+         main = main,col.main=main_col,cex.main=1
   )
   if(fulltable){
     text(annot_pos, nrow(gdata)+2, c("N","Type","Age","%M","Time"),cex=col.cex)
@@ -133,9 +142,15 @@ gdata_forest_plot<-function(gdata,model,fulltable=T,col.cex=0.8,
 # nn = "longterm,muscle"
 # nn = "acute,muscle"
 # gdata = meta_reg_datasets[[nn]][[gene]]
-# model = simple_REs[[nn]][[gene]]
+# nrow(gdata)
+# 
+# model0 = meta_analysis_wrapper(gdata,func = rma)
+# model = meta_analysis_wrapper(gdata,random= ~V1|gse, struct="CS")
+# if(is.null(model)){model=model0}
+# model$I2 = model0$I2
+# 
 # png("~/Desktop/test_forest.png",
-#     width = 5.5, height = 4, units = 'in', res = 400, pointsize=8)
+#     width = 4.5, height = 4, units = 'in', res = 400, pointsize=8)
 # par(mar=c(5,3,3,2))
 # gdata_forest_plot(gdata,model)
 # dev.off()
@@ -187,7 +202,10 @@ if(is.na(opt$forest) || !(opt$forest %in% 0:2)){
 
 ######################################################
 # run the analysis
+me_result0 = meta_analysis_wrapper(d,func = rma)
 me_result = meta_analysis_wrapper(d,random= ~V1|gse, struct="CS")
+if(is.null(me_result)){me_result=me_result0}
+me_result$I2 = me_result0$I2
 fitscores = fitstats(me_result)
 if(opt$verbose){
   print("Completed fitting the mixed effects model:")
@@ -218,9 +236,15 @@ if(opt$verbose){
   paste0(getwd(),"/",opt$out,".forest.png")
 }
 
+plot_pointsize = 10
+if(nrow(d)>20){
+  plot_pointsize = 8
+}
+
 png(paste0(getwd(),"/",opt$out,".forest.png"),
-    width = 5.5, height = 4, units = 'in', res = 400, pointsize=8)
-par(mar=c(5,3,3,3))
+    width = 4.5, height = 4, units = 'in', 
+    res = 400, pointsize = plot_pointsize)
+par(mar=c(5,3,3,2))
 if(opt$forest == 1){
   tmp = gdata_forest_plot(d,me_result,F)
 }
